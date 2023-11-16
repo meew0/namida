@@ -23,7 +23,6 @@ pub mod client {
 pub mod common {
     pub mod common;
     pub mod error;
-    pub mod md5;
 } // mod common
 pub mod server {
     pub mod config;

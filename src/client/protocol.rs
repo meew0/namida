@@ -50,12 +50,6 @@ extern "C" {
     static REQUEST_ERROR_RATE: u_int16_t;
     fn get_usec_since(old_time: *mut timeval) -> u_int64_t;
     fn ntohll(value: u_int64_t) -> u_int64_t;
-    fn prepare_proof(
-        buffer: *mut u_char,
-        bytes: size_t,
-        secret: *const u_char,
-        digest: *mut u_char,
-    ) -> *mut u_char;
     fn get_udp_in_errors() -> u_int64_t;
     fn error_handler(
         file: *const libc::c_char,
@@ -369,8 +363,10 @@ unsafe extern "C" fn __bswap_32(mut __bsx: __uint32_t) -> __uint32_t {
 #[no_mangle]
 pub unsafe extern "C" fn ttp_authenticate_client(
     mut session: *mut ttp_session_t,
-    mut secret: *mut u_char,
+    mut secret_c: *mut u_char,
 ) -> libc::c_int {
+    let mut secret = std::ffi::CStr::from_ptr(secret_c as *const i8).to_bytes().to_owned();
+
     let mut random: [u_char; 64] = [0; 64];
     let mut digest: [u_char; 16] = [0; 16];
     let mut result: u_char = 0;
@@ -390,17 +386,15 @@ pub unsafe extern "C" fn ttp_authenticate_client(
             0 as libc::c_int,
         );
     }
-    prepare_proof(
-        random.as_mut_ptr(),
-        64 as libc::c_int as size_t,
-        secret,
-        digest.as_mut_ptr(),
-    );
-    while *secret != 0 {
-        let fresh0 = secret;
-        secret = secret.offset(1);
-        *fresh0 = '\0' as i32 as u_char;
+    let mut digest: [u8; 16] = crate::common::common::prepare_proof(
+        &mut random,
+        &secret,
+    ).into();
+    
+    for byte in &mut secret {
+        *byte = b'0';
     }
+
     status = fwrite(
         digest.as_mut_ptr() as *const libc::c_void,
         1 as libc::c_int as libc::c_ulong,
@@ -435,6 +429,7 @@ pub unsafe extern "C" fn ttp_authenticate_client(
         -(1 as libc::c_int)
     };
 }
+
 #[no_mangle]
 pub unsafe extern "C" fn ttp_negotiate_client(mut session: *mut ttp_session_t) -> libc::c_int {
     let mut server_revision: u_int32_t = 0;

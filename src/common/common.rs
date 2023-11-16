@@ -34,7 +34,6 @@ extern "C" {
         _: *mut FILE,
     ) -> libc::c_ulong;
     fn feof(__stream: *mut FILE) -> libc::c_int;
-    fn md5_digest(buffer: *mut u_char, size: size_t, digest: *mut u_char);
     fn error_handler(
         file: *const libc::c_char,
         line: libc::c_int,
@@ -152,28 +151,7 @@ pub static mut REQUEST_RESTART: u_int16_t = 1 as libc::c_int as u_int16_t;
 pub static mut REQUEST_STOP: u_int16_t = 2 as libc::c_int as u_int16_t;
 #[no_mangle]
 pub static mut REQUEST_ERROR_RATE: u_int16_t = 3 as libc::c_int as u_int16_t;
-#[no_mangle]
-pub unsafe extern "C" fn get_random_data(
-    mut buffer: *mut u_char,
-    mut bytes: size_t,
-) -> libc::c_int {
-    let mut random_fd: libc::c_int = 0;
-    random_fd = open(
-        b"/dev/urandom\0" as *const u8 as *const libc::c_char,
-        0 as libc::c_int,
-    );
-    if random_fd < 0 as libc::c_int {
-        return -(1 as libc::c_int);
-    }
-    if read(random_fd, buffer as *mut libc::c_void, bytes) < 0 as libc::c_int as ssize_t {
-        return -(1 as libc::c_int);
-    }
-    return if close(random_fd) < 0 as libc::c_int {
-        -(1 as libc::c_int)
-    } else {
-        0 as libc::c_int
-    };
-}
+
 #[no_mangle]
 pub unsafe extern "C" fn get_usec_since(mut old_time: *mut timeval) -> u_int64_t {
     let mut now: timeval = timeval {
@@ -244,28 +222,17 @@ pub unsafe extern "C" fn make_transcript_filename(
 pub unsafe extern "C" fn ntohll(mut value: u_int64_t) -> u_int64_t {
     return htonll(value);
 }
-#[no_mangle]
-pub unsafe extern "C" fn prepare_proof(
-    mut buffer: *mut u_char,
-    mut bytes: size_t,
-    mut secret: *const u_char,
-    mut digest: *mut u_char,
-) -> *mut u_char {
-    let mut secret_length: u_int32_t = 0;
-    let mut offset: u_int32_t = 0;
-    secret_length = strlen(secret as *mut libc::c_char) as u_int32_t;
-    offset = 0 as libc::c_int as u_int32_t;
-    while (offset as size_t) < bytes {
-        let ref mut fresh0 = *buffer.offset(offset as isize);
-        *fresh0 = (*fresh0 as libc::c_int
-            ^ *secret.offset((offset % secret_length) as isize) as libc::c_int)
-            as u_char;
-        offset = offset.wrapping_add(1);
-        offset;
+
+pub fn prepare_proof(
+    mut buffer: &mut [u8],
+    mut secret: &[u8],
+) -> md5::Digest {
+    for (offset, fresh0) in buffer.iter_mut().enumerate() {
+        *fresh0 ^= secret[offset % secret.len()];
     }
-    md5_digest(buffer, bytes, digest);
-    return digest;
+    md5::compute(buffer)
 }
+
 #[no_mangle]
 pub unsafe extern "C" fn read_line(
     mut fd: libc::c_int,

@@ -63,14 +63,7 @@ extern "C" {
     static REQUEST_RESTART: u_int16_t;
     static REQUEST_ERROR_RATE: u_int16_t;
     static mut g_error: [libc::c_char; 0];
-    fn get_random_data(buffer: *mut u_char, bytes: size_t) -> libc::c_int;
     fn htonll(value: u_int64_t) -> u_int64_t;
-    fn prepare_proof(
-        buffer: *mut u_char,
-        bytes: size_t,
-        secret: *const u_char,
-        digest: *mut u_char,
-    ) -> *mut u_char;
     fn read_line(fd: libc::c_int, buffer: *mut libc::c_char, buffer_length: size_t) -> libc::c_int;
     fn full_write(_: libc::c_int, _: *const libc::c_void, _: size_t) -> ssize_t;
     fn full_read(_: libc::c_int, _: *mut libc::c_void, _: size_t) -> ssize_t;
@@ -470,22 +463,20 @@ pub unsafe extern "C" fn ttp_accept_retransmit(
 #[no_mangle]
 pub unsafe extern "C" fn ttp_authenticate_server(
     mut session: *mut ttp_session_t,
-    mut secret: *const u_char,
+    mut secret_c: *const u_char,
 ) -> libc::c_int {
+    use rand::Rng;
+
+    let mut secret = std::ffi::CStr::from_ptr(secret_c as *const i8).to_bytes();
+
     let mut random: [u_char; 64] = [0; 64];
     let mut server_digest: [u_char; 16] = [0; 16];
     let mut client_digest: [u_char; 16] = [0; 16];
     let mut i: libc::c_int = 0;
     let mut status: libc::c_int = 0;
-    status = get_random_data(random.as_mut_ptr(), 64 as libc::c_int as size_t);
-    if status < 0 as libc::c_int {
-        return error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            214 as libc::c_int,
-            b"Access to random data is broken\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
-    }
+
+    rand::thread_rng().fill(&mut random);
+
     status = full_write(
         (*session).client_fd,
         random.as_mut_ptr() as *const libc::c_void,
@@ -514,12 +505,10 @@ pub unsafe extern "C" fn ttp_authenticate_server(
             0 as libc::c_int,
         );
     }
-    prepare_proof(
-        random.as_mut_ptr(),
-        64 as libc::c_int as size_t,
+    let server_digest: [u8; 16] = crate::common::common::prepare_proof(
+        &mut random,
         secret,
-        server_digest.as_mut_ptr(),
-    );
+    ).into();
     i = 0 as libc::c_int;
     while i < 16 as libc::c_int {
         if client_digest[i as usize] as libc::c_int != server_digest[i as usize] as libc::c_int {
