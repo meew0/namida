@@ -27,28 +27,6 @@ pub mod common;
 pub mod error;
 pub mod md5;
 } // mod common
-pub mod rtclient {
-pub mod command;
-pub mod config;
-pub mod io;
-pub mod main;
-pub mod network;
-pub mod protocol;
-pub mod ring;
-pub mod transcript;
-pub mod vsibctl;
-} // mod rtclient
-pub mod rtserver {
-pub mod config;
-pub mod io;
-pub mod log;
-pub mod main;
-pub mod network;
-pub mod parse_evn_filename;
-pub mod protocol;
-pub mod transcript;
-pub mod vsibctl;
-} // mod rtserver
 pub mod server {
 pub mod config;
 pub mod io;
