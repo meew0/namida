@@ -3,11 +3,7 @@ extern "C" {
     pub type _IO_wide_data;
     pub type _IO_codecvt;
     pub type _IO_marker;
-    fn strtol(
-        _: *const libc::c_char,
-        _: *mut *mut libc::c_char,
-        _: libc::c_int,
-    ) -> libc::c_long;
+    fn strtol(_: *const libc::c_char, _: *mut *mut libc::c_char, _: libc::c_int) -> libc::c_long;
     fn malloc(_: libc::c_ulong) -> *mut libc::c_void;
     fn fclose(__stream: *mut FILE) -> libc::c_int;
     fn fopen(_: *const libc::c_char, _: *const libc::c_char) -> *mut FILE;
@@ -18,11 +14,7 @@ extern "C" {
         _: libc::c_ulong,
         _: *mut FILE,
     ) -> libc::c_ulong;
-    fn fseeko(
-        __stream: *mut FILE,
-        __off: __off64_t,
-        __whence: libc::c_int,
-    ) -> libc::c_int;
+    fn fseeko(__stream: *mut FILE, __off: __off64_t, __whence: libc::c_int) -> libc::c_int;
     fn ftello(__stream: *mut FILE) -> __off64_t;
     fn gettimeofday(__tv: *mut timeval, __tz: *mut libc::c_void) -> libc::c_int;
 }
@@ -89,19 +81,20 @@ unsafe extern "C" fn atoi(mut __nptr: *const libc::c_char) -> libc::c_int {
         10 as libc::c_int,
     ) as libc::c_int;
 }
-unsafe fn main_0(
-    mut argc: libc::c_int,
-    mut argv: *mut *mut libc::c_char,
-) -> libc::c_int {
-    let mut start: timeval = timeval { tv_sec: 0, tv_usec: 0 };
-    let mut stop: timeval = timeval { tv_sec: 0, tv_usec: 0 };
+unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) -> libc::c_int {
+    let mut start: timeval = timeval {
+        tv_sec: 0,
+        tv_usec: 0,
+    };
+    let mut stop: timeval = timeval {
+        tv_sec: 0,
+        tv_usec: 0,
+    };
     let mut file: *mut FILE = 0 as *mut FILE;
     let mut block_size: u_int32_t = 0;
     static mut block: *mut u_char = 0 as *const u_char as *mut u_char;
     let mut file_size: u_int64_t = 0;
-    if ::core::mem::size_of::<off_t>() as libc::c_ulong
-        != 8 as libc::c_int as libc::c_ulong
-    {
+    if ::core::mem::size_of::<off_t>() as libc::c_ulong != 8 as libc::c_int as libc::c_ulong {
         printf(
             b"Warning: Not compiled with 64-bit Large File Support, results can be unreliable\n\0"
                 as *const u8 as *const libc::c_char,
@@ -130,9 +123,9 @@ unsafe fn main_0(
     {}
     fclose(file);
     gettimeofday(&mut stop, 0 as *mut libc::c_void);
-    let mut usec: int64_t = (1000000 as libc::c_longlong
-        * (stop.tv_sec - start.tv_sec) as libc::c_longlong
-        + (stop.tv_usec - start.tv_usec) as libc::c_longlong) as int64_t;
+    let mut usec: int64_t =
+        (1000000 as libc::c_longlong * (stop.tv_sec - start.tv_sec) as libc::c_longlong
+            + (stop.tv_usec - start.tv_usec) as libc::c_longlong) as int64_t;
     let mut bits: int64_t = (file_size * 8 as libc::c_int as u_int64_t) as int64_t;
     printf(
         b"Start time = %lu.%06lu\n\0" as *const u8 as *const libc::c_char,
@@ -155,7 +148,7 @@ unsafe fn main_0(
     return 0 as libc::c_int;
 }
 pub fn main() {
-    let mut args: Vec::<*mut libc::c_char> = Vec::new();
+    let mut args: Vec<*mut libc::c_char> = Vec::new();
     for arg in ::std::env::args() {
         args.push(
             (::std::ffi::CString::new(arg))
@@ -165,11 +158,9 @@ pub fn main() {
     }
     args.push(::core::ptr::null_mut());
     unsafe {
-        ::std::process::exit(
-            main_0(
-                (args.len() - 1) as libc::c_int,
-                args.as_mut_ptr() as *mut *mut libc::c_char,
-            ) as i32,
-        )
+        ::std::process::exit(main_0(
+            (args.len() - 1) as libc::c_int,
+            args.as_mut_ptr() as *mut *mut libc::c_char,
+        ) as i32)
     }
 }

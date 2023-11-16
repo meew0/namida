@@ -20,21 +20,9 @@ extern "C" {
         __optval: *const libc::c_void,
         __optlen: socklen_t,
     ) -> libc::c_int;
-    fn connect(
-        __fd: libc::c_int,
-        __addr: __CONST_SOCKADDR_ARG,
-        __len: socklen_t,
-    ) -> libc::c_int;
-    fn socket(
-        __domain: libc::c_int,
-        __type: libc::c_int,
-        __protocol: libc::c_int,
-    ) -> libc::c_int;
-    fn bind(
-        __fd: libc::c_int,
-        __addr: __CONST_SOCKADDR_ARG,
-        __len: socklen_t,
-    ) -> libc::c_int;
+    fn connect(__fd: libc::c_int, __addr: __CONST_SOCKADDR_ARG, __len: socklen_t) -> libc::c_int;
+    fn socket(__domain: libc::c_int, __type: libc::c_int, __protocol: libc::c_int) -> libc::c_int;
+    fn bind(__fd: libc::c_int, __addr: __CONST_SOCKADDR_ARG, __len: socklen_t) -> libc::c_int;
     fn getaddrinfo(
         __name: *const libc::c_char,
         __service: *const libc::c_char,
@@ -42,16 +30,8 @@ extern "C" {
         __pai: *mut *mut addrinfo,
     ) -> libc::c_int;
     fn freeaddrinfo(__ai: *mut addrinfo);
-    fn memset(
-        _: *mut libc::c_void,
-        _: libc::c_int,
-        _: libc::c_ulong,
-    ) -> *mut libc::c_void;
-    fn memcpy(
-        _: *mut libc::c_void,
-        _: *const libc::c_void,
-        _: libc::c_ulong,
-    ) -> *mut libc::c_void;
+    fn memset(_: *mut libc::c_void, _: libc::c_int, _: libc::c_ulong) -> *mut libc::c_void;
+    fn memcpy(_: *mut libc::c_void, _: *const libc::c_void, _: libc::c_ulong) -> *mut libc::c_void;
     fn close(__fd: libc::c_int) -> libc::c_int;
     fn malloc(_: libc::c_ulong) -> *mut libc::c_void;
     static mut stderr: *mut FILE;
@@ -427,8 +407,7 @@ pub unsafe extern "C" fn create_tcp_socket_client(
         0 as libc::c_int,
         ::core::mem::size_of::<addrinfo>() as libc::c_ulong,
     );
-    hints
-        .ai_family = if (*(*session).parameter).ipv6_yn as libc::c_int != 0 {
+    hints.ai_family = if (*(*session).parameter).ipv6_yn as libc::c_int != 0 {
         10 as libc::c_int
     } else {
         2 as libc::c_int
@@ -471,8 +450,7 @@ pub unsafe extern "C" fn create_tcp_socket_client(
                 error_handler(
                     b"network.c\0" as *const u8 as *const libc::c_char,
                     122 as libc::c_int,
-                    b"Could not make socket reusable\0" as *const u8
-                        as *const libc::c_char,
+                    b"Could not make socket reusable\0" as *const u8 as *const libc::c_char,
                     0 as libc::c_int,
                 );
                 close(socket_fd);
@@ -502,16 +480,15 @@ pub unsafe extern "C" fn create_tcp_socket_client(
                         (*info).ai_addrlen,
                     );
                     if status == 0 as libc::c_int {
-                        (*session)
-                            .server_address = malloc((*info).ai_addrlen as libc::c_ulong)
-                            as *mut sockaddr;
+                        (*session).server_address =
+                            malloc((*info).ai_addrlen as libc::c_ulong) as *mut sockaddr;
                         (*session).server_address_length = (*info).ai_addrlen;
                         if ((*session).server_address).is_null() {
                             error_handler(
                                 b"network.c\0" as *const u8 as *const libc::c_char,
                                 143 as libc::c_int,
-                                b"Could not allocate space for server address\0"
-                                    as *const u8 as *const libc::c_char,
+                                b"Could not allocate space for server address\0" as *const u8
+                                    as *const libc::c_char,
                                 1 as libc::c_int,
                             );
                         }
@@ -535,8 +512,7 @@ pub unsafe extern "C" fn create_tcp_socket_client(
         return error_handler(
             b"network.c\0" as *const u8 as *const libc::c_char,
             155 as libc::c_int,
-            b"Error in connecting to Tsunami server\0" as *const u8
-                as *const libc::c_char,
+            b"Error in connecting to Tsunami server\0" as *const u8 as *const libc::c_char,
             0 as libc::c_int,
         );
     }
@@ -568,8 +544,7 @@ pub unsafe extern "C" fn create_udp_socket_client(
         ::core::mem::size_of::<addrinfo>() as libc::c_ulong,
     );
     hints.ai_flags = 0x1 as libc::c_int;
-    hints
-        .ai_family = if (*parameter).ipv6_yn as libc::c_int != 0 {
+    hints.ai_family = if (*parameter).ipv6_yn as libc::c_int != 0 {
         10 as libc::c_int
     } else {
         2 as libc::c_int
@@ -591,25 +566,19 @@ pub unsafe extern "C" fn create_udp_socket_client(
             return error_handler(
                 b"network.c\0" as *const u8 as *const libc::c_char,
                 195 as libc::c_int,
-                b"Error in getting address information\0" as *const u8
-                    as *const libc::c_char,
+                b"Error in getting address information\0" as *const u8 as *const libc::c_char,
                 0 as libc::c_int,
             );
         }
         info_save = info;
         loop {
-            socket_fd = socket(
-                (*info).ai_family,
-                (*info).ai_socktype,
-                (*info).ai_protocol,
-            );
+            socket_fd = socket((*info).ai_family, (*info).ai_socktype, (*info).ai_protocol);
             if !(socket_fd < 0 as libc::c_int) {
                 status = setsockopt(
                     socket_fd,
                     1 as libc::c_int,
                     8 as libc::c_int,
-                    &mut (*parameter).udp_buffer as *mut u_int32_t
-                        as *const libc::c_void,
+                    &mut (*parameter).udp_buffer as *mut u_int32_t as *const libc::c_void,
                     ::core::mem::size_of::<u_int32_t>() as libc::c_ulong as socklen_t,
                 );
                 if status < 0 as libc::c_int {
@@ -629,14 +598,11 @@ pub unsafe extern "C" fn create_udp_socket_client(
                     (*info).ai_addrlen,
                 );
                 if status == 0 as libc::c_int {
-                    (*parameter)
-                        .client_port = __bswap_16(
-                        (*((*info).ai_addr as *mut sockaddr_in)).sin_port,
-                    );
+                    (*parameter).client_port =
+                        __bswap_16((*((*info).ai_addr as *mut sockaddr_in)).sin_port);
                     fprintf(
                         stderr,
-                        b"Receiving data on UDP port %d\n\0" as *const u8
-                            as *const libc::c_char,
+                        b"Receiving data on UDP port %d\n\0" as *const u8 as *const libc::c_char,
                         (*parameter).client_port as libc::c_int,
                     );
                     break;

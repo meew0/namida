@@ -3,11 +3,7 @@ extern "C" {
     pub type _IO_wide_data;
     pub type _IO_codecvt;
     pub type _IO_marker;
-    fn strtol(
-        _: *const libc::c_char,
-        _: *mut *mut libc::c_char,
-        _: libc::c_int,
-    ) -> libc::c_long;
+    fn strtol(_: *const libc::c_char, _: *mut *mut libc::c_char, _: libc::c_int) -> libc::c_long;
     fn rand() -> libc::c_int;
     fn srand(__seed: libc::c_uint);
     fn malloc(_: libc::c_ulong) -> *mut libc::c_void;
@@ -86,13 +82,19 @@ unsafe extern "C" fn atoi(mut __nptr: *const libc::c_char) -> libc::c_int {
         10 as libc::c_int,
     ) as libc::c_int;
 }
-unsafe fn main_0(
-    mut argc: libc::c_int,
-    mut argv: *mut *mut libc::c_char,
-) -> libc::c_int {
-    let mut t_start: timeval = timeval { tv_sec: 0, tv_usec: 0 };
-    let mut t_isopen: timeval = timeval { tv_sec: 0, tv_usec: 0 };
-    let mut t_closed: timeval = timeval { tv_sec: 0, tv_usec: 0 };
+unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) -> libc::c_int {
+    let mut t_start: timeval = timeval {
+        tv_sec: 0,
+        tv_usec: 0,
+    };
+    let mut t_isopen: timeval = timeval {
+        tv_sec: 0,
+        tv_usec: 0,
+    };
+    let mut t_closed: timeval = timeval {
+        tv_sec: 0,
+        tv_usec: 0,
+    };
     let mut tdelta: libc::c_double = 0.;
     let mut tsleeps: libc::c_double = 0.;
     let mut randsleep: libc::c_ulong = 0;
@@ -109,9 +111,7 @@ unsafe fn main_0(
         );
         return 0 as libc::c_int;
     }
-    if ::core::mem::size_of::<off_t>() as libc::c_ulong
-        != 8 as libc::c_int as libc::c_ulong
-    {
+    if ::core::mem::size_of::<off_t>() as libc::c_ulong != 8 as libc::c_int as libc::c_ulong {
         printf(
             b"Warning: Not compiled with 64-bit Large File Support, results can be unreliable\n\0"
                 as *const u8 as *const libc::c_char,
@@ -120,8 +120,7 @@ unsafe fn main_0(
     if argc > 2 as libc::c_int {
         readbytes = atoi(*argv.offset(2 as libc::c_int as isize)) as u_int32_t;
     } else {
-        readbytes = ((1250 as libc::c_int * 512 as libc::c_int * 2 as libc::c_int)
-            as libc::c_ulong)
+        readbytes = ((1250 as libc::c_int * 512 as libc::c_int * 2 as libc::c_int) as libc::c_ulong)
             .wrapping_mul(::core::mem::size_of::<libc::c_float>() as libc::c_ulong)
             as u_int32_t;
     }
@@ -139,24 +138,21 @@ unsafe fn main_0(
         j = rand() / (2147483647 as libc::c_int / 4 as libc::c_int);
         i = 0 as libc::c_int;
         while i < j {
-            totalread = (totalread as libc::c_ulong)
-                .wrapping_add(
-                    fread(
-                        block as *mut libc::c_void,
-                        1 as libc::c_int as libc::c_ulong,
-                        readbytes as libc::c_ulong,
-                        file,
-                    ),
-                ) as u_int64_t as u_int64_t;
+            totalread = (totalread as libc::c_ulong).wrapping_add(fread(
+                block as *mut libc::c_void,
+                1 as libc::c_int as libc::c_ulong,
+                readbytes as libc::c_ulong,
+                file,
+            )) as u_int64_t as u_int64_t;
             i += 1;
             i;
         }
         if feof(file) != 0 {
             break;
         }
-        randsleep = (10000 as libc::c_longlong * 100 as libc::c_longlong
-            * rand() as libc::c_longlong / 2147483647 as libc::c_int as libc::c_longlong)
-            as libc::c_ulong;
+        randsleep =
+            (10000 as libc::c_longlong * 100 as libc::c_longlong * rand() as libc::c_longlong
+                / 2147483647 as libc::c_int as libc::c_longlong) as libc::c_ulong;
         tsleeps += 1e-6f64 * randsleep as libc::c_double;
         usleep(randsleep as __useconds_t);
     }
@@ -179,18 +175,25 @@ unsafe fn main_0(
         t_closed.tv_sec as libc::c_ulong,
         t_closed.tv_usec as libc::c_ulong,
     );
-    printf(b"Delta    = %0.3lf sec\n\0" as *const u8 as *const libc::c_char, tdelta);
-    printf(b"Sleeps   = %0.3lf sec\n\0" as *const u8 as *const libc::c_char, tsleeps);
+    printf(
+        b"Delta    = %0.3lf sec\n\0" as *const u8 as *const libc::c_char,
+        tdelta,
+    );
+    printf(
+        b"Sleeps   = %0.3lf sec\n\0" as *const u8 as *const libc::c_char,
+        tsleeps,
+    );
     printf(
         b"Speed    = %0.3lf Mbps\n\0" as *const u8 as *const libc::c_char,
         totalread as libc::c_double * 8.0f64
-            / (tdelta * 1024 as libc::c_int as libc::c_double
+            / (tdelta
+                * 1024 as libc::c_int as libc::c_double
                 * 1024 as libc::c_int as libc::c_double),
     );
     return 0 as libc::c_int;
 }
 pub fn main() {
-    let mut args: Vec::<*mut libc::c_char> = Vec::new();
+    let mut args: Vec<*mut libc::c_char> = Vec::new();
     for arg in ::std::env::args() {
         args.push(
             (::std::ffi::CString::new(arg))
@@ -200,11 +203,9 @@ pub fn main() {
     }
     args.push(::core::ptr::null_mut());
     unsafe {
-        ::std::process::exit(
-            main_0(
-                (args.len() - 1) as libc::c_int,
-                args.as_mut_ptr() as *mut *mut libc::c_char,
-            ) as i32,
-        )
+        ::std::process::exit(main_0(
+            (args.len() - 1) as libc::c_int,
+            args.as_mut_ptr() as *mut *mut libc::c_char,
+        ) as i32)
     }
 }

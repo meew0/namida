@@ -26,42 +26,20 @@ extern "C" {
         _: *const libc::c_char,
         _: ...
     ) -> libc::c_int;
-    fn fgets(
-        __s: *mut libc::c_char,
-        __n: libc::c_int,
-        __stream: *mut FILE,
-    ) -> *mut libc::c_char;
-    fn fseeko(
-        __stream: *mut FILE,
-        __off: __off64_t,
-        __whence: libc::c_int,
-    ) -> libc::c_int;
+    fn fgets(__s: *mut libc::c_char, __n: libc::c_int, __stream: *mut FILE) -> *mut libc::c_char;
+    fn fseeko(__stream: *mut FILE, __off: __off64_t, __whence: libc::c_int) -> libc::c_int;
     fn ftello(__stream: *mut FILE) -> __off64_t;
     fn pclose(__stream: *mut FILE) -> libc::c_int;
     fn popen(__command: *const libc::c_char, __modes: *const libc::c_char) -> *mut FILE;
-    fn memcpy(
-        _: *mut libc::c_void,
-        _: *const libc::c_void,
-        _: libc::c_ulong,
-    ) -> *mut libc::c_void;
-    fn memset(
-        _: *mut libc::c_void,
-        _: libc::c_int,
-        _: libc::c_ulong,
-    ) -> *mut libc::c_void;
-    fn strncpy(
-        _: *mut libc::c_char,
-        _: *const libc::c_char,
-        _: libc::c_ulong,
-    ) -> *mut libc::c_char;
+    fn memcpy(_: *mut libc::c_void, _: *const libc::c_void, _: libc::c_ulong) -> *mut libc::c_void;
+    fn memset(_: *mut libc::c_void, _: libc::c_int, _: libc::c_ulong) -> *mut libc::c_void;
+    fn strncpy(_: *mut libc::c_char, _: *const libc::c_char, _: libc::c_ulong)
+        -> *mut libc::c_char;
     fn strcmp(_: *const libc::c_char, _: *const libc::c_char) -> libc::c_int;
     fn strdup(_: *const libc::c_char) -> *mut libc::c_char;
     fn strlen(_: *const libc::c_char) -> libc::c_ulong;
-    fn getpeername(
-        __fd: libc::c_int,
-        __addr: __SOCKADDR_ARG,
-        __len: *mut socklen_t,
-    ) -> libc::c_int;
+    fn getpeername(__fd: libc::c_int, __addr: __SOCKADDR_ARG, __len: *mut socklen_t)
+        -> libc::c_int;
     fn sendto(
         __fd: libc::c_int,
         __buf: *const libc::c_void,
@@ -93,11 +71,7 @@ extern "C" {
         secret: *const u_char,
         digest: *mut u_char,
     ) -> *mut u_char;
-    fn read_line(
-        fd: libc::c_int,
-        buffer: *mut libc::c_char,
-        buffer_length: size_t,
-    ) -> libc::c_int;
+    fn read_line(fd: libc::c_int, buffer: *mut libc::c_char, buffer_length: size_t) -> libc::c_int;
     fn full_write(_: libc::c_int, _: *const libc::c_void, _: size_t) -> ssize_t;
     fn full_read(_: libc::c_int, _: *mut libc::c_void, _: size_t) -> ssize_t;
     fn error_handler(
@@ -365,19 +339,18 @@ pub unsafe extern "C" fn ttp_accept_retransmit(
         if (*retransmission).error_rate > (*param).error_rate {
             let mut factor1: libc::c_double = 1.0f64
                 * (*param).slower_num as libc::c_int as libc::c_double
-                / (*param).slower_den as libc::c_int as libc::c_double - 1.0f64;
+                / (*param).slower_den as libc::c_int as libc::c_double
+                - 1.0f64;
             let mut factor2: libc::c_double = (1.0f64
                 + (*retransmission).error_rate as libc::c_double
                 - (*param).error_rate as libc::c_double)
                 / (100000.0f64 - (*param).error_rate as libc::c_double);
             (*xfer).ipd_current *= 1.0f64 + factor1 * factor2;
         } else {
-            (*xfer).ipd_current
-                *= (*param).faster_num as libc::c_double
-                    / (*param).faster_den as libc::c_int as libc::c_double;
+            (*xfer).ipd_current *= (*param).faster_num as libc::c_double
+                / (*param).faster_den as libc::c_int as libc::c_double;
         }
-        (*xfer)
-            .ipd_current = if (if (*xfer).ipd_current < 10000.0f64 {
+        (*xfer).ipd_current = if (if (*xfer).ipd_current < 10000.0f64 {
             (*xfer).ipd_current
         } else {
             10000.0f64
@@ -398,8 +371,7 @@ pub unsafe extern "C" fn ttp_accept_retransmit(
             (*xfer).ipd_current as libc::c_float as libc::c_double,
             (*param).ipd_time,
             (*xfer).block,
-            100.0f64 * (*xfer).block as libc::c_double
-                / (*param).block_count as libc::c_double,
+            100.0f64 * (*xfer).block as libc::c_double / (*param).block_count as libc::c_double,
             (*session).session_id,
         );
         let fresh0 = iteration;
@@ -410,7 +382,10 @@ pub unsafe extern "C" fn ttp_accept_retransmit(
                     as *const libc::c_char,
             );
         }
-        printf(b"%s\0" as *const u8 as *const libc::c_char, stats_line.as_mut_ptr());
+        printf(
+            b"%s\0" as *const u8 as *const libc::c_char,
+            stats_line.as_mut_ptr(),
+        );
         if (*param).transcript_yn != 0 {
             xscript_data_log_server(session, stats_line.as_mut_ptr());
         }
@@ -420,8 +395,7 @@ pub unsafe extern "C" fn ttp_accept_retransmit(
         {
             sprintf(
                 g_error.as_mut_ptr(),
-                b"Attempt to restart at illegal block %u\0" as *const u8
-                    as *const libc::c_char,
+                b"Attempt to restart at illegal block %u\0" as *const u8 as *const libc::c_char,
                 (*retransmission).block,
             );
             return error_handler(
@@ -548,9 +522,7 @@ pub unsafe extern "C" fn ttp_authenticate_server(
     );
     i = 0 as libc::c_int;
     while i < 16 as libc::c_int {
-        if client_digest[i as usize] as libc::c_int
-            != server_digest[i as usize] as libc::c_int
-        {
+        if client_digest[i as usize] as libc::c_int != server_digest[i as usize] as libc::c_int {
             full_write(
                 (*session).client_fd,
                 b"\x01\0" as *const u8 as *const libc::c_char as *const libc::c_void,
@@ -596,8 +568,7 @@ pub unsafe extern "C" fn ttp_negotiate_server(mut session: *mut ttp_session_t) -
         return error_handler(
             b"protocol.c\0" as *const u8 as *const libc::c_char,
             263 as libc::c_int,
-            b"Could not send protocol revision number\0" as *const u8
-                as *const libc::c_char,
+            b"Could not send protocol revision number\0" as *const u8 as *const libc::c_char,
             0 as libc::c_int,
         );
     }
@@ -610,8 +581,7 @@ pub unsafe extern "C" fn ttp_negotiate_server(mut session: *mut ttp_session_t) -
         return error_handler(
             b"protocol.c\0" as *const u8 as *const libc::c_char,
             268 as libc::c_int,
-            b"Could not read protocol revision number\0" as *const u8
-                as *const libc::c_char,
+            b"Could not read protocol revision number\0" as *const u8 as *const libc::c_char,
             0 as libc::c_int,
         );
     }
@@ -628,15 +598,12 @@ pub unsafe extern "C" fn ttp_open_port_server(mut session: *mut ttp_session_t) -
     let mut port: u_int16_t = 0;
     let mut ipv6_yn: u_char = (*(*session).parameter).ipv6_yn;
     if ((*(*session).parameter).client).is_null() {
-        (*session)
-            .transfer
-            .udp_length = (if ipv6_yn as libc::c_int != 0 {
+        (*session).transfer.udp_length = (if ipv6_yn as libc::c_int != 0 {
             ::core::mem::size_of::<sockaddr_in6>() as libc::c_ulong
         } else {
             ::core::mem::size_of::<sockaddr_in>() as libc::c_ulong
         }) as socklen_t;
-        address = malloc((*session).transfer.udp_length as libc::c_ulong)
-            as *mut sockaddr;
+        address = malloc((*session).transfer.udp_length as libc::c_ulong) as *mut sockaddr;
         if address.is_null() {
             error_handler(
                 b"protocol.c\0" as *const u8 as *const libc::c_char,
@@ -743,9 +710,7 @@ pub unsafe extern "C" fn ttp_open_port_server(mut session: *mut ttp_session_t) -
     return 0 as libc::c_int;
 }
 #[no_mangle]
-pub unsafe extern "C" fn ttp_open_transfer_server(
-    mut session: *mut ttp_session_t,
-) -> libc::c_int {
+pub unsafe extern "C" fn ttp_open_transfer_server(mut session: *mut ttp_session_t) -> libc::c_int {
     let mut filename: [libc::c_char; 1024] = [0; 1024];
     let mut file_size: u_int64_t = 0;
     let mut block_size: u_int32_t = 0;
@@ -758,8 +723,14 @@ pub unsafe extern "C" fn ttp_open_transfer_server(
     let mut file_no: [libc::c_char; 10] = [0; 10];
     let mut message: [libc::c_char; 20] = [0; 20];
     let mut i: u_int16_t = 0;
-    let mut ping_s: timeval = timeval { tv_sec: 0, tv_usec: 0 };
-    let mut ping_e: timeval = timeval { tv_sec: 0, tv_usec: 0 };
+    let mut ping_s: timeval = timeval {
+        tv_sec: 0,
+        tv_usec: 0,
+    };
+    let mut ping_e: timeval = timeval {
+        tv_sec: 0,
+        tv_usec: 0,
+    };
     memset(
         xfer as *mut libc::c_void,
         0 as libc::c_int,
@@ -778,10 +749,11 @@ pub unsafe extern "C" fn ttp_open_transfer_server(
             1 as libc::c_int,
         );
     }
-    filename[(1024 as libc::c_int - 1 as libc::c_int)
-        as usize] = '\0' as i32 as libc::c_char;
-    if strcmp(filename.as_mut_ptr(), b"!#DIR??\0" as *const u8 as *const libc::c_char)
-        == 0
+    filename[(1024 as libc::c_int - 1 as libc::c_int) as usize] = '\0' as i32 as libc::c_char;
+    if strcmp(
+        filename.as_mut_ptr(),
+        b"!#DIR??\0" as *const u8 as *const libc::c_char,
+    ) == 0
     {
         snprintf(
             file_no.as_mut_ptr(),
@@ -792,8 +764,7 @@ pub unsafe extern "C" fn ttp_open_transfer_server(
         full_write(
             (*session).client_fd,
             file_no.as_mut_ptr() as *const libc::c_void,
-            (strlen(file_no.as_mut_ptr()))
-                .wrapping_add(1 as libc::c_int as libc::c_ulong),
+            (strlen(file_no.as_mut_ptr())).wrapping_add(1 as libc::c_int as libc::c_ulong),
         );
         i = 0 as libc::c_int as u_int16_t;
         while (i as libc::c_int) < (*param).total_files as libc::c_int {
@@ -812,8 +783,7 @@ pub unsafe extern "C" fn ttp_open_transfer_server(
             full_write(
                 (*session).client_fd,
                 message.as_mut_ptr() as *const libc::c_void,
-                (strlen(message.as_mut_ptr()))
-                    .wrapping_add(1 as libc::c_int as libc::c_ulong),
+                (strlen(message.as_mut_ptr())).wrapping_add(1 as libc::c_int as libc::c_ulong),
             );
             i = i.wrapping_add(1);
             i;
@@ -829,13 +799,15 @@ pub unsafe extern "C" fn ttp_open_transfer_server(
             b"File list sent!\0" as *const u8 as *const libc::c_char,
             0 as libc::c_int,
         );
-    } else if strcmp(filename.as_mut_ptr(), b"*\0" as *const u8 as *const libc::c_char)
-        == 0
+    } else if strcmp(
+        filename.as_mut_ptr(),
+        b"*\0" as *const u8 as *const libc::c_char,
+    ) == 0
     {
         if !((*param).allhook).is_null() {
             let MaxFileListLength: libc::c_int = 32768 as libc::c_int;
             let vla = MaxFileListLength as usize;
-            let mut fileList: Vec::<libc::c_char> = ::std::vec::from_elem(0, vla);
+            let mut fileList: Vec<libc::c_char> = ::std::vec::from_elem(0, vla);
             let mut fl: *const libc::c_char = 0 as *const libc::c_char;
             let mut nFile: libc::c_int = 0 as libc::c_int;
             let mut length: libc::c_int = 0 as libc::c_int;
@@ -858,11 +830,10 @@ pub unsafe extern "C" fn ttp_open_transfer_server(
                 );
                 while !(fgets(
                     message.as_mut_ptr(),
-                    ::core::mem::size_of::<[libc::c_char; 20]>() as libc::c_ulong
-                        as libc::c_int,
+                    ::core::mem::size_of::<[libc::c_char; 20]>() as libc::c_ulong as libc::c_int,
                     p,
                 ))
-                    .is_null()
+                .is_null()
                 {
                     l = 0 as libc::c_int;
                     while message[l as usize] as libc::c_int >= ' ' as i32 {
@@ -922,8 +893,8 @@ pub unsafe extern "C" fn ttp_open_transfer_server(
                 10 as libc::c_int as size_t,
             );
             printf(
-                b"\nSent multi-GET filename count and array size to client\n\0"
-                    as *const u8 as *const libc::c_char,
+                b"\nSent multi-GET filename count and array size to client\n\0" as *const u8
+                    as *const libc::c_char,
             );
             memset(
                 message.as_mut_ptr() as *mut libc::c_void,
@@ -964,8 +935,7 @@ pub unsafe extern "C" fn ttp_open_transfer_server(
                     8 as libc::c_int as size_t,
                 );
                 printf(
-                    b"Sent file list, client response: %s\n\0" as *const u8
-                        as *const libc::c_char,
+                    b"Sent file list, client response: %s\n\0" as *const u8 as *const libc::c_char,
                     message.as_mut_ptr(),
                 );
                 status = read_line(
@@ -1017,8 +987,8 @@ pub unsafe extern "C" fn ttp_open_transfer_server(
                 10 as libc::c_int as size_t,
             );
             printf(
-                b"\nSent multi-GET filename count and array size to client\n\0"
-                    as *const u8 as *const libc::c_char,
+                b"\nSent multi-GET filename count and array size to client\n\0" as *const u8
+                    as *const libc::c_char,
             );
             memset(
                 message.as_mut_ptr() as *mut libc::c_void,
@@ -1056,8 +1026,7 @@ pub unsafe extern "C" fn ttp_open_transfer_server(
                 8 as libc::c_int as size_t,
             );
             printf(
-                b"Sent file list, client response: %s\n\0" as *const u8
-                    as *const libc::c_char,
+                b"Sent file list, client response: %s\n\0" as *const u8 as *const libc::c_char,
                 message.as_mut_ptr(),
             );
             status = read_line(
@@ -1069,8 +1038,7 @@ pub unsafe extern "C" fn ttp_open_transfer_server(
                 error_handler(
                     b"protocol.c\0" as *const u8 as *const libc::c_char,
                     520 as libc::c_int,
-                    b"Could not read filename from client\0" as *const u8
-                        as *const libc::c_char,
+                    b"Could not read filename from client\0" as *const u8 as *const libc::c_char,
                     1 as libc::c_int,
                 );
             }
@@ -1091,13 +1059,14 @@ pub unsafe extern "C" fn ttp_open_transfer_server(
             filename.as_mut_ptr(),
         );
     }
-    (*xfer)
-        .file = fopen(filename.as_mut_ptr(), b"r\0" as *const u8 as *const libc::c_char);
+    (*xfer).file = fopen(
+        filename.as_mut_ptr(),
+        b"r\0" as *const u8 as *const libc::c_char,
+    );
     if ((*xfer).file).is_null() {
         sprintf(
             g_error.as_mut_ptr(),
-            b"File '%s' does not exist or cannot be read\0" as *const u8
-                as *const libc::c_char,
+            b"File '%s' does not exist or cannot be read\0" as *const u8 as *const libc::c_char,
             filename.as_mut_ptr(),
         );
         status = full_write(
@@ -1109,8 +1078,7 @@ pub unsafe extern "C" fn ttp_open_transfer_server(
             error_handler(
                 b"protocol.c\0" as *const u8 as *const libc::c_char,
                 542 as libc::c_int,
-                b"Could not signal request failure to client\0" as *const u8
-                    as *const libc::c_char,
+                b"Could not signal request failure to client\0" as *const u8 as *const libc::c_char,
                 0 as libc::c_int,
             );
         }
@@ -1131,8 +1099,7 @@ pub unsafe extern "C" fn ttp_open_transfer_server(
         return error_handler(
             b"protocol.c\0" as *const u8 as *const libc::c_char,
             630 as libc::c_int,
-            b"Could not signal request approval to client\0" as *const u8
-                as *const libc::c_char,
+            b"Could not signal request approval to client\0" as *const u8 as *const libc::c_char,
             0 as libc::c_int,
         );
     }
@@ -1235,15 +1202,21 @@ pub unsafe extern "C" fn ttp_open_transfer_server(
         );
     }
     (*param).faster_den = __bswap_16((*param).faster_den);
-    fseeko((*xfer).file, 0 as libc::c_int as __off64_t, 2 as libc::c_int);
+    fseeko(
+        (*xfer).file,
+        0 as libc::c_int as __off64_t,
+        2 as libc::c_int,
+    );
     (*param).file_size = ftello((*xfer).file) as u_int64_t;
-    fseeko((*xfer).file, 0 as libc::c_int as __off64_t, 0 as libc::c_int);
-    (*param)
-        .block_count = ((*param).file_size / (*param).block_size as u_int64_t)
-        .wrapping_add(
-            ((*param).file_size % (*param).block_size as u_int64_t
-                != 0 as libc::c_int as u_int64_t) as libc::c_int as u_int64_t,
-        ) as u_int32_t;
+    fseeko(
+        (*xfer).file,
+        0 as libc::c_int as __off64_t,
+        0 as libc::c_int,
+    );
+    (*param).block_count = ((*param).file_size / (*param).block_size as u_int64_t).wrapping_add(
+        ((*param).file_size % (*param).block_size as u_int64_t != 0 as libc::c_int as u_int64_t)
+            as libc::c_int as u_int64_t,
+    ) as u_int32_t;
     (*param).epoch = time(0 as *mut time_t);
     file_size = htonll((*param).file_size);
     if full_write(
@@ -1301,20 +1274,17 @@ pub unsafe extern "C" fn ttp_open_transfer_server(
             0 as libc::c_int,
         );
     }
-    (*(*session).parameter)
-        .wait_u_sec = (ping_e.tv_sec - ping_s.tv_sec)
-        * 1000000 as libc::c_int as __time_t + (ping_e.tv_usec - ping_s.tv_usec);
-    (*(*session).parameter)
-        .wait_u_sec = (*(*session).parameter).wait_u_sec
+    (*(*session).parameter).wait_u_sec = (ping_e.tv_sec - ping_s.tv_sec)
+        * 1000000 as libc::c_int as __time_t
+        + (ping_e.tv_usec - ping_s.tv_usec);
+    (*(*session).parameter).wait_u_sec = (*(*session).parameter).wait_u_sec
         + ((*(*session).parameter).wait_u_sec as libc::c_double * 0.1f64) as libc::c_int
             as libc::c_long;
-    (*param)
-        .ipd_time = (1000000 as libc::c_longlong * 8 as libc::c_int as libc::c_longlong
+    (*param).ipd_time = (1000000 as libc::c_longlong
+        * 8 as libc::c_int as libc::c_longlong
         * (*param).block_size as libc::c_longlong
         / (*param).target_rate as libc::c_longlong) as u_int32_t;
-    (*xfer)
-        .ipd_current = ((*param).ipd_time * 3 as libc::c_int as u_int32_t)
-        as libc::c_double;
+    (*xfer).ipd_current = ((*param).ipd_time * 3 as libc::c_int as u_int32_t) as libc::c_double;
     if (*param).transcript_yn != 0 {
         xscript_open_server(session);
     }

@@ -19,22 +19,14 @@ extern "C" {
     fn close(__fd: libc::c_int) -> libc::c_int;
     fn read(__fd: libc::c_int, __buf: *mut libc::c_void, __nbytes: size_t) -> ssize_t;
     fn write(__fd: libc::c_int, __buf: *const libc::c_void, __n: size_t) -> ssize_t;
-    fn strtol(
-        _: *const libc::c_char,
-        _: *mut *mut libc::c_char,
-        _: libc::c_int,
-    ) -> libc::c_long;
+    fn strtol(_: *const libc::c_char, _: *mut *mut libc::c_char, _: libc::c_int) -> libc::c_long;
     fn __errno_location() -> *mut libc::c_int;
     static mut stderr: *mut FILE;
     fn fclose(__stream: *mut FILE) -> libc::c_int;
     fn fopen(_: *const libc::c_char, _: *const libc::c_char) -> *mut FILE;
     fn fprintf(_: *mut FILE, _: *const libc::c_char, _: ...) -> libc::c_int;
     fn sprintf(_: *mut libc::c_char, _: *const libc::c_char, _: ...) -> libc::c_int;
-    fn fgets(
-        __s: *mut libc::c_char,
-        __n: libc::c_int,
-        __stream: *mut FILE,
-    ) -> *mut libc::c_char;
+    fn fgets(__s: *mut libc::c_char, __n: libc::c_int, __stream: *mut FILE) -> *mut libc::c_char;
     fn fread(
         _: *mut libc::c_void,
         _: libc::c_ulong,
@@ -173,8 +165,7 @@ pub unsafe extern "C" fn get_random_data(
     if random_fd < 0 as libc::c_int {
         return -(1 as libc::c_int);
     }
-    if read(random_fd, buffer as *mut libc::c_void, bytes) < 0 as libc::c_int as ssize_t
-    {
+    if read(random_fd, buffer as *mut libc::c_void, bytes) < 0 as libc::c_int as ssize_t {
         return -(1 as libc::c_int);
     }
     return if close(random_fd) < 0 as libc::c_int {
@@ -185,7 +176,10 @@ pub unsafe extern "C" fn get_random_data(
 }
 #[no_mangle]
 pub unsafe extern "C" fn get_usec_since(mut old_time: *mut timeval) -> u_int64_t {
-    let mut now: timeval = timeval { tv_sec: 0, tv_usec: 0 };
+    let mut now: timeval = timeval {
+        tv_sec: 0,
+        tv_usec: 0,
+    };
     let mut result: u_int64_t = 0 as libc::c_int as u_int64_t;
     gettimeofday(&mut now, 0 as *mut libc::c_void);
     while now.tv_sec > (*old_time).tv_sec {
@@ -199,17 +193,18 @@ pub unsafe extern "C" fn get_usec_since(mut old_time: *mut timeval) -> u_int64_t
 pub unsafe extern "C" fn htonll(mut value: u_int64_t) -> u_int64_t {
     static mut necessary: libc::c_int = -(1 as libc::c_int);
     if necessary == -(1 as libc::c_int) {
-        necessary = (5 as libc::c_int
-            != __bswap_16(5 as libc::c_int as __uint16_t) as libc::c_int) as libc::c_int;
+        necessary = (5 as libc::c_int != __bswap_16(5 as libc::c_int as __uint16_t) as libc::c_int)
+            as libc::c_int;
     }
     if necessary != 0 {
         return (__bswap_32(
-            (value as libc::c_ulonglong
-                & 0xffffffff as libc::c_longlong as libc::c_ulonglong) as __uint32_t,
-        ) as u_int64_t) << 32 as libc::c_int
-            | __bswap_32((value >> 32 as libc::c_int) as __uint32_t) as u_int64_t
+            (value as libc::c_ulonglong & 0xffffffff as libc::c_longlong as libc::c_ulonglong)
+                as __uint32_t,
+        ) as u_int64_t)
+            << 32 as libc::c_int
+            | __bswap_32((value >> 32 as libc::c_int) as __uint32_t) as u_int64_t;
     } else {
-        return value
+        return value;
     };
 }
 #[no_mangle]
@@ -288,8 +283,7 @@ pub unsafe extern "C" fn read_line(
             return error_handler(
                 b"common.c\0" as *const u8 as *const libc::c_char,
                 242 as libc::c_int,
-                b"Could not read complete line of input\0" as *const u8
-                    as *const libc::c_char,
+                b"Could not read complete line of input\0" as *const u8 as *const libc::c_char,
                 0 as libc::c_int,
             );
         }
@@ -298,15 +292,13 @@ pub unsafe extern "C" fn read_line(
         if !(*buffer.offset((buffer_offset - 1 as libc::c_int) as isize) as libc::c_int
             != '\0' as i32
             && *buffer.offset((buffer_offset - 1 as libc::c_int) as isize) as libc::c_int
-                != '\n' as i32 && (buffer_offset as size_t) < buffer_length)
+                != '\n' as i32
+            && (buffer_offset as size_t) < buffer_length)
         {
             break;
         }
     }
-    *buffer
-        .offset(
-            (buffer_offset - 1 as libc::c_int) as isize,
-        ) = '\0' as i32 as libc::c_char;
+    *buffer.offset((buffer_offset - 1 as libc::c_int) as isize) = '\0' as i32 as libc::c_char;
     return 0 as libc::c_int;
 }
 #[no_mangle]
@@ -327,8 +319,7 @@ pub unsafe extern "C" fn fread_line(
             return error_handler(
                 b"common.c\0" as *const u8 as *const libc::c_char,
                 266 as libc::c_int,
-                b"Could not read complete line of input\0" as *const u8
-                    as *const libc::c_char,
+                b"Could not read complete line of input\0" as *const u8 as *const libc::c_char,
                 0 as libc::c_int,
             );
         }
@@ -337,29 +328,31 @@ pub unsafe extern "C" fn fread_line(
         if !(*buffer.offset((buffer_offset - 1 as libc::c_int) as isize) as libc::c_int
             != '\0' as i32
             && *buffer.offset((buffer_offset - 1 as libc::c_int) as isize) as libc::c_int
-                != '\n' as i32 && (buffer_offset as size_t) < buffer_length)
+                != '\n' as i32
+            && (buffer_offset as size_t) < buffer_length)
         {
             break;
         }
     }
-    *buffer
-        .offset(
-            (buffer_offset - 1 as libc::c_int) as isize,
-        ) = '\0' as i32 as libc::c_char;
+    *buffer.offset((buffer_offset - 1 as libc::c_int) as isize) = '\0' as i32 as libc::c_char;
     return 0 as libc::c_int;
 }
 #[no_mangle]
 pub unsafe extern "C" fn usleep_that_works(mut usec: u_int64_t) {
-    let mut sleep_time: u_int64_t = usec / 10000 as libc::c_int as u_int64_t
-        * 10000 as libc::c_int as u_int64_t;
-    let mut delay: timeval = timeval { tv_sec: 0, tv_usec: 0 };
-    let mut now: timeval = timeval { tv_sec: 0, tv_usec: 0 };
+    let mut sleep_time: u_int64_t =
+        usec / 10000 as libc::c_int as u_int64_t * 10000 as libc::c_int as u_int64_t;
+    let mut delay: timeval = timeval {
+        tv_sec: 0,
+        tv_usec: 0,
+    };
+    let mut now: timeval = timeval {
+        tv_sec: 0,
+        tv_usec: 0,
+    };
     gettimeofday(&mut now, 0 as *mut libc::c_void);
     if sleep_time >= 10000 as libc::c_int as u_int64_t {
         delay.tv_sec = (sleep_time / 1000000 as libc::c_int as u_int64_t) as __time_t;
-        delay
-            .tv_usec = (sleep_time % 1000000 as libc::c_int as u_int64_t)
-            as __suseconds_t;
+        delay.tv_usec = (sleep_time % 1000000 as libc::c_int as u_int64_t) as __suseconds_t;
         select(
             0 as libc::c_int,
             0 as *mut fd_set,
@@ -392,17 +385,21 @@ pub unsafe extern "C" fn get_udp_in_errors() -> u_int64_t {
                 .wrapping_sub(1 as libc::c_int as libc::c_ulong) as libc::c_int,
             f,
         ))
-            .is_null()
+        .is_null()
         {
             break;
         }
-        if !(!(strstr(buf.as_mut_ptr(), b"Udp:\0" as *const u8 as *const libc::c_char))
-            .is_null()
+        if !(!(strstr(
+            buf.as_mut_ptr(),
+            b"Udp:\0" as *const u8 as *const libc::c_char,
+        ))
+        .is_null()
             && !(strstr(
                 buf.as_mut_ptr(),
                 b"InErrors\0" as *const u8 as *const libc::c_char,
             ))
-                .is_null() && feof(f) == 0)
+            .is_null()
+            && feof(f) == 0)
         {
             continue;
         }
@@ -412,19 +409,19 @@ pub unsafe extern "C" fn get_udp_in_errors() -> u_int64_t {
                 .wrapping_sub(1 as libc::c_int as libc::c_ulong) as libc::c_int,
             f,
         ))
-            .is_null()
+        .is_null()
         {
             break;
         }
         len = strlen(buf.as_mut_ptr()) as libc::c_int;
         p = buf.as_mut_ptr();
         i = 0 as libc::c_int;
-        while i < 3 as libc::c_int && !p.is_null()
-            && p
-                < buf
-                    .as_mut_ptr()
-                    .offset(len as isize)
-                    .offset(-(1 as libc::c_int as isize))
+        while i < 3 as libc::c_int
+            && !p.is_null()
+            && p < buf
+                .as_mut_ptr()
+                .offset(len as isize)
+                .offset(-(1 as libc::c_int as isize))
         {
             p = strchr(p, ' ' as i32);
             i += 1;
@@ -433,11 +430,10 @@ pub unsafe extern "C" fn get_udp_in_errors() -> u_int64_t {
             p;
         }
         if !p.is_null()
-            && p
-                < buf
-                    .as_mut_ptr()
-                    .offset(len as isize)
-                    .offset(-(1 as libc::c_int as isize))
+            && p < buf
+                .as_mut_ptr()
+                .offset(len as isize)
+                .offset(-(1 as libc::c_int as isize))
         {
             let fresh1 = p;
             p = p.offset(-1);

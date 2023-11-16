@@ -28,19 +28,11 @@ extern "C" {
     fn read(__fd: libc::c_int, __buf: *mut libc::c_void, __nbytes: size_t) -> ssize_t;
     fn signal(__sig: libc::c_int, __handler: __sighandler_t) -> __sighandler_t;
     fn fork() -> __pid_t;
-    fn strtol(
-        _: *const libc::c_char,
-        _: *mut *mut libc::c_char,
-        _: libc::c_int,
-    ) -> libc::c_long;
+    fn strtol(_: *const libc::c_char, _: *mut *mut libc::c_char, _: libc::c_int) -> libc::c_long;
     fn malloc(_: libc::c_ulong) -> *mut libc::c_void;
     fn exit(_: libc::c_int) -> !;
     fn system(__command: *const libc::c_char) -> libc::c_int;
-    fn memset(
-        _: *mut libc::c_void,
-        _: libc::c_int,
-        _: libc::c_ulong,
-    ) -> *mut libc::c_void;
+    fn memset(_: *mut libc::c_void, _: libc::c_int, _: libc::c_ulong) -> *mut libc::c_void;
     fn strlen(_: *const libc::c_char) -> libc::c_ulong;
     fn sendto(
         __fd: libc::c_int,
@@ -50,18 +42,11 @@ extern "C" {
         __addr: __CONST_SOCKADDR_ARG,
         __addr_len: socklen_t,
     ) -> ssize_t;
-    fn accept(
-        __fd: libc::c_int,
-        __addr: __SOCKADDR_ARG,
-        __addr_len: *mut socklen_t,
-    ) -> libc::c_int;
+    fn accept(__fd: libc::c_int, __addr: __SOCKADDR_ARG, __addr_len: *mut socklen_t)
+        -> libc::c_int;
     fn stat(__file: *const libc::c_char, __buf: *mut stat) -> libc::c_int;
     fn inet_ntoa(__in: in_addr) -> *mut libc::c_char;
-    fn waitpid(
-        __pid: __pid_t,
-        __stat_loc: *mut libc::c_int,
-        __options: libc::c_int,
-    ) -> __pid_t;
+    fn waitpid(__pid: __pid_t, __stat_loc: *mut libc::c_int, __options: libc::c_int) -> __pid_t;
     static mut stderr: *mut FILE;
     fn fclose(__stream: *mut FILE) -> libc::c_int;
     fn fprintf(_: *mut FILE, _: *const libc::c_char, _: ...) -> libc::c_int;
@@ -97,10 +82,7 @@ extern "C" {
         retransmission: *mut retransmission_t,
         datagram: *mut u_char,
     ) -> libc::c_int;
-    fn ttp_authenticate_server(
-        session: *mut ttp_session_t,
-        secret: *const u_char,
-    ) -> libc::c_int;
+    fn ttp_authenticate_server(session: *mut ttp_session_t, secret: *const u_char) -> libc::c_int;
     fn ttp_negotiate_server(session: *mut ttp_session_t) -> libc::c_int;
     fn ttp_open_port_server(session: *mut ttp_session_t) -> libc::c_int;
     fn ttp_open_transfer_server(session: *mut ttp_session_t) -> libc::c_int;
@@ -174,7 +156,7 @@ pub struct option {
     pub flag: *mut libc::c_int,
     pub val: libc::c_int,
 }
-pub type __sighandler_t = Option::<unsafe extern "C" fn(libc::c_int) -> ()>;
+pub type __sighandler_t = Option<unsafe extern "C" fn(libc::c_int) -> ()>;
 pub type ssize_t = __ssize_t;
 pub type socklen_t = __socklen_t;
 pub type u_char = __u_char;
@@ -389,10 +371,7 @@ unsafe extern "C" fn __bswap_16(mut __bsx: __uint16_t) -> __uint16_t {
         | (__bsx as libc::c_int & 0xff as libc::c_int) << 8 as libc::c_int)
         as __uint16_t;
 }
-unsafe fn main_0(
-    mut argc: libc::c_int,
-    mut argv: *mut *mut libc::c_char,
-) -> libc::c_int {
+unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) -> libc::c_int {
     let mut server_fd: libc::c_int = 0;
     let mut client_fd: libc::c_int = 0;
     let mut remote_address: sockaddr_in = sockaddr_in {
@@ -401,8 +380,8 @@ unsafe fn main_0(
         sin_addr: in_addr { s_addr: 0 },
         sin_zero: [0; 8],
     };
-    let mut remote_length: socklen_t = ::core::mem::size_of::<sockaddr_in>()
-        as libc::c_ulong as socklen_t;
+    let mut remote_length: socklen_t =
+        ::core::mem::size_of::<sockaddr_in>() as libc::c_ulong as socklen_t;
     let mut parameter: ttp_parameter_t = ttp_parameter_t {
         epoch: 0,
         verbose_yn: 0,
@@ -465,8 +444,7 @@ unsafe fn main_0(
     if server_fd < 0 as libc::c_int {
         sprintf(
             g_error.as_mut_ptr(),
-            b"Could not create server socket on port %d\0" as *const u8
-                as *const libc::c_char,
+            b"Could not create server socket on port %d\0" as *const u8 as *const libc::c_char,
             parameter.tcp_port as libc::c_int,
         );
         return error_handler(
@@ -476,7 +454,10 @@ unsafe fn main_0(
             1 as libc::c_int,
         );
     }
-    signal(17 as libc::c_int, Some(reap as unsafe extern "C" fn(libc::c_int) -> ()));
+    signal(
+        17 as libc::c_int,
+        Some(reap as unsafe extern "C" fn(libc::c_int) -> ()),
+    );
     fprintf(
         stderr,
         b"Tsunami Server for protocol rev %X\nRevision: %s\nCompiled: %s %s\nWaiting for clients to connect.\n\0"
@@ -498,15 +479,13 @@ unsafe fn main_0(
             error_handler(
                 b"main.c\0" as *const u8 as *const libc::c_char,
                 142 as libc::c_int,
-                b"Could not accept client connection\0" as *const u8
-                    as *const libc::c_char,
+                b"Could not accept client connection\0" as *const u8 as *const libc::c_char,
                 0 as libc::c_int,
             );
         } else {
             fprintf(
                 stderr,
-                b"New client connecting from %s...\n\0" as *const u8
-                    as *const libc::c_char,
+                b"New client connecting from %s...\n\0" as *const u8 as *const libc::c_char,
                 inet_ntoa(remote_address.sin_addr),
             );
             child_pid = fork();
@@ -514,8 +493,7 @@ unsafe fn main_0(
                 error_handler(
                     b"main.c\0" as *const u8 as *const libc::c_char,
                     151 as libc::c_int,
-                    b"Could not create child process\0" as *const u8
-                        as *const libc::c_char,
+                    b"Could not create child process\0" as *const u8 as *const libc::c_char,
                     0 as libc::c_int,
                 );
             } else {
@@ -526,8 +504,7 @@ unsafe fn main_0(
                     session.client_fd = client_fd;
                     session.parameter = &mut parameter;
                     memset(
-                        &mut session.transfer as *mut ttp_transfer_t
-                            as *mut libc::c_void,
+                        &mut session.transfer as *mut ttp_transfer_t as *mut libc::c_void,
                         0 as libc::c_int,
                         ::core::mem::size_of::<ttp_transfer_t>() as libc::c_ulong,
                     );
@@ -539,7 +516,7 @@ unsafe fn main_0(
                 }
             }
         }
-    };
+    }
 }
 #[no_mangle]
 pub unsafe extern "C" fn client_handler(mut session: *mut ttp_session_t) {
@@ -548,12 +525,30 @@ pub unsafe extern "C" fn client_handler(mut session: *mut ttp_session_t) {
         block: 0,
         error_rate: 0,
     };
-    let mut start: timeval = timeval { tv_sec: 0, tv_usec: 0 };
-    let mut stop: timeval = timeval { tv_sec: 0, tv_usec: 0 };
-    let mut prevpacketT: timeval = timeval { tv_sec: 0, tv_usec: 0 };
-    let mut currpacketT: timeval = timeval { tv_sec: 0, tv_usec: 0 };
-    let mut lastfeedback: timeval = timeval { tv_sec: 0, tv_usec: 0 };
-    let mut lasthblostreport: timeval = timeval { tv_sec: 0, tv_usec: 0 };
+    let mut start: timeval = timeval {
+        tv_sec: 0,
+        tv_usec: 0,
+    };
+    let mut stop: timeval = timeval {
+        tv_sec: 0,
+        tv_usec: 0,
+    };
+    let mut prevpacketT: timeval = timeval {
+        tv_sec: 0,
+        tv_usec: 0,
+    };
+    let mut currpacketT: timeval = timeval {
+        tv_sec: 0,
+        tv_usec: 0,
+    };
+    let mut lastfeedback: timeval = timeval {
+        tv_sec: 0,
+        tv_usec: 0,
+    };
+    let mut lasthblostreport: timeval = timeval {
+        tv_sec: 0,
+        tv_usec: 0,
+    };
     let mut deadconnection_counter: u_int32_t = 0;
     let mut retransmitlen: libc::c_int = 0;
     let mut datagram: [u_char; 65536] = [0; 65536];
@@ -611,8 +606,7 @@ pub unsafe extern "C" fn client_handler(mut session: *mut ttp_session_t) {
             error_handler(
                 b"main.c\0" as *const u8 as *const libc::c_char,
                 231 as libc::c_int,
-                b"Could not make client socket blocking\0" as *const u8
-                    as *const libc::c_char,
+                b"Could not make client socket blocking\0" as *const u8 as *const libc::c_char,
                 1 as libc::c_int,
             );
         }
@@ -665,10 +659,9 @@ pub unsafe extern "C" fn client_handler(mut session: *mut ttp_session_t) {
                     block_type = 'R' as i32 as u_char;
                     gettimeofday(&mut currpacketT, 0 as *mut libc::c_void);
                     ipd_usleep_diff = ((*xfer).ipd_current
-                        + ((prevpacketT.tv_sec - currpacketT.tv_sec) as libc::c_double
-                            * 1e6f64
-                            + (prevpacketT.tv_usec - currpacketT.tv_usec)
-                                as libc::c_double)) as int64_t;
+                        + ((prevpacketT.tv_sec - currpacketT.tv_sec) as libc::c_double * 1e6f64
+                            + (prevpacketT.tv_usec - currpacketT.tv_usec) as libc::c_double))
+                        as int64_t;
                     prevpacketT = currpacketT;
                     if ipd_usleep_diff > 0 as libc::c_int as int64_t
                         || ipd_time > 0 as libc::c_int as int64_t
@@ -682,20 +675,17 @@ pub unsafe extern "C" fn client_handler(mut session: *mut ttp_session_t) {
                     };
                     status = read(
                         (*session).client_fd,
-                        (&mut retransmission as *mut retransmission_t
-                            as *mut libc::c_char)
-                            .offset(retransmitlen as isize) as *mut libc::c_void,
+                        (&mut retransmission as *mut retransmission_t as *mut libc::c_char)
+                            .offset(retransmitlen as isize)
+                            as *mut libc::c_void,
                         (::core::mem::size_of::<retransmission_t>() as libc::c_ulong)
                             .wrapping_sub(retransmitlen as libc::c_ulong),
                     ) as libc::c_int;
-                    if status <= 0 as libc::c_int
-                        && *__errno_location() != 11 as libc::c_int
-                    {
+                    if status <= 0 as libc::c_int && *__errno_location() != 11 as libc::c_int {
                         error_handler(
                             b"main.c\0" as *const u8 as *const libc::c_char,
                             288 as libc::c_int,
-                            b"Retransmission read failed\0" as *const u8
-                                as *const libc::c_char,
+                            b"Retransmission read failed\0" as *const u8 as *const libc::c_char,
                             1 as libc::c_int,
                         );
                     }
@@ -720,10 +710,7 @@ pub unsafe extern "C" fn client_handler(mut session: *mut ttp_session_t) {
                             if !((*param).finishhook).is_null() {
                                 let MaxCommandLength: libc::c_int = 1024 as libc::c_int;
                                 let vla = MaxCommandLength as usize;
-                                let mut cmd: Vec::<libc::c_char> = ::std::vec::from_elem(
-                                    0,
-                                    vla,
-                                );
+                                let mut cmd: Vec<libc::c_char> = ::std::vec::from_elem(0, vla);
                                 let mut v: libc::c_int = 0;
                                 v = snprintf(
                                     cmd.as_mut_ptr(),
@@ -758,8 +745,7 @@ pub unsafe extern "C" fn client_handler(mut session: *mut ttp_session_t) {
                                 error_handler(
                                     b"main.c\0" as *const u8 as *const libc::c_char,
                                     333 as libc::c_int,
-                                    b"Retransmission error\0" as *const u8
-                                        as *const libc::c_char,
+                                    b"Retransmission error\0" as *const u8 as *const libc::c_char,
                                     0 as libc::c_int,
                                 );
                             }
@@ -768,8 +754,7 @@ pub unsafe extern "C" fn client_handler(mut session: *mut ttp_session_t) {
                     } else if (retransmitlen as libc::c_ulong)
                         < ::core::mem::size_of::<retransmission_t>() as libc::c_ulong
                     {
-                        (*xfer)
-                            .block = if ((*xfer).block)
+                        (*xfer).block = if ((*xfer).block)
                             .wrapping_add(1 as libc::c_int as u_int32_t)
                             < (*param).block_count
                         {
@@ -791,8 +776,7 @@ pub unsafe extern "C" fn client_handler(mut session: *mut ttp_session_t) {
                         if status < 0 as libc::c_int {
                             sprintf(
                                 g_error.as_mut_ptr(),
-                                b"Could not read block #%u\0" as *const u8
-                                    as *const libc::c_char,
+                                b"Could not read block #%u\0" as *const u8 as *const libc::c_char,
                                 (*xfer).block,
                             );
                             error_handler(
@@ -805,8 +789,8 @@ pub unsafe extern "C" fn client_handler(mut session: *mut ttp_session_t) {
                         status = sendto(
                             (*xfer).udp_fd,
                             datagram.as_mut_ptr() as *const libc::c_void,
-                            (6 as libc::c_int as u_int32_t)
-                                .wrapping_add((*param).block_size) as size_t,
+                            (6 as libc::c_int as u_int32_t).wrapping_add((*param).block_size)
+                                as size_t,
                             0 as libc::c_int,
                             __CONST_SOCKADDR_ARG {
                                 __sockaddr__: (*xfer).udp_address,
@@ -833,8 +817,7 @@ pub unsafe extern "C" fn client_handler(mut session: *mut ttp_session_t) {
                     {
                         fprintf(
                             stderr,
-                            b"warn: retransmitlen > %d\n\0" as *const u8
-                                as *const libc::c_char,
+                            b"warn: retransmitlen > %d\n\0" as *const u8 as *const libc::c_char,
                             ::core::mem::size_of::<retransmission_t>() as libc::c_ulong
                                 as libc::c_int,
                         );
@@ -845,28 +828,18 @@ pub unsafe extern "C" fn client_handler(mut session: *mut ttp_session_t) {
                     if fresh0 > 2048 as libc::c_int as u_int32_t {
                         let mut stats_line: [libc::c_char; 160] = [0; 160];
                         deadconnection_counter = 0 as libc::c_int as u_int32_t;
-                        if (get_usec_since(&mut lasthblostreport) as libc::c_double)
-                            < 500000.0f64
-                        {
+                        if (get_usec_since(&mut lasthblostreport) as libc::c_double) < 500000.0f64 {
                             continue;
                         }
                         gettimeofday(&mut lasthblostreport, 0 as *mut libc::c_void);
                         retransmission.request_type = __bswap_16(REQUEST_ERROR_RATE);
-                        retransmission
-                            .error_rate = __bswap_32(
-                            100000 as libc::c_int as __uint32_t,
-                        );
+                        retransmission.error_rate = __bswap_32(100000 as libc::c_int as __uint32_t);
                         retransmission.block = 0 as libc::c_int as u_int32_t;
-                        ttp_accept_retransmit(
-                            session,
-                            &mut retransmission,
-                            datagram.as_mut_ptr(),
-                        );
+                        ttp_accept_retransmit(session, &mut retransmission, datagram.as_mut_ptr());
                         delta = get_usec_since(&mut lastfeedback);
                         snprintf(
                             stats_line.as_mut_ptr(),
-                            (::core::mem::size_of::<[libc::c_char; 160]>()
-                                as libc::c_ulong)
+                            (::core::mem::size_of::<[libc::c_char; 160]>() as libc::c_ulong)
                                 .wrapping_sub(1 as libc::c_int as libc::c_ulong),
                             b"   n/a     n/a     n/a %7u %6.2f %3u -- no heartbeat since %3.2fs\n\0"
                                 as *const u8 as *const libc::c_char,
@@ -922,7 +895,8 @@ pub unsafe extern "C" fn client_handler(mut session: *mut ttp_session_t) {
                         (*param).file_size as ull_t,
                         delta as libc::c_double / 1000000.0f64,
                         8.0f64 * (*param).file_size as libc::c_double
-                            / (delta as libc::c_double * 1e-6f64
+                            / (delta as libc::c_double
+                                * 1e-6f64
                                 * 1024 as libc::c_int as libc::c_double
                                 * 1024 as libc::c_int as libc::c_double),
                     );
@@ -939,7 +913,7 @@ pub unsafe extern "C" fn client_handler(mut session: *mut ttp_session_t) {
                 );
             }
         }
-    };
+    }
 }
 #[no_mangle]
 pub unsafe extern "C" fn process_options(
@@ -1069,9 +1043,18 @@ pub unsafe extern "C" fn process_options(
         st_size: 0,
         st_blksize: 0,
         st_blocks: 0,
-        st_atim: timespec { tv_sec: 0, tv_nsec: 0 },
-        st_mtim: timespec { tv_sec: 0, tv_nsec: 0 },
-        st_ctim: timespec { tv_sec: 0, tv_nsec: 0 },
+        st_atim: timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        },
+        st_mtim: timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        },
+        st_ctim: timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        },
         __glibc_reserved: [0; 3],
     };
     let mut which: libc::c_int = 0;
@@ -1134,8 +1117,7 @@ pub unsafe extern "C" fn process_options(
                 );
                 fprintf(
                     stderr,
-                    b"[filename1 filename2 ...]\n\n\0" as *const u8
-                        as *const libc::c_char,
+                    b"[filename1 filename2 ...]\n\n\0" as *const u8 as *const libc::c_char,
                 );
                 fprintf(
                     stderr,
@@ -1215,14 +1197,12 @@ pub unsafe extern "C" fn process_options(
                 );
                 fprintf(
                     stderr,
-                    b"          buffer     = %d bytes\n\0" as *const u8
-                        as *const libc::c_char,
+                    b"          buffer     = %d bytes\n\0" as *const u8 as *const libc::c_char,
                     DEFAULT_UDP_BUFFER,
                 );
                 fprintf(
                     stderr,
-                    b"          hbtimeout  = %d seconds\n\0" as *const u8
-                        as *const libc::c_char,
+                    b"          hbtimeout  = %d seconds\n\0" as *const u8 as *const libc::c_char,
                     DEFAULT_HEARTBEAT_TIMEOUT as libc::c_int,
                 );
                 fprintf(stderr, b"\n\0" as *const u8 as *const libc::c_char);
@@ -1235,8 +1215,7 @@ pub unsafe extern "C" fn process_options(
         (*parameter).file_names = argv.offset(optind as isize);
         (*parameter).file_name_size = 0 as libc::c_int as u_int16_t;
         (*parameter).total_files = (argc - optind) as u_int16_t;
-        (*parameter)
-            .file_sizes = malloc(
+        (*parameter).file_sizes = malloc(
             (::core::mem::size_of::<size_t>() as libc::c_ulong)
                 .wrapping_mul((*parameter).total_files as libc::c_ulong),
         ) as *mut size_t;
@@ -1248,11 +1227,12 @@ pub unsafe extern "C" fn process_options(
         );
         counter = 0 as libc::c_int;
         while counter < argc - optind {
-            stat(*((*parameter).file_names).offset(counter as isize), &mut filestat);
-            *((*parameter).file_sizes)
-                .offset(counter as isize) = filestat.st_size as size_t;
-            (*parameter)
-                .file_name_size = ((*parameter).file_name_size as libc::c_ulong)
+            stat(
+                *((*parameter).file_names).offset(counter as isize),
+                &mut filestat,
+            );
+            *((*parameter).file_sizes).offset(counter as isize) = filestat.st_size as size_t;
+            (*parameter).file_name_size = ((*parameter).file_name_size as libc::c_ulong)
                 .wrapping_add(
                     (strlen(*((*parameter).file_names).offset(counter as isize)))
                         .wrapping_add(1 as libc::c_int as libc::c_ulong),
@@ -1294,8 +1274,7 @@ pub unsafe extern "C" fn process_options(
 #[no_mangle]
 pub unsafe extern "C" fn reap(mut signum: libc::c_int) {
     let mut status: libc::c_int = 0;
-    while waitpid(-(1 as libc::c_int), &mut status, 1 as libc::c_int) > 0 as libc::c_int
-    {
+    while waitpid(-(1 as libc::c_int), &mut status, 1 as libc::c_int) > 0 as libc::c_int {
         fprintf(
             stderr,
             b"Child server process terminated with status code 0x%X\n\0" as *const u8
@@ -1303,10 +1282,13 @@ pub unsafe extern "C" fn reap(mut signum: libc::c_int) {
             status,
         );
     }
-    signal(17 as libc::c_int, Some(reap as unsafe extern "C" fn(libc::c_int) -> ()));
+    signal(
+        17 as libc::c_int,
+        Some(reap as unsafe extern "C" fn(libc::c_int) -> ()),
+    );
 }
 pub fn main() {
-    let mut args: Vec::<*mut libc::c_char> = Vec::new();
+    let mut args: Vec<*mut libc::c_char> = Vec::new();
     for arg in ::std::env::args() {
         args.push(
             (::std::ffi::CString::new(arg))
@@ -1316,11 +1298,9 @@ pub fn main() {
     }
     args.push(::core::ptr::null_mut());
     unsafe {
-        ::std::process::exit(
-            main_0(
-                (args.len() - 1) as libc::c_int,
-                args.as_mut_ptr() as *mut *mut libc::c_char,
-            ) as i32,
-        )
+        ::std::process::exit(main_0(
+            (args.len() - 1) as libc::c_int,
+            args.as_mut_ptr() as *mut *mut libc::c_char,
+        ) as i32)
     }
 }

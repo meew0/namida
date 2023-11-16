@@ -10,11 +10,7 @@ extern "C" {
         _: libc::c_ulong,
         _: *mut FILE,
     ) -> libc::c_ulong;
-    fn fseeko(
-        __stream: *mut FILE,
-        __off: __off64_t,
-        __whence: libc::c_int,
-    ) -> libc::c_int;
+    fn fseeko(__stream: *mut FILE, __off: __off64_t, __whence: libc::c_int) -> libc::c_int;
     static mut g_error: [libc::c_char; 0];
     fn error_handler(
         file: *const libc::c_char,
@@ -187,10 +183,8 @@ pub unsafe extern "C" fn build_datagram(
             0 as libc::c_int,
         );
     }
-    *(datagram.offset(0 as libc::c_int as isize)
-        as *mut u_int32_t) = __bswap_32(block_index);
-    *(datagram.offset(4 as libc::c_int as isize)
-        as *mut u_int16_t) = __bswap_16(block_type);
+    *(datagram.offset(0 as libc::c_int as isize) as *mut u_int32_t) = __bswap_32(block_index);
+    *(datagram.offset(4 as libc::c_int as isize) as *mut u_int16_t) = __bswap_16(block_type);
     last_block = block_index;
     return 0 as libc::c_int;
 }

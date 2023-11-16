@@ -5,16 +5,8 @@ extern "C" {
     pub type _IO_marker;
     fn fprintf(_: *mut FILE, _: *const libc::c_char, _: ...) -> libc::c_int;
     fn sprintf(_: *mut libc::c_char, _: *const libc::c_char, _: ...) -> libc::c_int;
-    fn memcpy(
-        _: *mut libc::c_void,
-        _: *const libc::c_void,
-        _: libc::c_ulong,
-    ) -> *mut libc::c_void;
-    fn memset(
-        _: *mut libc::c_void,
-        _: libc::c_int,
-        _: libc::c_ulong,
-    ) -> *mut libc::c_void;
+    fn memcpy(_: *mut libc::c_void, _: *const libc::c_void, _: libc::c_ulong) -> *mut libc::c_void;
+    fn memset(_: *mut libc::c_void, _: libc::c_int, _: libc::c_ulong) -> *mut libc::c_void;
 }
 pub type size_t = libc::c_ulong;
 pub type __u_char = libc::c_uchar;
@@ -270,51 +262,29 @@ pub static mut md5_table: [[u_char; 2]; 64] = [
     [9 as libc::c_int as u_char, 21 as libc::c_int as u_char],
 ];
 #[no_mangle]
-pub unsafe extern "C" fn md5_F(
-    mut x: u_int32_t,
-    mut y: u_int32_t,
-    mut z: u_int32_t,
-) -> u_int32_t {
+pub unsafe extern "C" fn md5_F(mut x: u_int32_t, mut y: u_int32_t, mut z: u_int32_t) -> u_int32_t {
     return x & y | !x & z;
 }
 #[no_mangle]
-pub unsafe extern "C" fn md5_G(
-    mut x: u_int32_t,
-    mut y: u_int32_t,
-    mut z: u_int32_t,
-) -> u_int32_t {
+pub unsafe extern "C" fn md5_G(mut x: u_int32_t, mut y: u_int32_t, mut z: u_int32_t) -> u_int32_t {
     return x & z | y & !z;
 }
 #[no_mangle]
-pub unsafe extern "C" fn md5_H(
-    mut x: u_int32_t,
-    mut y: u_int32_t,
-    mut z: u_int32_t,
-) -> u_int32_t {
+pub unsafe extern "C" fn md5_H(mut x: u_int32_t, mut y: u_int32_t, mut z: u_int32_t) -> u_int32_t {
     return x ^ y ^ z;
 }
 #[no_mangle]
-pub unsafe extern "C" fn md5_I(
-    mut x: u_int32_t,
-    mut y: u_int32_t,
-    mut z: u_int32_t,
-) -> u_int32_t {
+pub unsafe extern "C" fn md5_I(mut x: u_int32_t, mut y: u_int32_t, mut z: u_int32_t) -> u_int32_t {
     return y ^ (x | !z);
 }
 #[no_mangle]
-pub static mut md5_dispatch: [Option::<
+pub static mut md5_dispatch: [Option<
     unsafe extern "C" fn(u_int32_t, u_int32_t, u_int32_t) -> u_int32_t,
 >; 4] = unsafe {
     [
-        Some(
-            md5_F as unsafe extern "C" fn(u_int32_t, u_int32_t, u_int32_t) -> u_int32_t,
-        ),
-        Some(
-            md5_G as unsafe extern "C" fn(u_int32_t, u_int32_t, u_int32_t) -> u_int32_t,
-        ),
-        Some(
-            md5_H as unsafe extern "C" fn(u_int32_t, u_int32_t, u_int32_t) -> u_int32_t,
-        ),
+        Some(md5_F as unsafe extern "C" fn(u_int32_t, u_int32_t, u_int32_t) -> u_int32_t),
+        Some(md5_G as unsafe extern "C" fn(u_int32_t, u_int32_t, u_int32_t) -> u_int32_t),
+        Some(md5_H as unsafe extern "C" fn(u_int32_t, u_int32_t, u_int32_t) -> u_int32_t),
         Some(md5_I as unsafe extern "C" fn(u_int32_t, u_int32_t, u_int32_t) -> u_int32_t),
     ]
 };
@@ -353,8 +323,7 @@ pub unsafe extern "C" fn md5_digest(
             if (64 as libc::c_int * (i + 1 as libc::c_int)) as size_t > size {
                 memcpy(
                     X.as_mut_ptr() as *mut u_char as *mut libc::c_void,
-                    buffer.offset((64 as libc::c_int * i) as isize)
-                        as *const libc::c_void,
+                    buffer.offset((64 as libc::c_int * i) as isize) as *const libc::c_void,
                     size % 64 as libc::c_int as size_t,
                 );
                 memcpy(
@@ -362,14 +331,12 @@ pub unsafe extern "C" fn md5_digest(
                         .offset((size % 64 as libc::c_int as size_t) as isize)
                         as *mut libc::c_void,
                     pad.as_mut_ptr() as *const libc::c_void,
-                    (64 as libc::c_int as size_t)
-                        .wrapping_sub(size % 64 as libc::c_int as size_t),
+                    (64 as libc::c_int as size_t).wrapping_sub(size % 64 as libc::c_int as size_t),
                 );
             } else {
                 memcpy(
                     X.as_mut_ptr() as *mut u_char as *mut libc::c_void,
-                    buffer.offset((64 as libc::c_int * i) as isize)
-                        as *const libc::c_void,
+                    buffer.offset((64 as libc::c_int * i) as isize) as *const libc::c_void,
                     64 as libc::c_int as libc::c_ulong,
                 );
             }
@@ -383,8 +350,7 @@ pub unsafe extern "C" fn md5_digest(
             } else {
                 memcpy(
                     X.as_mut_ptr() as *mut u_char as *mut libc::c_void,
-                    buffer.offset((64 as libc::c_int * i) as isize)
-                        as *const libc::c_void,
+                    buffer.offset((64 as libc::c_int * i) as isize) as *const libc::c_void,
                     size % 64 as libc::c_int as size_t,
                 );
                 memcpy(
@@ -392,12 +358,10 @@ pub unsafe extern "C" fn md5_digest(
                         .offset((size % 64 as libc::c_int as size_t) as isize)
                         as *mut libc::c_void,
                     pad.as_mut_ptr() as *const libc::c_void,
-                    (64 as libc::c_int as size_t)
-                        .wrapping_sub(size % 64 as libc::c_int as size_t),
+                    (64 as libc::c_int as size_t).wrapping_sub(size % 64 as libc::c_int as size_t),
                 );
             }
-            X[14 as libc::c_int
-                as usize] = (size * 8 as libc::c_int as size_t) as u_int32_t;
+            X[14 as libc::c_int as usize] = (size * 8 as libc::c_int as size_t) as u_int32_t;
             X[15 as libc::c_int as usize] = 0 as libc::c_int as u_int32_t;
         }
         memcpy(
@@ -408,9 +372,7 @@ pub unsafe extern "C" fn md5_digest(
         j = 0 as libc::c_int;
         while j < 64 as libc::c_int {
             func = (md5_dispatch[(j / 16 as libc::c_int) as usize])
-                .expect(
-                    "non-null function pointer",
-                )(
+                .expect("non-null function pointer")(
                 state[((4 as libc::c_int - j % 4 as libc::c_int + 1 as libc::c_int)
                     % 4 as libc::c_int) as usize],
                 state[((4 as libc::c_int - j % 4 as libc::c_int + 2 as libc::c_int)
@@ -418,25 +380,20 @@ pub unsafe extern "C" fn md5_digest(
                 state[((4 as libc::c_int - j % 4 as libc::c_int + 3 as libc::c_int)
                     % 4 as libc::c_int) as usize],
             );
-            sum = (state[((4 as libc::c_int - j % 4 as libc::c_int) % 4 as libc::c_int)
-                as usize])
+            sum = (state[((4 as libc::c_int - j % 4 as libc::c_int) % 4 as libc::c_int) as usize])
                 .wrapping_add(func)
-                .wrapping_add(
-                    X[md5_table[j as usize][0 as libc::c_int as usize] as usize],
-                )
+                .wrapping_add(X[md5_table[j as usize][0 as libc::c_int as usize] as usize])
                 .wrapping_add(T[j as usize]);
-            state[((4 as libc::c_int - j % 4 as libc::c_int) % 4 as libc::c_int)
-                as usize] = (state[((4 as libc::c_int - j % 4 as libc::c_int
-                + 1 as libc::c_int) % 4 as libc::c_int) as usize])
-                .wrapping_add(
-                    sum
-                        << md5_table[j as usize][1 as libc::c_int as usize]
-                            as libc::c_int
-                        | sum
-                            >> 32 as libc::c_int
-                                - md5_table[j as usize][1 as libc::c_int as usize]
-                                    as libc::c_int,
-                );
+            state[((4 as libc::c_int - j % 4 as libc::c_int) % 4 as libc::c_int) as usize] =
+                (state[((4 as libc::c_int - j % 4 as libc::c_int + 1 as libc::c_int)
+                    % 4 as libc::c_int) as usize])
+                    .wrapping_add(
+                        sum << md5_table[j as usize][1 as libc::c_int as usize] as libc::c_int
+                            | sum
+                                >> 32 as libc::c_int
+                                    - md5_table[j as usize][1 as libc::c_int as usize]
+                                        as libc::c_int,
+                    );
             j += 1;
             j;
         }
@@ -456,10 +413,7 @@ pub unsafe extern "C" fn md5_digest(
     );
 }
 #[no_mangle]
-pub unsafe extern "C" fn md5_fprint_digest(
-    mut file: *mut FILE,
-    mut digest: *mut u_char,
-) {
+pub unsafe extern "C" fn md5_fprint_digest(mut file: *mut FILE, mut digest: *mut u_char) {
     let mut i: libc::c_int = 0;
     i = 0 as libc::c_int;
     while i < 16 as libc::c_int {
@@ -473,14 +427,11 @@ pub unsafe extern "C" fn md5_fprint_digest(
     }
 }
 #[no_mangle]
-pub unsafe extern "C" fn md5_sprint_digest(
-    mut buffer: *mut libc::c_char,
-    mut digest: *mut u_char,
-) {
+pub unsafe extern "C" fn md5_sprint_digest(mut buffer: *mut libc::c_char, mut digest: *mut u_char) {
     sprintf(
         buffer,
-        b"%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\0"
-            as *const u8 as *const libc::c_char,
+        b"%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\0" as *const u8
+            as *const libc::c_char,
         *digest.offset(0 as libc::c_int as isize) as libc::c_int,
         *digest.offset(1 as libc::c_int as isize) as libc::c_int,
         *digest.offset(2 as libc::c_int as isize) as libc::c_int,
@@ -499,10 +450,7 @@ pub unsafe extern "C" fn md5_sprint_digest(
         *digest.offset(15 as libc::c_int as isize) as libc::c_int,
     );
 }
-unsafe extern "C" fn md5_process(
-    mut pms: *mut md5_state_t,
-    mut data: *const md5_byte_t,
-) {
+unsafe extern "C" fn md5_process(mut pms: *mut md5_state_t, mut data: *const md5_byte_t) {
     let mut a: md5_word_t = (*pms).abcd[0 as libc::c_int as usize];
     let mut b: md5_word_t = (*pms).abcd[1 as libc::c_int as usize];
     let mut c: md5_word_t = (*pms).abcd[2 as libc::c_int as usize];
@@ -513,7 +461,8 @@ unsafe extern "C" fn md5_process(
     static mut w: libc::c_int = 1 as libc::c_int;
     if *(&w as *const libc::c_int as *const md5_byte_t) != 0 {
         if data.offset_from(0 as *const md5_byte_t) as libc::c_long
-            & 3 as libc::c_int as libc::c_long == 0
+            & 3 as libc::c_int as libc::c_long
+            == 0
         {
             X = data as *const md5_word_t;
         } else {
@@ -530,14 +479,11 @@ unsafe extern "C" fn md5_process(
         X = xbuf.as_mut_ptr();
         i = 0 as libc::c_int;
         while i < 16 as libc::c_int {
-            xbuf[i
-                as usize] = (*xp.offset(0 as libc::c_int as isize) as libc::c_int
-                + ((*xp.offset(1 as libc::c_int as isize) as libc::c_int)
-                    << 8 as libc::c_int)
-                + ((*xp.offset(2 as libc::c_int as isize) as libc::c_int)
-                    << 16 as libc::c_int)
-                + ((*xp.offset(3 as libc::c_int as isize) as libc::c_int)
-                    << 24 as libc::c_int)) as md5_word_t;
+            xbuf[i as usize] = (*xp.offset(0 as libc::c_int as isize) as libc::c_int
+                + ((*xp.offset(1 as libc::c_int as isize) as libc::c_int) << 8 as libc::c_int)
+                + ((*xp.offset(2 as libc::c_int as isize) as libc::c_int) << 16 as libc::c_int)
+                + ((*xp.offset(3 as libc::c_int as isize) as libc::c_int) << 24 as libc::c_int))
+                as md5_word_t;
             i += 1;
             i;
             xp = xp.offset(4 as libc::c_int as isize);
@@ -546,501 +492,341 @@ unsafe extern "C" fn md5_process(
     t = a
         .wrapping_add(b & c | !b & d)
         .wrapping_add(*X.offset(0 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x28955b87 as libc::c_int as md5_word_t,
-        );
-    a = (t << 7 as libc::c_int | t >> 32 as libc::c_int - 7 as libc::c_int)
-        .wrapping_add(b);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x28955b87 as libc::c_int as md5_word_t);
+    a = (t << 7 as libc::c_int | t >> 32 as libc::c_int - 7 as libc::c_int).wrapping_add(b);
     t = d
         .wrapping_add(a & b | !a & c)
         .wrapping_add(*X.offset(1 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x173848a9 as libc::c_int as md5_word_t,
-        );
-    d = (t << 12 as libc::c_int | t >> 32 as libc::c_int - 12 as libc::c_int)
-        .wrapping_add(a);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x173848a9 as libc::c_int as md5_word_t);
+    d = (t << 12 as libc::c_int | t >> 32 as libc::c_int - 12 as libc::c_int).wrapping_add(a);
     t = c
         .wrapping_add(d & a | !d & b)
         .wrapping_add(*X.offset(2 as libc::c_int as isize))
         .wrapping_add(0x242070db as libc::c_int as md5_word_t);
-    c = (t << 17 as libc::c_int | t >> 32 as libc::c_int - 17 as libc::c_int)
-        .wrapping_add(d);
+    c = (t << 17 as libc::c_int | t >> 32 as libc::c_int - 17 as libc::c_int).wrapping_add(d);
     t = b
         .wrapping_add(c & d | !c & a)
         .wrapping_add(*X.offset(3 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x3e423111 as libc::c_int as md5_word_t,
-        );
-    b = (t << 22 as libc::c_int | t >> 32 as libc::c_int - 22 as libc::c_int)
-        .wrapping_add(c);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x3e423111 as libc::c_int as md5_word_t);
+    b = (t << 22 as libc::c_int | t >> 32 as libc::c_int - 22 as libc::c_int).wrapping_add(c);
     t = a
         .wrapping_add(b & c | !b & d)
         .wrapping_add(*X.offset(4 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0xa83f050 as libc::c_int as md5_word_t,
-        );
-    a = (t << 7 as libc::c_int | t >> 32 as libc::c_int - 7 as libc::c_int)
-        .wrapping_add(b);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0xa83f050 as libc::c_int as md5_word_t);
+    a = (t << 7 as libc::c_int | t >> 32 as libc::c_int - 7 as libc::c_int).wrapping_add(b);
     t = d
         .wrapping_add(a & b | !a & c)
         .wrapping_add(*X.offset(5 as libc::c_int as isize))
         .wrapping_add(0x4787c62a as libc::c_int as md5_word_t);
-    d = (t << 12 as libc::c_int | t >> 32 as libc::c_int - 12 as libc::c_int)
-        .wrapping_add(a);
+    d = (t << 12 as libc::c_int | t >> 32 as libc::c_int - 12 as libc::c_int).wrapping_add(a);
     t = c
         .wrapping_add(d & a | !d & b)
         .wrapping_add(*X.offset(6 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x57cfb9ec as libc::c_int as md5_word_t,
-        );
-    c = (t << 17 as libc::c_int | t >> 32 as libc::c_int - 17 as libc::c_int)
-        .wrapping_add(d);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x57cfb9ec as libc::c_int as md5_word_t);
+    c = (t << 17 as libc::c_int | t >> 32 as libc::c_int - 17 as libc::c_int).wrapping_add(d);
     t = b
         .wrapping_add(c & d | !c & a)
         .wrapping_add(*X.offset(7 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x2b96afe as libc::c_int as md5_word_t,
-        );
-    b = (t << 22 as libc::c_int | t >> 32 as libc::c_int - 22 as libc::c_int)
-        .wrapping_add(c);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x2b96afe as libc::c_int as md5_word_t);
+    b = (t << 22 as libc::c_int | t >> 32 as libc::c_int - 22 as libc::c_int).wrapping_add(c);
     t = a
         .wrapping_add(b & c | !b & d)
         .wrapping_add(*X.offset(8 as libc::c_int as isize))
         .wrapping_add(0x698098d8 as libc::c_int as md5_word_t);
-    a = (t << 7 as libc::c_int | t >> 32 as libc::c_int - 7 as libc::c_int)
-        .wrapping_add(b);
+    a = (t << 7 as libc::c_int | t >> 32 as libc::c_int - 7 as libc::c_int).wrapping_add(b);
     t = d
         .wrapping_add(a & b | !a & c)
         .wrapping_add(*X.offset(9 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x74bb0850 as libc::c_int as md5_word_t,
-        );
-    d = (t << 12 as libc::c_int | t >> 32 as libc::c_int - 12 as libc::c_int)
-        .wrapping_add(a);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x74bb0850 as libc::c_int as md5_word_t);
+    d = (t << 12 as libc::c_int | t >> 32 as libc::c_int - 12 as libc::c_int).wrapping_add(a);
     t = c
         .wrapping_add(d & a | !d & b)
         .wrapping_add(*X.offset(10 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0xa44e as libc::c_int as md5_word_t,
-        );
-    c = (t << 17 as libc::c_int | t >> 32 as libc::c_int - 17 as libc::c_int)
-        .wrapping_add(d);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0xa44e as libc::c_int as md5_word_t);
+    c = (t << 17 as libc::c_int | t >> 32 as libc::c_int - 17 as libc::c_int).wrapping_add(d);
     t = b
         .wrapping_add(c & d | !c & a)
         .wrapping_add(*X.offset(11 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x76a32841 as libc::c_int as md5_word_t,
-        );
-    b = (t << 22 as libc::c_int | t >> 32 as libc::c_int - 22 as libc::c_int)
-        .wrapping_add(c);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x76a32841 as libc::c_int as md5_word_t);
+    b = (t << 22 as libc::c_int | t >> 32 as libc::c_int - 22 as libc::c_int).wrapping_add(c);
     t = a
         .wrapping_add(b & c | !b & d)
         .wrapping_add(*X.offset(12 as libc::c_int as isize))
         .wrapping_add(0x6b901122 as libc::c_int as md5_word_t);
-    a = (t << 7 as libc::c_int | t >> 32 as libc::c_int - 7 as libc::c_int)
-        .wrapping_add(b);
+    a = (t << 7 as libc::c_int | t >> 32 as libc::c_int - 7 as libc::c_int).wrapping_add(b);
     t = d
         .wrapping_add(a & b | !a & c)
         .wrapping_add(*X.offset(13 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x2678e6c as libc::c_int as md5_word_t,
-        );
-    d = (t << 12 as libc::c_int | t >> 32 as libc::c_int - 12 as libc::c_int)
-        .wrapping_add(a);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x2678e6c as libc::c_int as md5_word_t);
+    d = (t << 12 as libc::c_int | t >> 32 as libc::c_int - 12 as libc::c_int).wrapping_add(a);
     t = c
         .wrapping_add(d & a | !d & b)
         .wrapping_add(*X.offset(14 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x5986bc71 as libc::c_int as md5_word_t,
-        );
-    c = (t << 17 as libc::c_int | t >> 32 as libc::c_int - 17 as libc::c_int)
-        .wrapping_add(d);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x5986bc71 as libc::c_int as md5_word_t);
+    c = (t << 17 as libc::c_int | t >> 32 as libc::c_int - 17 as libc::c_int).wrapping_add(d);
     t = b
         .wrapping_add(c & d | !c & a)
         .wrapping_add(*X.offset(15 as libc::c_int as isize))
         .wrapping_add(0x49b40821 as libc::c_int as md5_word_t);
-    b = (t << 22 as libc::c_int | t >> 32 as libc::c_int - 22 as libc::c_int)
-        .wrapping_add(c);
+    b = (t << 22 as libc::c_int | t >> 32 as libc::c_int - 22 as libc::c_int).wrapping_add(c);
     t = a
         .wrapping_add(b & d | c & !d)
         .wrapping_add(*X.offset(1 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x9e1da9d as libc::c_int as md5_word_t,
-        );
-    a = (t << 5 as libc::c_int | t >> 32 as libc::c_int - 5 as libc::c_int)
-        .wrapping_add(b);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x9e1da9d as libc::c_int as md5_word_t);
+    a = (t << 5 as libc::c_int | t >> 32 as libc::c_int - 5 as libc::c_int).wrapping_add(b);
     t = d
         .wrapping_add(a & c | b & !c)
         .wrapping_add(*X.offset(6 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x3fbf4cbf as libc::c_int as md5_word_t,
-        );
-    d = (t << 9 as libc::c_int | t >> 32 as libc::c_int - 9 as libc::c_int)
-        .wrapping_add(a);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x3fbf4cbf as libc::c_int as md5_word_t);
+    d = (t << 9 as libc::c_int | t >> 32 as libc::c_int - 9 as libc::c_int).wrapping_add(a);
     t = c
         .wrapping_add(d & b | a & !b)
         .wrapping_add(*X.offset(11 as libc::c_int as isize))
         .wrapping_add(0x265e5a51 as libc::c_int as md5_word_t);
-    c = (t << 14 as libc::c_int | t >> 32 as libc::c_int - 14 as libc::c_int)
-        .wrapping_add(d);
+    c = (t << 14 as libc::c_int | t >> 32 as libc::c_int - 14 as libc::c_int).wrapping_add(d);
     t = b
         .wrapping_add(c & a | d & !a)
         .wrapping_add(*X.offset(0 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x16493855 as libc::c_int as md5_word_t,
-        );
-    b = (t << 20 as libc::c_int | t >> 32 as libc::c_int - 20 as libc::c_int)
-        .wrapping_add(c);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x16493855 as libc::c_int as md5_word_t);
+    b = (t << 20 as libc::c_int | t >> 32 as libc::c_int - 20 as libc::c_int).wrapping_add(c);
     t = a
         .wrapping_add(b & d | c & !d)
         .wrapping_add(*X.offset(5 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x29d0efa2 as libc::c_int as md5_word_t,
-        );
-    a = (t << 5 as libc::c_int | t >> 32 as libc::c_int - 5 as libc::c_int)
-        .wrapping_add(b);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x29d0efa2 as libc::c_int as md5_word_t);
+    a = (t << 5 as libc::c_int | t >> 32 as libc::c_int - 5 as libc::c_int).wrapping_add(b);
     t = d
         .wrapping_add(a & c | b & !c)
         .wrapping_add(*X.offset(10 as libc::c_int as isize))
         .wrapping_add(0x2441453 as libc::c_int as md5_word_t);
-    d = (t << 9 as libc::c_int | t >> 32 as libc::c_int - 9 as libc::c_int)
-        .wrapping_add(a);
+    d = (t << 9 as libc::c_int | t >> 32 as libc::c_int - 9 as libc::c_int).wrapping_add(a);
     t = c
         .wrapping_add(d & b | a & !b)
         .wrapping_add(*X.offset(15 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x275e197e as libc::c_int as md5_word_t,
-        );
-    c = (t << 14 as libc::c_int | t >> 32 as libc::c_int - 14 as libc::c_int)
-        .wrapping_add(d);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x275e197e as libc::c_int as md5_word_t);
+    c = (t << 14 as libc::c_int | t >> 32 as libc::c_int - 14 as libc::c_int).wrapping_add(d);
     t = b
         .wrapping_add(c & a | d & !a)
         .wrapping_add(*X.offset(4 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x182c0437 as libc::c_int as md5_word_t,
-        );
-    b = (t << 20 as libc::c_int | t >> 32 as libc::c_int - 20 as libc::c_int)
-        .wrapping_add(c);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x182c0437 as libc::c_int as md5_word_t);
+    b = (t << 20 as libc::c_int | t >> 32 as libc::c_int - 20 as libc::c_int).wrapping_add(c);
     t = a
         .wrapping_add(b & d | c & !d)
         .wrapping_add(*X.offset(9 as libc::c_int as isize))
         .wrapping_add(0x21e1cde6 as libc::c_int as md5_word_t);
-    a = (t << 5 as libc::c_int | t >> 32 as libc::c_int - 5 as libc::c_int)
-        .wrapping_add(b);
+    a = (t << 5 as libc::c_int | t >> 32 as libc::c_int - 5 as libc::c_int).wrapping_add(b);
     t = d
         .wrapping_add(a & c | b & !c)
         .wrapping_add(*X.offset(14 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x3cc8f829 as libc::c_int as md5_word_t,
-        );
-    d = (t << 9 as libc::c_int | t >> 32 as libc::c_int - 9 as libc::c_int)
-        .wrapping_add(a);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x3cc8f829 as libc::c_int as md5_word_t);
+    d = (t << 9 as libc::c_int | t >> 32 as libc::c_int - 9 as libc::c_int).wrapping_add(a);
     t = c
         .wrapping_add(d & b | a & !b)
         .wrapping_add(*X.offset(3 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0xb2af278 as libc::c_int as md5_word_t,
-        );
-    c = (t << 14 as libc::c_int | t >> 32 as libc::c_int - 14 as libc::c_int)
-        .wrapping_add(d);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0xb2af278 as libc::c_int as md5_word_t);
+    c = (t << 14 as libc::c_int | t >> 32 as libc::c_int - 14 as libc::c_int).wrapping_add(d);
     t = b
         .wrapping_add(c & a | d & !a)
         .wrapping_add(*X.offset(8 as libc::c_int as isize))
         .wrapping_add(0x455a14ed as libc::c_int as md5_word_t);
-    b = (t << 20 as libc::c_int | t >> 32 as libc::c_int - 20 as libc::c_int)
-        .wrapping_add(c);
+    b = (t << 20 as libc::c_int | t >> 32 as libc::c_int - 20 as libc::c_int).wrapping_add(c);
     t = a
         .wrapping_add(b & d | c & !d)
         .wrapping_add(*X.offset(13 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x561c16fa as libc::c_int as md5_word_t,
-        );
-    a = (t << 5 as libc::c_int | t >> 32 as libc::c_int - 5 as libc::c_int)
-        .wrapping_add(b);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x561c16fa as libc::c_int as md5_word_t);
+    a = (t << 5 as libc::c_int | t >> 32 as libc::c_int - 5 as libc::c_int).wrapping_add(b);
     t = d
         .wrapping_add(a & c | b & !c)
         .wrapping_add(*X.offset(2 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x3105c07 as libc::c_int as md5_word_t,
-        );
-    d = (t << 9 as libc::c_int | t >> 32 as libc::c_int - 9 as libc::c_int)
-        .wrapping_add(a);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x3105c07 as libc::c_int as md5_word_t);
+    d = (t << 9 as libc::c_int | t >> 32 as libc::c_int - 9 as libc::c_int).wrapping_add(a);
     t = c
         .wrapping_add(d & b | a & !b)
         .wrapping_add(*X.offset(7 as libc::c_int as isize))
         .wrapping_add(0x676f02d9 as libc::c_int as md5_word_t);
-    c = (t << 14 as libc::c_int | t >> 32 as libc::c_int - 14 as libc::c_int)
-        .wrapping_add(d);
+    c = (t << 14 as libc::c_int | t >> 32 as libc::c_int - 14 as libc::c_int).wrapping_add(d);
     t = b
         .wrapping_add(c & a | d & !a)
         .wrapping_add(*X.offset(12 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x72d5b375 as libc::c_int as md5_word_t,
-        );
-    b = (t << 20 as libc::c_int | t >> 32 as libc::c_int - 20 as libc::c_int)
-        .wrapping_add(c);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x72d5b375 as libc::c_int as md5_word_t);
+    b = (t << 20 as libc::c_int | t >> 32 as libc::c_int - 20 as libc::c_int).wrapping_add(c);
     t = a
         .wrapping_add(b ^ c ^ d)
         .wrapping_add(*X.offset(5 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x5c6bd as libc::c_int as md5_word_t,
-        );
-    a = (t << 4 as libc::c_int | t >> 32 as libc::c_int - 4 as libc::c_int)
-        .wrapping_add(b);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x5c6bd as libc::c_int as md5_word_t);
+    a = (t << 4 as libc::c_int | t >> 32 as libc::c_int - 4 as libc::c_int).wrapping_add(b);
     t = d
         .wrapping_add(a ^ b ^ c)
         .wrapping_add(*X.offset(8 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x788e097e as libc::c_int as md5_word_t,
-        );
-    d = (t << 11 as libc::c_int | t >> 32 as libc::c_int - 11 as libc::c_int)
-        .wrapping_add(a);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x788e097e as libc::c_int as md5_word_t);
+    d = (t << 11 as libc::c_int | t >> 32 as libc::c_int - 11 as libc::c_int).wrapping_add(a);
     t = c
         .wrapping_add(d ^ a ^ b)
         .wrapping_add(*X.offset(11 as libc::c_int as isize))
         .wrapping_add(0x6d9d6122 as libc::c_int as md5_word_t);
-    c = (t << 16 as libc::c_int | t >> 32 as libc::c_int - 16 as libc::c_int)
-        .wrapping_add(d);
+    c = (t << 16 as libc::c_int | t >> 32 as libc::c_int - 16 as libc::c_int).wrapping_add(d);
     t = b
         .wrapping_add(c ^ d ^ a)
         .wrapping_add(*X.offset(14 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x21ac7f3 as libc::c_int as md5_word_t,
-        );
-    b = (t << 23 as libc::c_int | t >> 32 as libc::c_int - 23 as libc::c_int)
-        .wrapping_add(c);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x21ac7f3 as libc::c_int as md5_word_t);
+    b = (t << 23 as libc::c_int | t >> 32 as libc::c_int - 23 as libc::c_int).wrapping_add(c);
     t = a
         .wrapping_add(b ^ c ^ d)
         .wrapping_add(*X.offset(1 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x5b4115bb as libc::c_int as md5_word_t,
-        );
-    a = (t << 4 as libc::c_int | t >> 32 as libc::c_int - 4 as libc::c_int)
-        .wrapping_add(b);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x5b4115bb as libc::c_int as md5_word_t);
+    a = (t << 4 as libc::c_int | t >> 32 as libc::c_int - 4 as libc::c_int).wrapping_add(b);
     t = d
         .wrapping_add(a ^ b ^ c)
         .wrapping_add(*X.offset(4 as libc::c_int as isize))
         .wrapping_add(0x4bdecfa9 as libc::c_int as md5_word_t);
-    d = (t << 11 as libc::c_int | t >> 32 as libc::c_int - 11 as libc::c_int)
-        .wrapping_add(a);
+    d = (t << 11 as libc::c_int | t >> 32 as libc::c_int - 11 as libc::c_int).wrapping_add(a);
     t = c
         .wrapping_add(d ^ a ^ b)
         .wrapping_add(*X.offset(7 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x944b49f as libc::c_int as md5_word_t,
-        );
-    c = (t << 16 as libc::c_int | t >> 32 as libc::c_int - 16 as libc::c_int)
-        .wrapping_add(d);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x944b49f as libc::c_int as md5_word_t);
+    c = (t << 16 as libc::c_int | t >> 32 as libc::c_int - 16 as libc::c_int).wrapping_add(d);
     t = b
         .wrapping_add(c ^ d ^ a)
         .wrapping_add(*X.offset(10 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x4140438f as libc::c_int as md5_word_t,
-        );
-    b = (t << 23 as libc::c_int | t >> 32 as libc::c_int - 23 as libc::c_int)
-        .wrapping_add(c);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x4140438f as libc::c_int as md5_word_t);
+    b = (t << 23 as libc::c_int | t >> 32 as libc::c_int - 23 as libc::c_int).wrapping_add(c);
     t = a
         .wrapping_add(b ^ c ^ d)
         .wrapping_add(*X.offset(13 as libc::c_int as isize))
         .wrapping_add(0x289b7ec6 as libc::c_int as md5_word_t);
-    a = (t << 4 as libc::c_int | t >> 32 as libc::c_int - 4 as libc::c_int)
-        .wrapping_add(b);
+    a = (t << 4 as libc::c_int | t >> 32 as libc::c_int - 4 as libc::c_int).wrapping_add(b);
     t = d
         .wrapping_add(a ^ b ^ c)
         .wrapping_add(*X.offset(0 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x155ed805 as libc::c_int as md5_word_t,
-        );
-    d = (t << 11 as libc::c_int | t >> 32 as libc::c_int - 11 as libc::c_int)
-        .wrapping_add(a);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x155ed805 as libc::c_int as md5_word_t);
+    d = (t << 11 as libc::c_int | t >> 32 as libc::c_int - 11 as libc::c_int).wrapping_add(a);
     t = c
         .wrapping_add(d ^ a ^ b)
         .wrapping_add(*X.offset(3 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x2b10cf7a as libc::c_int as md5_word_t,
-        );
-    c = (t << 16 as libc::c_int | t >> 32 as libc::c_int - 16 as libc::c_int)
-        .wrapping_add(d);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x2b10cf7a as libc::c_int as md5_word_t);
+    c = (t << 16 as libc::c_int | t >> 32 as libc::c_int - 16 as libc::c_int).wrapping_add(d);
     t = b
         .wrapping_add(c ^ d ^ a)
         .wrapping_add(*X.offset(6 as libc::c_int as isize))
         .wrapping_add(0x4881d05 as libc::c_int as md5_word_t);
-    b = (t << 23 as libc::c_int | t >> 32 as libc::c_int - 23 as libc::c_int)
-        .wrapping_add(c);
+    b = (t << 23 as libc::c_int | t >> 32 as libc::c_int - 23 as libc::c_int).wrapping_add(c);
     t = a
         .wrapping_add(b ^ c ^ d)
         .wrapping_add(*X.offset(9 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x262b2fc6 as libc::c_int as md5_word_t,
-        );
-    a = (t << 4 as libc::c_int | t >> 32 as libc::c_int - 4 as libc::c_int)
-        .wrapping_add(b);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x262b2fc6 as libc::c_int as md5_word_t);
+    a = (t << 4 as libc::c_int | t >> 32 as libc::c_int - 4 as libc::c_int).wrapping_add(b);
     t = d
         .wrapping_add(a ^ b ^ c)
         .wrapping_add(*X.offset(12 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x1924661a as libc::c_int as md5_word_t,
-        );
-    d = (t << 11 as libc::c_int | t >> 32 as libc::c_int - 11 as libc::c_int)
-        .wrapping_add(a);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x1924661a as libc::c_int as md5_word_t);
+    d = (t << 11 as libc::c_int | t >> 32 as libc::c_int - 11 as libc::c_int).wrapping_add(a);
     t = c
         .wrapping_add(d ^ a ^ b)
         .wrapping_add(*X.offset(15 as libc::c_int as isize))
         .wrapping_add(0x1fa27cf8 as libc::c_int as md5_word_t);
-    c = (t << 16 as libc::c_int | t >> 32 as libc::c_int - 16 as libc::c_int)
-        .wrapping_add(d);
+    c = (t << 16 as libc::c_int | t >> 32 as libc::c_int - 16 as libc::c_int).wrapping_add(d);
     t = b
         .wrapping_add(c ^ d ^ a)
         .wrapping_add(*X.offset(2 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x3b53a99a as libc::c_int as md5_word_t,
-        );
-    b = (t << 23 as libc::c_int | t >> 32 as libc::c_int - 23 as libc::c_int)
-        .wrapping_add(c);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x3b53a99a as libc::c_int as md5_word_t);
+    b = (t << 23 as libc::c_int | t >> 32 as libc::c_int - 23 as libc::c_int).wrapping_add(c);
     t = a
         .wrapping_add(c ^ (b | !d))
         .wrapping_add(*X.offset(0 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0xbd6ddbb as libc::c_int as md5_word_t,
-        );
-    a = (t << 6 as libc::c_int | t >> 32 as libc::c_int - 6 as libc::c_int)
-        .wrapping_add(b);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0xbd6ddbb as libc::c_int as md5_word_t);
+    a = (t << 6 as libc::c_int | t >> 32 as libc::c_int - 6 as libc::c_int).wrapping_add(b);
     t = d
         .wrapping_add(b ^ (a | !c))
         .wrapping_add(*X.offset(7 as libc::c_int as isize))
         .wrapping_add(0x432aff97 as libc::c_int as md5_word_t);
-    d = (t << 10 as libc::c_int | t >> 32 as libc::c_int - 10 as libc::c_int)
-        .wrapping_add(a);
+    d = (t << 10 as libc::c_int | t >> 32 as libc::c_int - 10 as libc::c_int).wrapping_add(a);
     t = c
         .wrapping_add(a ^ (d | !b))
         .wrapping_add(*X.offset(14 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x546bdc58 as libc::c_int as md5_word_t,
-        );
-    c = (t << 15 as libc::c_int | t >> 32 as libc::c_int - 15 as libc::c_int)
-        .wrapping_add(d);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x546bdc58 as libc::c_int as md5_word_t);
+    c = (t << 15 as libc::c_int | t >> 32 as libc::c_int - 15 as libc::c_int).wrapping_add(d);
     t = b
         .wrapping_add(d ^ (c | !a))
         .wrapping_add(*X.offset(5 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x36c5fc6 as libc::c_int as md5_word_t,
-        );
-    b = (t << 21 as libc::c_int | t >> 32 as libc::c_int - 21 as libc::c_int)
-        .wrapping_add(c);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x36c5fc6 as libc::c_int as md5_word_t);
+    b = (t << 21 as libc::c_int | t >> 32 as libc::c_int - 21 as libc::c_int).wrapping_add(c);
     t = a
         .wrapping_add(c ^ (b | !d))
         .wrapping_add(*X.offset(12 as libc::c_int as isize))
         .wrapping_add(0x655b59c3 as libc::c_int as md5_word_t);
-    a = (t << 6 as libc::c_int | t >> 32 as libc::c_int - 6 as libc::c_int)
-        .wrapping_add(b);
+    a = (t << 6 as libc::c_int | t >> 32 as libc::c_int - 6 as libc::c_int).wrapping_add(b);
     t = d
         .wrapping_add(b ^ (a | !c))
         .wrapping_add(*X.offset(3 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x70f3336d as libc::c_int as md5_word_t,
-        );
-    d = (t << 10 as libc::c_int | t >> 32 as libc::c_int - 10 as libc::c_int)
-        .wrapping_add(a);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x70f3336d as libc::c_int as md5_word_t);
+    d = (t << 10 as libc::c_int | t >> 32 as libc::c_int - 10 as libc::c_int).wrapping_add(a);
     t = c
         .wrapping_add(a ^ (d | !b))
         .wrapping_add(*X.offset(10 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x100b82 as libc::c_int as md5_word_t,
-        );
-    c = (t << 15 as libc::c_int | t >> 32 as libc::c_int - 15 as libc::c_int)
-        .wrapping_add(d);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x100b82 as libc::c_int as md5_word_t);
+    c = (t << 15 as libc::c_int | t >> 32 as libc::c_int - 15 as libc::c_int).wrapping_add(d);
     t = b
         .wrapping_add(d ^ (c | !a))
         .wrapping_add(*X.offset(1 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x7a7ba22e as libc::c_int as md5_word_t,
-        );
-    b = (t << 21 as libc::c_int | t >> 32 as libc::c_int - 21 as libc::c_int)
-        .wrapping_add(c);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x7a7ba22e as libc::c_int as md5_word_t);
+    b = (t << 21 as libc::c_int | t >> 32 as libc::c_int - 21 as libc::c_int).wrapping_add(c);
     t = a
         .wrapping_add(c ^ (b | !d))
         .wrapping_add(*X.offset(8 as libc::c_int as isize))
         .wrapping_add(0x6fa87e4f as libc::c_int as md5_word_t);
-    a = (t << 6 as libc::c_int | t >> 32 as libc::c_int - 6 as libc::c_int)
-        .wrapping_add(b);
+    a = (t << 6 as libc::c_int | t >> 32 as libc::c_int - 6 as libc::c_int).wrapping_add(b);
     t = d
         .wrapping_add(b ^ (a | !c))
         .wrapping_add(*X.offset(15 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x1d3191f as libc::c_int as md5_word_t,
-        );
-    d = (t << 10 as libc::c_int | t >> 32 as libc::c_int - 10 as libc::c_int)
-        .wrapping_add(a);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x1d3191f as libc::c_int as md5_word_t);
+    d = (t << 10 as libc::c_int | t >> 32 as libc::c_int - 10 as libc::c_int).wrapping_add(a);
     t = c
         .wrapping_add(a ^ (d | !b))
         .wrapping_add(*X.offset(6 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x5cfebceb as libc::c_int as md5_word_t,
-        );
-    c = (t << 15 as libc::c_int | t >> 32 as libc::c_int - 15 as libc::c_int)
-        .wrapping_add(d);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x5cfebceb as libc::c_int as md5_word_t);
+    c = (t << 15 as libc::c_int | t >> 32 as libc::c_int - 15 as libc::c_int).wrapping_add(d);
     t = b
         .wrapping_add(d ^ (c | !a))
         .wrapping_add(*X.offset(13 as libc::c_int as isize))
         .wrapping_add(0x4e0811a1 as libc::c_int as md5_word_t);
-    b = (t << 21 as libc::c_int | t >> 32 as libc::c_int - 21 as libc::c_int)
-        .wrapping_add(c);
+    b = (t << 21 as libc::c_int | t >> 32 as libc::c_int - 21 as libc::c_int).wrapping_add(c);
     t = a
         .wrapping_add(c ^ (b | !d))
         .wrapping_add(*X.offset(4 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x8ac817d as libc::c_int as md5_word_t,
-        );
-    a = (t << 6 as libc::c_int | t >> 32 as libc::c_int - 6 as libc::c_int)
-        .wrapping_add(b);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x8ac817d as libc::c_int as md5_word_t);
+    a = (t << 6 as libc::c_int | t >> 32 as libc::c_int - 6 as libc::c_int).wrapping_add(b);
     t = d
         .wrapping_add(b ^ (a | !c))
         .wrapping_add(*X.offset(11 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x42c50dca as libc::c_int as md5_word_t,
-        );
-    d = (t << 10 as libc::c_int | t >> 32 as libc::c_int - 10 as libc::c_int)
-        .wrapping_add(a);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x42c50dca as libc::c_int as md5_word_t);
+    d = (t << 10 as libc::c_int | t >> 32 as libc::c_int - 10 as libc::c_int).wrapping_add(a);
     t = c
         .wrapping_add(a ^ (d | !b))
         .wrapping_add(*X.offset(2 as libc::c_int as isize))
         .wrapping_add(0x2ad7d2bb as libc::c_int as md5_word_t);
-    c = (t << 15 as libc::c_int | t >> 32 as libc::c_int - 15 as libc::c_int)
-        .wrapping_add(d);
+    c = (t << 15 as libc::c_int | t >> 32 as libc::c_int - 15 as libc::c_int).wrapping_add(d);
     t = b
         .wrapping_add(d ^ (c | !a))
         .wrapping_add(*X.offset(9 as libc::c_int as isize))
-        .wrapping_add(
-            !(0 as libc::c_int) as md5_word_t ^ 0x14792c6e as libc::c_int as md5_word_t,
-        );
-    b = (t << 21 as libc::c_int | t >> 32 as libc::c_int - 21 as libc::c_int)
-        .wrapping_add(c);
-    (*pms)
-        .abcd[0 as libc::c_int
-        as usize] = ((*pms).abcd[0 as libc::c_int as usize]).wrapping_add(a);
-    (*pms)
-        .abcd[1 as libc::c_int
-        as usize] = ((*pms).abcd[1 as libc::c_int as usize]).wrapping_add(b);
-    (*pms)
-        .abcd[2 as libc::c_int
-        as usize] = ((*pms).abcd[2 as libc::c_int as usize]).wrapping_add(c);
-    (*pms)
-        .abcd[3 as libc::c_int
-        as usize] = ((*pms).abcd[3 as libc::c_int as usize]).wrapping_add(d);
+        .wrapping_add(!(0 as libc::c_int) as md5_word_t ^ 0x14792c6e as libc::c_int as md5_word_t);
+    b = (t << 21 as libc::c_int | t >> 32 as libc::c_int - 21 as libc::c_int).wrapping_add(c);
+    (*pms).abcd[0 as libc::c_int as usize] =
+        ((*pms).abcd[0 as libc::c_int as usize]).wrapping_add(a);
+    (*pms).abcd[1 as libc::c_int as usize] =
+        ((*pms).abcd[1 as libc::c_int as usize]).wrapping_add(b);
+    (*pms).abcd[2 as libc::c_int as usize] =
+        ((*pms).abcd[2 as libc::c_int as usize]).wrapping_add(c);
+    (*pms).abcd[3 as libc::c_int as usize] =
+        ((*pms).abcd[3 as libc::c_int as usize]).wrapping_add(d);
 }
 #[no_mangle]
 pub unsafe extern "C" fn md5_init(mut pms: *mut md5_state_t) {
     (*pms).count[1 as libc::c_int as usize] = 0 as libc::c_int as md5_word_t;
     (*pms).count[0 as libc::c_int as usize] = (*pms).count[1 as libc::c_int as usize];
     (*pms).abcd[0 as libc::c_int as usize] = 0x67452301 as libc::c_int as md5_word_t;
-    (*pms)
-        .abcd[1 as libc::c_int
-        as usize] = !(0 as libc::c_int) as md5_word_t
-        ^ 0x10325476 as libc::c_int as md5_word_t;
-    (*pms)
-        .abcd[2 as libc::c_int
-        as usize] = !(0 as libc::c_int) as md5_word_t
-        ^ 0x67452301 as libc::c_int as md5_word_t;
+    (*pms).abcd[1 as libc::c_int as usize] =
+        !(0 as libc::c_int) as md5_word_t ^ 0x10325476 as libc::c_int as md5_word_t;
+    (*pms).abcd[2 as libc::c_int as usize] =
+        !(0 as libc::c_int) as md5_word_t ^ 0x67452301 as libc::c_int as md5_word_t;
     (*pms).abcd[3 as libc::c_int as usize] = 0x10325476 as libc::c_int as md5_word_t;
 }
 #[no_mangle]
@@ -1051,23 +837,19 @@ pub unsafe extern "C" fn md5_append(
 ) {
     let mut p: *const md5_byte_t = data;
     let mut left: libc::c_int = nbytes;
-    let mut offset: libc::c_int = ((*pms).count[0 as libc::c_int as usize]
-        >> 3 as libc::c_int & 63 as libc::c_int as md5_word_t) as libc::c_int;
+    let mut offset: libc::c_int = ((*pms).count[0 as libc::c_int as usize] >> 3 as libc::c_int
+        & 63 as libc::c_int as md5_word_t) as libc::c_int;
     let mut nbits: md5_word_t = (nbytes << 3 as libc::c_int) as md5_word_t;
     if nbytes <= 0 as libc::c_int {
         return;
     }
-    (*pms)
-        .count[1 as libc::c_int
-        as usize] = ((*pms).count[1 as libc::c_int as usize])
+    (*pms).count[1 as libc::c_int as usize] = ((*pms).count[1 as libc::c_int as usize])
         .wrapping_add((nbytes >> 29 as libc::c_int) as md5_word_t);
-    (*pms)
-        .count[0 as libc::c_int
-        as usize] = ((*pms).count[0 as libc::c_int as usize]).wrapping_add(nbits);
+    (*pms).count[0 as libc::c_int as usize] =
+        ((*pms).count[0 as libc::c_int as usize]).wrapping_add(nbits);
     if (*pms).count[0 as libc::c_int as usize] < nbits {
-        (*pms)
-            .count[1 as libc::c_int
-            as usize] = ((*pms).count[1 as libc::c_int as usize]).wrapping_add(1);
+        (*pms).count[1 as libc::c_int as usize] =
+            ((*pms).count[1 as libc::c_int as usize]).wrapping_add(1);
         (*pms).count[1 as libc::c_int as usize];
     }
     if offset != 0 {
@@ -1102,10 +884,7 @@ pub unsafe extern "C" fn md5_append(
     }
 }
 #[no_mangle]
-pub unsafe extern "C" fn md5_finish(
-    mut pms: *mut md5_state_t,
-    mut digest: *mut md5_byte_t,
-) {
+pub unsafe extern "C" fn md5_finish(mut pms: *mut md5_state_t, mut digest: *mut md5_byte_t) {
     static mut pad_0: [md5_byte_t; 64] = [
         0x80 as libc::c_int as md5_byte_t,
         0 as libc::c_int as md5_byte_t,
@@ -1176,9 +955,9 @@ pub unsafe extern "C" fn md5_finish(
     let mut i: libc::c_int = 0;
     i = 0 as libc::c_int;
     while i < 8 as libc::c_int {
-        data[i
-            as usize] = ((*pms).count[(i >> 2 as libc::c_int) as usize]
-            >> ((i & 3 as libc::c_int) << 3 as libc::c_int)) as md5_byte_t;
+        data[i as usize] = ((*pms).count[(i >> 2 as libc::c_int) as usize]
+            >> ((i & 3 as libc::c_int) << 3 as libc::c_int))
+            as md5_byte_t;
         i += 1;
         i;
     }
@@ -1193,11 +972,9 @@ pub unsafe extern "C" fn md5_finish(
     md5_append(pms, data.as_mut_ptr(), 8 as libc::c_int);
     i = 0 as libc::c_int;
     while i < 16 as libc::c_int {
-        *digest
-            .offset(
-                i as isize,
-            ) = ((*pms).abcd[(i >> 2 as libc::c_int) as usize]
-            >> ((i & 3 as libc::c_int) << 3 as libc::c_int)) as md5_byte_t;
+        *digest.offset(i as isize) = ((*pms).abcd[(i >> 2 as libc::c_int) as usize]
+            >> ((i & 3 as libc::c_int) << 3 as libc::c_int))
+            as md5_byte_t;
         i += 1;
         i;
     }

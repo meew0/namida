@@ -5,11 +5,7 @@ extern "C" {
     pub type _IO_marker;
     fn __ctype_b_loc() -> *mut *const libc::c_ushort;
     fn exit(_: libc::c_int) -> !;
-    fn memset(
-        _: *mut libc::c_void,
-        _: libc::c_int,
-        _: libc::c_ulong,
-    ) -> *mut libc::c_void;
+    fn memset(_: *mut libc::c_void, _: libc::c_int, _: libc::c_ulong) -> *mut libc::c_void;
     fn strcpy(_: *mut libc::c_char, _: *const libc::c_char) -> *mut libc::c_char;
     fn strcat(_: *mut libc::c_char, _: *const libc::c_char) -> *mut libc::c_char;
     fn strcasecmp(_: *const libc::c_char, _: *const libc::c_char) -> libc::c_int;
@@ -18,11 +14,7 @@ extern "C" {
     static mut stderr: *mut FILE;
     fn fflush(__stream: *mut FILE) -> libc::c_int;
     fn fprintf(_: *mut FILE, _: *const libc::c_char, _: ...) -> libc::c_int;
-    fn fgets(
-        __s: *mut libc::c_char,
-        __n: libc::c_int,
-        __stream: *mut FILE,
-    ) -> *mut libc::c_char;
+    fn fgets(__s: *mut libc::c_char, __n: libc::c_int, __stream: *mut FILE) -> *mut libc::c_char;
     static PROTOCOL_REVISION: u_int32_t;
     fn error_handler(
         file: *const libc::c_char,
@@ -30,10 +22,7 @@ extern "C" {
         message: *const libc::c_char,
         fatal_yn: libc::c_int,
     ) -> libc::c_int;
-    fn command_close(
-        command: *mut command_t,
-        session: *mut ttp_session_t,
-    ) -> libc::c_int;
+    fn command_close(command: *mut command_t, session: *mut ttp_session_t) -> libc::c_int;
     fn command_connect(
         command: *mut command_t,
         parameter: *mut ttp_parameter_t,
@@ -41,10 +30,7 @@ extern "C" {
     fn command_get(command: *mut command_t, session: *mut ttp_session_t) -> libc::c_int;
     fn command_help(command: *mut command_t, session: *mut ttp_session_t) -> libc::c_int;
     fn command_quit(command: *mut command_t, session: *mut ttp_session_t) -> libc::c_int;
-    fn command_set(
-        command: *mut command_t,
-        parameter: *mut ttp_parameter_t,
-    ) -> libc::c_int;
+    fn command_set(command: *mut command_t, parameter: *mut ttp_parameter_t) -> libc::c_int;
     fn command_dir(command: *mut command_t, session: *mut ttp_session_t) -> libc::c_int;
     fn reset_client(parameter: *mut ttp_parameter_t);
 }
@@ -288,16 +274,13 @@ pub struct ttp_session_t {
     pub server_address: *mut sockaddr,
     pub server_address_length: socklen_t,
 }
-unsafe fn main_0(
-    mut argc: libc::c_int,
-    mut argv: *mut *const libc::c_char,
-) -> libc::c_int {
+unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *const libc::c_char) -> libc::c_int {
     let mut command: command_t = command_t {
         count: 0,
         text: [0 as *const libc::c_char; 10],
     };
     let vla = super::config::MAX_COMMAND_LENGTH as usize;
-    let mut command_text: Vec::<libc::c_char> = ::std::vec::from_elem(0, vla);
+    let mut command_text: Vec<libc::c_char> = ::std::vec::from_elem(0, vla);
     let mut session: *mut ttp_session_t = 0 as *mut ttp_session_t;
     let mut parameter: ttp_parameter_t = ttp_parameter_t {
         server_name: 0 as *mut libc::c_char,
@@ -324,9 +307,8 @@ unsafe fn main_0(
         ringbuf: 0 as *mut libc::c_char,
     };
     let mut argc_curr: libc::c_int = 1 as libc::c_int;
-    let mut ptr_command_text: *mut libc::c_char = &mut *command_text
-        .as_mut_ptr()
-        .offset(0 as libc::c_int as isize) as *mut libc::c_char;
+    let mut ptr_command_text: *mut libc::c_char =
+        &mut *command_text.as_mut_ptr().offset(0 as libc::c_int as isize) as *mut libc::c_char;
     memset(
         &mut parameter as *mut ttp_parameter_t as *mut libc::c_void,
         0 as libc::c_int,
@@ -335,8 +317,8 @@ unsafe fn main_0(
     reset_client(&mut parameter);
     fprintf(
         stderr,
-        b"Tsunami Client for protocol rev %X\nRevision: %s\nCompiled: %s %s\n\0"
-            as *const u8 as *const libc::c_char,
+        b"Tsunami Client for protocol rev %X\nRevision: %s\nCompiled: %s %s\n\0" as *const u8
+            as *const libc::c_char,
         PROTOCOL_REVISION,
         b"v1.1 devel cvsbuild 43\0" as *const u8 as *const libc::c_char,
         b"Nov 16 2023\0" as *const u8 as *const libc::c_char,
@@ -346,12 +328,17 @@ unsafe fn main_0(
         if argc <= 1 as libc::c_int || argc_curr >= argc {
             fprintf(stdout, b"tsunami> \0" as *const u8 as *const libc::c_char);
             fflush(stdout);
-            if (fgets(command_text.as_mut_ptr(), super::config::MAX_COMMAND_LENGTH, stdin)).is_null() {
+            if (fgets(
+                command_text.as_mut_ptr(),
+                super::config::MAX_COMMAND_LENGTH,
+                stdin,
+            ))
+            .is_null()
+            {
                 error_handler(
                     b"main.c\0" as *const u8 as *const libc::c_char,
                     121 as libc::c_int,
-                    b"Could not read command input\0" as *const u8
-                        as *const libc::c_char,
+                    b"Could not read command input\0" as *const u8 as *const libc::c_char,
                     1 as libc::c_int,
                 );
             }
@@ -403,8 +390,7 @@ unsafe fn main_0(
                     } else {
                         fprintf(
                             stderr,
-                            b"Connect: no host specified\n\0" as *const u8
-                                as *const libc::c_char,
+                            b"Connect: no host specified\n\0" as *const u8 as *const libc::c_char,
                         );
                         exit(1 as libc::c_int);
                     }
@@ -428,8 +414,7 @@ unsafe fn main_0(
                     } else {
                         fprintf(
                             stderr,
-                            b"Get: no file specified\n\0" as *const u8
-                                as *const libc::c_char,
+                            b"Get: no file specified\n\0" as *const u8 as *const libc::c_char,
                         );
                         exit(1 as libc::c_int);
                     }
@@ -461,8 +446,7 @@ unsafe fn main_0(
                     } else {
                         fprintf(
                             stderr,
-                            b"Connect: no host specified\n\0" as *const u8
-                                as *const libc::c_char,
+                            b"Connect: no host specified\n\0" as *const u8 as *const libc::c_char,
                         );
                         exit(1 as libc::c_int);
                     }
@@ -546,37 +530,35 @@ unsafe fn main_0(
                 command.text[0 as libc::c_int as usize],
             );
         }
-    };
+    }
 }
 #[no_mangle]
-pub unsafe extern "C" fn parse_command(
-    mut command: *mut command_t,
-    mut buffer: *mut libc::c_char,
-) {
+pub unsafe extern "C" fn parse_command(mut command: *mut command_t, mut buffer: *mut libc::c_char) {
     (*command).count = 0 as libc::c_int as u_char;
     while *(*__ctype_b_loc()).offset(*buffer as libc::c_int as isize) as libc::c_int
-        & _ISspace as libc::c_int as libc::c_ushort as libc::c_int != 0
+        & _ISspace as libc::c_int as libc::c_ushort as libc::c_int
+        != 0
         && *buffer as libc::c_int != 0
     {
         buffer = buffer.offset(1);
         buffer;
     }
-    while ((*command).count as libc::c_int) < 10 as libc::c_int
-        && *buffer as libc::c_int != 0
-    {
+    while ((*command).count as libc::c_int) < 10 as libc::c_int && *buffer as libc::c_int != 0 {
         let fresh0 = (*command).count;
         (*command).count = ((*command).count).wrapping_add(1);
         (*command).text[fresh0 as usize] = buffer;
         while *buffer as libc::c_int != 0
             && *(*__ctype_b_loc()).offset(*buffer as libc::c_int as isize) as libc::c_int
-                & _ISspace as libc::c_int as libc::c_ushort as libc::c_int == 0
+                & _ISspace as libc::c_int as libc::c_ushort as libc::c_int
+                == 0
         {
             buffer = buffer.offset(1);
             buffer;
         }
         while *buffer as libc::c_int != 0
             && *(*__ctype_b_loc()).offset(*buffer as libc::c_int as isize) as libc::c_int
-                & _ISspace as libc::c_int as libc::c_ushort as libc::c_int != 0
+                & _ISspace as libc::c_int as libc::c_ushort as libc::c_int
+                != 0
         {
             let fresh1 = buffer;
             buffer = buffer.offset(1);
@@ -585,7 +567,7 @@ pub unsafe extern "C" fn parse_command(
     }
 }
 pub fn main() {
-    let mut args: Vec::<*mut libc::c_char> = Vec::new();
+    let mut args: Vec<*mut libc::c_char> = Vec::new();
     for arg in ::std::env::args() {
         args.push(
             (::std::ffi::CString::new(arg))
@@ -595,11 +577,9 @@ pub fn main() {
     }
     args.push(::core::ptr::null_mut());
     unsafe {
-        ::std::process::exit(
-            main_0(
-                (args.len() - 1) as libc::c_int,
-                args.as_mut_ptr() as *mut *const libc::c_char,
-            ) as i32,
-        )
+        ::std::process::exit(main_0(
+            (args.len() - 1) as libc::c_int,
+            args.as_mut_ptr() as *mut *const libc::c_char,
+        ) as i32)
     }
 }

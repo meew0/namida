@@ -252,8 +252,7 @@ pub unsafe extern "C" fn xscript_close_client(
     let mut mb_file: libc::c_double = 0.;
     let mut secs: libc::c_double = 0.;
     let mut xfer: *mut ttp_transfer_t = &mut (*session).transfer;
-    mb_thru = ((*xfer).stats.total_blocks * (*(*session).parameter).block_size)
-        as libc::c_double;
+    mb_thru = ((*xfer).stats.total_blocks * (*(*session).parameter).block_size) as libc::c_double;
     mb_good = mb_thru
         - ((*xfer).stats.total_recvd_retransmits * (*(*session).parameter).block_size)
             as libc::c_double;
@@ -347,8 +346,7 @@ pub unsafe extern "C" fn xscript_open_client(mut session: *mut ttp_session_t) {
         (*xfer).epoch,
         b"tsuc\0" as *const u8 as *const libc::c_char,
     );
-    (*xfer)
-        .transcript = fopen(
+    (*xfer).transcript = fopen(
         filename.as_mut_ptr(),
         b"w\0" as *const u8 as *const libc::c_char,
     );
@@ -466,6 +464,9 @@ pub unsafe extern "C" fn xscript_open_client(mut session: *mut ttp_session_t) {
         b"ipv6 = %u\n\0" as *const u8 as *const libc::c_char,
         (*param).ipv6_yn as libc::c_int,
     );
-    fprintf((*xfer).transcript, b"\n\0" as *const u8 as *const libc::c_char);
+    fprintf(
+        (*xfer).transcript,
+        b"\n\0" as *const u8 as *const libc::c_char,
+    );
     fflush((*session).transfer.transcript);
 }

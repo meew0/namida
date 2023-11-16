@@ -163,7 +163,9 @@ pub unsafe extern "C" fn xscript_close_server(
         (*xfer).transcript,
         b"throughput = %0.2f\n\0" as *const u8 as *const libc::c_char,
         (*param).file_size as libc::c_double * 8.0f64
-            / (delta as libc::c_double * 1e-6f64 * 1024 as libc::c_int as libc::c_double
+            / (delta as libc::c_double
+                * 1e-6f64
+                * 1024 as libc::c_int as libc::c_double
                 * 1024 as libc::c_int as libc::c_double),
     );
     fclose((*xfer).transcript);
@@ -216,8 +218,7 @@ pub unsafe extern "C" fn xscript_open_server(mut session: *mut ttp_session_t) {
         (*param).epoch,
         b"tsus\0" as *const u8 as *const libc::c_char,
     );
-    (*xfer)
-        .transcript = fopen(
+    (*xfer).transcript = fopen(
         filename.as_mut_ptr(),
         b"w\0" as *const u8 as *const libc::c_char,
     );
@@ -310,6 +311,9 @@ pub unsafe extern "C" fn xscript_open_server(mut session: *mut ttp_session_t) {
         b"ipv6 = %u\n\0" as *const u8 as *const libc::c_char,
         (*param).ipv6_yn as libc::c_int,
     );
-    fprintf((*xfer).transcript, b"\n\0" as *const u8 as *const libc::c_char);
+    fprintf(
+        (*xfer).transcript,
+        b"\n\0" as *const u8 as *const libc::c_char,
+    );
     fflush((*session).transfer.transcript);
 }

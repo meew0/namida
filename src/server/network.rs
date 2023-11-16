@@ -10,16 +10,8 @@ extern "C" {
     pub type sockaddr_dl;
     pub type sockaddr_ax25;
     pub type sockaddr_at;
-    fn socket(
-        __domain: libc::c_int,
-        __type: libc::c_int,
-        __protocol: libc::c_int,
-    ) -> libc::c_int;
-    fn bind(
-        __fd: libc::c_int,
-        __addr: __CONST_SOCKADDR_ARG,
-        __len: socklen_t,
-    ) -> libc::c_int;
+    fn socket(__domain: libc::c_int, __type: libc::c_int, __protocol: libc::c_int) -> libc::c_int;
+    fn bind(__fd: libc::c_int, __addr: __CONST_SOCKADDR_ARG, __len: socklen_t) -> libc::c_int;
     fn setsockopt(
         __fd: libc::c_int,
         __level: libc::c_int,
@@ -35,11 +27,7 @@ extern "C" {
         __pai: *mut *mut addrinfo,
     ) -> libc::c_int;
     fn freeaddrinfo(__ai: *mut addrinfo);
-    fn memset(
-        _: *mut libc::c_void,
-        _: libc::c_int,
-        _: libc::c_ulong,
-    ) -> *mut libc::c_void;
+    fn memset(_: *mut libc::c_void, _: libc::c_int, _: libc::c_ulong) -> *mut libc::c_void;
     fn close(__fd: libc::c_int) -> libc::c_int;
     fn sprintf(_: *mut libc::c_char, _: *const libc::c_char, _: ...) -> libc::c_int;
     fn error_handler(
@@ -209,8 +197,7 @@ pub unsafe extern "C" fn create_tcp_socket_server(
         ::core::mem::size_of::<addrinfo>() as libc::c_ulong,
     );
     hints.ai_flags = 0x1 as libc::c_int;
-    hints
-        .ai_family = if (*parameter).ipv6_yn as libc::c_int != 0 {
+    hints.ai_family = if (*parameter).ipv6_yn as libc::c_int != 0 {
         10 as libc::c_int
     } else {
         2 as libc::c_int
@@ -231,8 +218,7 @@ pub unsafe extern "C" fn create_tcp_socket_server(
         return error_handler(
             b"network.c\0" as *const u8 as *const libc::c_char,
             101 as libc::c_int,
-            b"Error in getting address information\0" as *const u8
-                as *const libc::c_char,
+            b"Error in getting address information\0" as *const u8 as *const libc::c_char,
             0 as libc::c_int,
         );
     }
@@ -279,8 +265,7 @@ pub unsafe extern "C" fn create_tcp_socket_server(
         return error_handler(
             b"network.c\0" as *const u8 as *const libc::c_char,
             134 as libc::c_int,
-            b"Error in listening on TCP server socket\0" as *const u8
-                as *const libc::c_char,
+            b"Error in listening on TCP server socket\0" as *const u8 as *const libc::c_char,
             0 as libc::c_int,
         );
     }
@@ -337,8 +322,7 @@ pub unsafe extern "C" fn create_udp_socket_server(
         error_handler(
             b"network.c\0" as *const u8 as *const libc::c_char,
             170 as libc::c_int,
-            b"Error in resizing UDP transmit buffer\0" as *const u8
-                as *const libc::c_char,
+            b"Error in resizing UDP transmit buffer\0" as *const u8 as *const libc::c_char,
             0 as libc::c_int,
         );
     }

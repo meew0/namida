@@ -16,10 +16,8 @@ extern "C" {
     ) -> libc::c_int;
     fn pthread_cond_destroy(__cond: *mut pthread_cond_t) -> libc::c_int;
     fn pthread_cond_signal(__cond: *mut pthread_cond_t) -> libc::c_int;
-    fn pthread_cond_wait(
-        __cond: *mut pthread_cond_t,
-        __mutex: *mut pthread_mutex_t,
-    ) -> libc::c_int;
+    fn pthread_cond_wait(__cond: *mut pthread_cond_t, __mutex: *mut pthread_mutex_t)
+        -> libc::c_int;
     fn malloc(_: libc::c_ulong) -> *mut libc::c_void;
     fn calloc(_: libc::c_ulong, _: libc::c_ulong) -> *mut libc::c_void;
     fn free(_: *mut libc::c_void);
@@ -283,8 +281,7 @@ pub unsafe extern "C" fn ring_full(mut ring: *mut ring_buffer_t) -> libc::c_int 
         error_handler(
             b"ring.c\0" as *const u8 as *const libc::c_char,
             91 as libc::c_int,
-            b"Could not get access to ring buffer mutex\0" as *const u8
-                as *const libc::c_char,
+            b"Could not get access to ring buffer mutex\0" as *const u8 as *const libc::c_char,
             1 as libc::c_int,
         );
     }
@@ -309,8 +306,7 @@ pub unsafe extern "C" fn ring_cancel(mut ring: *mut ring_buffer_t) -> libc::c_in
         error_handler(
             b"ring.c\0" as *const u8 as *const libc::c_char,
             117 as libc::c_int,
-            b"Could not get access to ring buffer mutex\0" as *const u8
-                as *const libc::c_char,
+            b"Could not get access to ring buffer mutex\0" as *const u8 as *const libc::c_char,
             1 as libc::c_int,
         );
     }
@@ -330,8 +326,7 @@ pub unsafe extern "C" fn ring_cancel(mut ring: *mut ring_buffer_t) -> libc::c_in
         error_handler(
             b"ring.c\0" as *const u8 as *const libc::c_char,
             127 as libc::c_int,
-            b"Could not signal space-ready condition\0" as *const u8
-                as *const libc::c_char,
+            b"Could not signal space-ready condition\0" as *const u8 as *const libc::c_char,
             1 as libc::c_int,
         );
     }
@@ -355,8 +350,7 @@ pub unsafe extern "C" fn ring_confirm(mut ring: *mut ring_buffer_t) -> libc::c_i
         error_handler(
             b"ring.c\0" as *const u8 as *const libc::c_char,
             153 as libc::c_int,
-            b"Could not get access to ring buffer mutex\0" as *const u8
-                as *const libc::c_char,
+            b"Could not get access to ring buffer mutex\0" as *const u8 as *const libc::c_char,
             1 as libc::c_int,
         );
     }
@@ -378,8 +372,7 @@ pub unsafe extern "C" fn ring_confirm(mut ring: *mut ring_buffer_t) -> libc::c_i
         error_handler(
             b"ring.c\0" as *const u8 as *const libc::c_char,
             164 as libc::c_int,
-            b"Could not signal data-ready condition\0" as *const u8
-                as *const libc::c_char,
+            b"Could not signal data-ready condition\0" as *const u8 as *const libc::c_char,
             1 as libc::c_int,
         );
     }
@@ -396,9 +389,7 @@ pub unsafe extern "C" fn ring_confirm(mut ring: *mut ring_buffer_t) -> libc::c_i
     return 0 as libc::c_int;
 }
 #[no_mangle]
-pub unsafe extern "C" fn ring_create(
-    mut session: *mut ttp_session_t,
-) -> *mut ring_buffer_t {
+pub unsafe extern "C" fn ring_create(mut session: *mut ttp_session_t) -> *mut ring_buffer_t {
     let mut ring: *mut ring_buffer_t = 0 as *mut ring_buffer_t;
     let mut status: libc::c_int = 0;
     ring = calloc(
@@ -409,24 +400,20 @@ pub unsafe extern "C" fn ring_create(
         error_handler(
             b"ring.c\0" as *const u8 as *const libc::c_char,
             192 as libc::c_int,
-            b"Could not allocate ring buffer object\0" as *const u8
-                as *const libc::c_char,
+            b"Could not allocate ring buffer object\0" as *const u8 as *const libc::c_char,
             1 as libc::c_int,
         );
     }
-    (*ring)
-        .datagram_size = (6 as libc::c_int as u_int32_t)
-        .wrapping_add((*(*session).parameter).block_size) as libc::c_int;
-    (*ring)
-        .datagrams = malloc(
-        ((*ring).datagram_size * 4096 as libc::c_int) as libc::c_ulong,
-    ) as *mut u_char;
+    (*ring).datagram_size = (6 as libc::c_int as u_int32_t)
+        .wrapping_add((*(*session).parameter).block_size)
+        as libc::c_int;
+    (*ring).datagrams =
+        malloc(((*ring).datagram_size * 4096 as libc::c_int) as libc::c_ulong) as *mut u_char;
     if ((*ring).datagrams).is_null() {
         error_handler(
             b"ring.c\0" as *const u8 as *const libc::c_char,
             198 as libc::c_int,
-            b"Could not allocate buffer for ring buffer\0" as *const u8
-                as *const libc::c_char,
+            b"Could not allocate buffer for ring buffer\0" as *const u8 as *const libc::c_char,
             1 as libc::c_int,
         );
     }
@@ -435,21 +422,16 @@ pub unsafe extern "C" fn ring_create(
         error_handler(
             b"ring.c\0" as *const u8 as *const libc::c_char,
             203 as libc::c_int,
-            b"Could not create mutex for ring buffer\0" as *const u8
-                as *const libc::c_char,
+            b"Could not create mutex for ring buffer\0" as *const u8 as *const libc::c_char,
             1 as libc::c_int,
         );
     }
-    status = pthread_cond_init(
-        &mut (*ring).data_ready_cond,
-        0 as *const pthread_condattr_t,
-    );
+    status = pthread_cond_init(&mut (*ring).data_ready_cond, 0 as *const pthread_condattr_t);
     if status != 0 as libc::c_int {
         error_handler(
             b"ring.c\0" as *const u8 as *const libc::c_char,
             208 as libc::c_int,
-            b"Could not create data-ready condition variable\0" as *const u8
-                as *const libc::c_char,
+            b"Could not create data-ready condition variable\0" as *const u8 as *const libc::c_char,
             1 as libc::c_int,
         );
     }
@@ -481,8 +463,7 @@ pub unsafe extern "C" fn ring_destroy(mut ring: *mut ring_buffer_t) -> libc::c_i
         return error_handler(
             b"ring.c\0" as *const u8 as *const libc::c_char,
             241 as libc::c_int,
-            b"Could not destroy mutex for ring buffer\0" as *const u8
-                as *const libc::c_char,
+            b"Could not destroy mutex for ring buffer\0" as *const u8 as *const libc::c_char,
             0 as libc::c_int,
         );
     }
@@ -523,8 +504,7 @@ pub unsafe extern "C" fn ring_dump(
         return error_handler(
             b"ring.c\0" as *const u8 as *const libc::c_char,
             275 as libc::c_int,
-            b"Could not get access to ring buffer mutex\0" as *const u8
-                as *const libc::c_char,
+            b"Could not get access to ring buffer mutex\0" as *const u8 as *const libc::c_char,
             0 as libc::c_int,
         );
     }
@@ -558,7 +538,10 @@ pub unsafe extern "C" fn ring_dump(
         b"space_ready    = %d\n\0" as *const u8 as *const libc::c_char,
         (*ring).space_ready,
     );
-    fprintf(out, b"block list     = [\0" as *const u8 as *const libc::c_char);
+    fprintf(
+        out,
+        b"block list     = [\0" as *const u8 as *const libc::c_char,
+    );
     index = (*ring).base_data;
     while index < (*ring).base_data + (*ring).count_data {
         datagram = ((*ring).datagrams)
@@ -593,8 +576,7 @@ pub unsafe extern "C" fn ring_peek(mut ring: *mut ring_buffer_t) -> *mut u_char 
         error_handler(
             b"ring.c\0" as *const u8 as *const libc::c_char,
             317 as libc::c_int,
-            b"Could not get access to ring buffer mutex\0" as *const u8
-                as *const libc::c_char,
+            b"Could not get access to ring buffer mutex\0" as *const u8 as *const libc::c_char,
             0 as libc::c_int,
         );
         return 0 as *mut u_char;
@@ -612,8 +594,7 @@ pub unsafe extern "C" fn ring_peek(mut ring: *mut ring_buffer_t) -> *mut u_char 
             return 0 as *mut u_char;
         }
     }
-    address = ((*ring).datagrams)
-        .offset(((*ring).datagram_size * (*ring).base_data) as isize);
+    address = ((*ring).datagrams).offset(((*ring).datagram_size * (*ring).base_data) as isize);
     status = pthread_mutex_unlock(&mut (*ring).mutex);
     if status != 0 as libc::c_int {
         error_handler(
@@ -635,8 +616,7 @@ pub unsafe extern "C" fn ring_pop(mut ring: *mut ring_buffer_t) -> libc::c_int {
         error_handler(
             b"ring.c\0" as *const u8 as *const libc::c_char,
             361 as libc::c_int,
-            b"Could not get access to ring buffer mutex\0" as *const u8
-                as *const libc::c_char,
+            b"Could not get access to ring buffer mutex\0" as *const u8 as *const libc::c_char,
             1 as libc::c_int,
         );
     }
@@ -663,8 +643,7 @@ pub unsafe extern "C" fn ring_pop(mut ring: *mut ring_buffer_t) -> libc::c_int {
         error_handler(
             b"ring.c\0" as *const u8 as *const libc::c_char,
             379 as libc::c_int,
-            b"Could not signal space-ready condition\0" as *const u8
-                as *const libc::c_char,
+            b"Could not signal space-ready condition\0" as *const u8 as *const libc::c_char,
             1 as libc::c_int,
         );
     }
@@ -690,17 +669,13 @@ pub unsafe extern "C" fn ring_reserve(mut ring: *mut ring_buffer_t) -> *mut u_ch
         error_handler(
             b"ring.c\0" as *const u8 as *const libc::c_char,
             408 as libc::c_int,
-            b"Could not get access to ring buffer mutex\0" as *const u8
-                as *const libc::c_char,
+            b"Could not get access to ring buffer mutex\0" as *const u8 as *const libc::c_char,
             1 as libc::c_int,
         );
     }
-    next = ((*ring).base_data + (*ring).count_data + (*ring).count_reserved)
-        % 4096 as libc::c_int;
+    next = ((*ring).base_data + (*ring).count_data + (*ring).count_reserved) % 4096 as libc::c_int;
     while (*ring).space_ready == 0 as libc::c_int {
-        printf(
-            b"FULL! -- ring_reserve() blocking.\n\0" as *const u8 as *const libc::c_char,
-        );
+        printf(b"FULL! -- ring_reserve() blocking.\n\0" as *const u8 as *const libc::c_char);
         printf(
             b"space_ready = %d, data_ready = %d\n\0" as *const u8 as *const libc::c_char,
             (*ring).space_ready,

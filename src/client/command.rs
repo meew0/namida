@@ -16,35 +16,18 @@ extern "C" {
     fn pthread_create(
         __newthread: *mut pthread_t,
         __attr: *const pthread_attr_t,
-        __start_routine: Option::<
-            unsafe extern "C" fn(*mut libc::c_void) -> *mut libc::c_void,
-        >,
+        __start_routine: Option<unsafe extern "C" fn(*mut libc::c_void) -> *mut libc::c_void>,
         __arg: *mut libc::c_void,
     ) -> libc::c_int;
-    fn pthread_join(
-        __th: pthread_t,
-        __thread_return: *mut *mut libc::c_void,
-    ) -> libc::c_int;
+    fn pthread_join(__th: pthread_t, __thread_return: *mut *mut libc::c_void) -> libc::c_int;
     fn strtod(_: *const libc::c_char, _: *mut *mut libc::c_char) -> libc::c_double;
-    fn strtol(
-        _: *const libc::c_char,
-        _: *mut *mut libc::c_char,
-        _: libc::c_int,
-    ) -> libc::c_long;
+    fn strtol(_: *const libc::c_char, _: *mut *mut libc::c_char, _: libc::c_int) -> libc::c_long;
     fn malloc(_: libc::c_ulong) -> *mut libc::c_void;
     fn calloc(_: libc::c_ulong, _: libc::c_ulong) -> *mut libc::c_void;
     fn free(_: *mut libc::c_void);
     fn exit(_: libc::c_int) -> !;
-    fn memcpy(
-        _: *mut libc::c_void,
-        _: *const libc::c_void,
-        _: libc::c_ulong,
-    ) -> *mut libc::c_void;
-    fn memset(
-        _: *mut libc::c_void,
-        _: libc::c_int,
-        _: libc::c_ulong,
-    ) -> *mut libc::c_void;
+    fn memcpy(_: *mut libc::c_void, _: *const libc::c_void, _: libc::c_ulong) -> *mut libc::c_void;
+    fn memset(_: *mut libc::c_void, _: libc::c_int, _: libc::c_ulong) -> *mut libc::c_void;
     fn strcpy(_: *mut libc::c_char, _: *const libc::c_char) -> *mut libc::c_char;
     fn strcat(_: *mut libc::c_char, _: *const libc::c_char) -> *mut libc::c_char;
     fn strcmp(_: *const libc::c_char, _: *const libc::c_char) -> libc::c_int;
@@ -109,11 +92,7 @@ extern "C" {
     fn ring_full(ring: *mut ring_buffer_t) -> libc::c_int;
     static mut g_error: [libc::c_char; 0];
     fn get_usec_since(old_time: *mut timeval) -> u_int64_t;
-    fn fread_line(
-        f: *mut FILE,
-        buffer: *mut libc::c_char,
-        buffer_length: size_t,
-    ) -> libc::c_int;
+    fn fread_line(f: *mut FILE, buffer: *mut libc::c_char, buffer_length: size_t) -> libc::c_int;
     fn get_udp_in_errors() -> u_int64_t;
     fn error_handler(
         file: *const libc::c_char,
@@ -121,10 +100,7 @@ extern "C" {
         message: *const libc::c_char,
         fatal_yn: libc::c_int,
     ) -> libc::c_int;
-    fn ttp_request_retransmit(
-        session: *mut ttp_session_t,
-        block: u_int32_t,
-    ) -> libc::c_int;
+    fn ttp_request_retransmit(session: *mut ttp_session_t, block: u_int32_t) -> libc::c_int;
     fn ttp_authenticate_client(session: *mut ttp_session_t, secret: *mut u_char) -> libc::c_int;
     fn ttp_negotiate_client(session: *mut ttp_session_t) -> libc::c_int;
     fn create_tcp_socket_client(
@@ -521,8 +497,7 @@ pub unsafe extern "C" fn command_connect(
         }
     }
     if (*command).count as libc::c_int > 2 as libc::c_int {
-        (*parameter)
-            .server_port = atoi((*command).text[2 as libc::c_int as usize]) as u_int16_t;
+        (*parameter).server_port = atoi((*command).text[2 as libc::c_int as usize]) as u_int16_t;
     }
     session = calloc(
         1 as libc::c_int as libc::c_ulong,
@@ -537,11 +512,8 @@ pub unsafe extern "C" fn command_connect(
         );
     }
     (*session).parameter = parameter;
-    server_fd = create_tcp_socket_client(
-        session,
-        (*parameter).server_name,
-        (*parameter).server_port,
-    );
+    server_fd =
+        create_tcp_socket_client(session, (*parameter).server_name, (*parameter).server_port);
     if server_fd < 0 as libc::c_int {
         sprintf(
             g_error.as_mut_ptr(),
@@ -638,8 +610,7 @@ pub unsafe extern "C" fn command_dir(
         return error_handler(
             b"command.c\0" as *const u8 as *const libc::c_char,
             222 as libc::c_int,
-            b"Could not read response to directory request\0" as *const u8
-                as *const libc::c_char,
+            b"Could not read response to directory request\0" as *const u8 as *const libc::c_char,
             0 as libc::c_int,
         );
     }
@@ -647,8 +618,7 @@ pub unsafe extern "C" fn command_dir(
         return error_handler(
             b"command.c\0" as *const u8 as *const libc::c_char,
             224 as libc::c_int,
-            b"Server does no support listing of shared files\0" as *const u8
-                as *const libc::c_char,
+            b"Server does no support listing of shared files\0" as *const u8 as *const libc::c_char,
             0 as libc::c_int,
         );
     }
@@ -660,7 +630,10 @@ pub unsafe extern "C" fn command_dir(
             .wrapping_sub(2 as libc::c_int as libc::c_ulong),
     );
     num_files = atoi(read_str.as_mut_ptr()) as u_int16_t;
-    fprintf(stderr, b"Remote file list:\n\0" as *const u8 as *const libc::c_char);
+    fprintf(
+        stderr,
+        b"Remote file list:\n\0" as *const u8 as *const libc::c_char,
+    );
     i = 0 as libc::c_int as u_int16_t;
     while (i as libc::c_int) < num_files as libc::c_int {
         fread_line(
@@ -725,8 +698,14 @@ pub unsafe extern "C" fn command_get(
     let mut f_counter: u_int32_t = 0 as libc::c_int as u_int32_t;
     let mut f_total: u_int32_t = 0 as libc::c_int as u_int32_t;
     let mut f_arrsize: u_int32_t = 0 as libc::c_int as u_int32_t;
-    let mut ping_s: timeval = timeval { tv_sec: 0, tv_usec: 0 };
-    let mut ping_e: timeval = timeval { tv_sec: 0, tv_usec: 0 };
+    let mut ping_s: timeval = timeval {
+        tv_sec: 0,
+        tv_usec: 0,
+    };
+    let mut ping_e: timeval = timeval {
+        tv_sec: 0,
+        tv_usec: 0,
+    };
     let mut wait_u_sec: libc::c_long = 1 as libc::c_int as libc::c_long;
     if ((*command).count as libc::c_int) < 2 as libc::c_int {
         return error_handler(
@@ -758,9 +737,7 @@ pub unsafe extern "C" fn command_get(
         let mut filearray_size: [libc::c_char; 10] = [0; 10];
         let mut file_count: [libc::c_char; 10] = [0; 10];
         multimode = 1 as libc::c_int;
-        printf(
-            b"Requesting all available files\n\0" as *const u8 as *const libc::c_char,
-        );
+        printf(b"Requesting all available files\n\0" as *const u8 as *const libc::c_char);
         gettimeofday(&mut ping_s, 0 as *mut libc::c_void);
         status = fprintf(
             (*session).server,
@@ -780,7 +757,10 @@ pub unsafe extern "C" fn command_get(
             10 as libc::c_int as libc::c_ulong,
             (*session).server,
         ) as libc::c_int;
-        fprintf((*session).server, b"got size\0" as *const u8 as *const libc::c_char);
+        fprintf(
+            (*session).server,
+            b"got size\0" as *const u8 as *const libc::c_char,
+        );
         if status <= 0 as libc::c_int || fflush((*session).server) != 0 {
             return error_handler(
                 b"command.c\0" as *const u8 as *const libc::c_char,
@@ -793,15 +773,14 @@ pub unsafe extern "C" fn command_get(
             return error_handler(
                 b"command.c\0" as *const u8 as *const libc::c_char,
                 315 as libc::c_int,
-                b"Could not read response to file request\0" as *const u8
-                    as *const libc::c_char,
+                b"Could not read response to file request\0" as *const u8 as *const libc::c_char,
                 0 as libc::c_int,
             );
         }
         wait_u_sec = (ping_e.tv_sec - ping_s.tv_sec) * 1000000 as libc::c_int as __time_t
             + (ping_e.tv_usec - ping_s.tv_usec);
-        wait_u_sec = wait_u_sec
-            + (wait_u_sec as libc::c_double * 0.1f64) as libc::c_int as libc::c_long;
+        wait_u_sec =
+            wait_u_sec + (wait_u_sec as libc::c_double * 0.1f64) as libc::c_int as libc::c_long;
         sscanf(
             filearray_size.as_mut_ptr(),
             b"%u\0" as *const u8 as *const libc::c_char,
@@ -823,8 +802,7 @@ pub unsafe extern "C" fn command_get(
             return error_handler(
                 b"command.c\0" as *const u8 as *const libc::c_char,
                 330 as libc::c_int,
-                b"Server advertised no files to get\0" as *const u8
-                    as *const libc::c_char,
+                b"Server advertised no files to get\0" as *const u8 as *const libc::c_char,
                 0 as libc::c_int,
             );
         } else {
@@ -834,9 +812,7 @@ pub unsafe extern "C" fn command_get(
             );
             file_names = malloc(
                 (f_total as libc::c_ulong)
-                    .wrapping_mul(
-                        ::core::mem::size_of::<*mut libc::c_char>() as libc::c_ulong,
-                    ),
+                    .wrapping_mul(::core::mem::size_of::<*mut libc::c_char>() as libc::c_ulong),
             ) as *mut *mut libc::c_char;
             if file_names.is_null() {
                 error_handler(
@@ -887,11 +863,8 @@ pub unsafe extern "C" fn command_get(
             if (*command).count as libc::c_int >= 3 as libc::c_int {
                 (*xfer).local_filename = (*command).text[2 as libc::c_int as usize];
             } else {
-                (*xfer)
-                    .local_filename = strrchr(
-                    (*command).text[1 as libc::c_int as usize],
-                    '/' as i32,
-                );
+                (*xfer).local_filename =
+                    strrchr((*command).text[1 as libc::c_int as usize], '/' as i32);
                 if ((*xfer).local_filename).is_null() {
                     (*xfer).local_filename = (*command).text[1 as libc::c_int as usize];
                 } else {
@@ -902,8 +875,7 @@ pub unsafe extern "C" fn command_get(
         } else {
             (*xfer).local_filename = *file_names.offset(f_counter as isize);
             printf(
-                b"GET *: now requesting file '%s'\n\0" as *const u8
-                    as *const libc::c_char,
+                b"GET *: now requesting file '%s'\n\0" as *const u8 as *const libc::c_char,
                 (*xfer).local_filename,
             );
         }
@@ -925,8 +897,7 @@ pub unsafe extern "C" fn command_get(
                 0 as libc::c_int,
             );
         }
-        (*rexmit)
-            .table = calloc(
+        (*rexmit).table = calloc(
             super::config::DEFAULT_TABLE_SIZE as libc::c_ulong,
             ::core::mem::size_of::<u_int32_t>() as libc::c_ulong,
         ) as *mut u_int32_t;
@@ -934,13 +905,11 @@ pub unsafe extern "C" fn command_get(
             error_handler(
                 b"command.c\0" as *const u8 as *const libc::c_char,
                 396 as libc::c_int,
-                b"Could not allocate retransmission table\0" as *const u8
-                    as *const libc::c_char,
+                b"Could not allocate retransmission table\0" as *const u8 as *const libc::c_char,
                 1 as libc::c_int,
             );
         }
-        (*xfer)
-            .received = calloc(
+        (*xfer).received = calloc(
             ((*xfer).block_count / 8 as libc::c_int as u_int32_t)
                 .wrapping_add(2 as libc::c_int as u_int32_t) as libc::c_ulong,
             ::core::mem::size_of::<u_char>() as libc::c_ulong,
@@ -949,33 +918,29 @@ pub unsafe extern "C" fn command_get(
             error_handler(
                 b"command.c\0" as *const u8 as *const libc::c_char,
                 401 as libc::c_int,
-                b"Could not allocate received-data bitfield\0" as *const u8
-                    as *const libc::c_char,
+                b"Could not allocate received-data bitfield\0" as *const u8 as *const libc::c_char,
                 1 as libc::c_int,
             );
         }
         (*xfer).ring_buffer = ring_create(session);
         local_datagram = calloc(
-            (6 as libc::c_int as u_int32_t)
-                .wrapping_add((*(*session).parameter).block_size) as libc::c_ulong,
+            (6 as libc::c_int as u_int32_t).wrapping_add((*(*session).parameter).block_size)
+                as libc::c_ulong,
             ::core::mem::size_of::<u_char>() as libc::c_ulong,
         ) as *mut u_char;
         if local_datagram.is_null() {
             error_handler(
                 b"command.c\0" as *const u8 as *const libc::c_char,
                 409 as libc::c_int,
-                b"Could not allocate fast local datagram buffer in command_get()\0"
-                    as *const u8 as *const libc::c_char,
+                b"Could not allocate fast local datagram buffer in command_get()\0" as *const u8
+                    as *const libc::c_char,
                 1 as libc::c_int,
             );
         }
         status = pthread_create(
             &mut disk_thread_id,
             0 as *const pthread_attr_t,
-            Some(
-                disk_thread
-                    as unsafe extern "C" fn(*mut libc::c_void) -> *mut libc::c_void,
-            ),
+            Some(disk_thread as unsafe extern "C" fn(*mut libc::c_void) -> *mut libc::c_void),
             session as *mut libc::c_void,
         );
         if status != 0 as libc::c_int {
@@ -1006,8 +971,8 @@ pub unsafe extern "C" fn command_get(
             status = recvfrom(
                 (*xfer).udp_fd,
                 local_datagram as *mut libc::c_void,
-                (6 as libc::c_int as u_int32_t)
-                    .wrapping_add((*(*session).parameter).block_size) as size_t,
+                (6 as libc::c_int as u_int32_t).wrapping_add((*(*session).parameter).block_size)
+                    as size_t,
                 0 as libc::c_int,
                 __SOCKADDR_ARG {
                     __sockaddr__: 0 as *mut libc::c_void as *mut sockaddr,
@@ -1022,8 +987,8 @@ pub unsafe extern "C" fn command_get(
                     0 as libc::c_int,
                 );
                 printf(
-                    b"Apparently frozen transfer, trying to do retransmit request\n\0"
-                        as *const u8 as *const libc::c_char,
+                    b"Apparently frozen transfer, trying to do retransmit request\n\0" as *const u8
+                        as *const libc::c_char,
                 );
                 if ttp_repeat_retransmit(session) < 0 as libc::c_int {
                     error_handler(
@@ -1038,27 +1003,20 @@ pub unsafe extern "C" fn command_get(
                 }
             }
             this_block = __bswap_32(*(local_datagram as *mut u_int32_t));
-            this_type = __bswap_16(
-                *(local_datagram.offset(4 as libc::c_int as isize) as *mut u_int16_t),
-            );
+            this_type =
+                __bswap_16(*(local_datagram.offset(4 as libc::c_int as isize) as *mut u_int16_t));
             (*xfer).stats.total_blocks = ((*xfer).stats.total_blocks).wrapping_add(1);
             (*xfer).stats.total_blocks;
             if this_type as libc::c_int != 'R' as i32 {
-                (*xfer)
-                    .stats
-                    .this_flow_originals = ((*xfer).stats.this_flow_originals)
-                    .wrapping_add(1);
+                (*xfer).stats.this_flow_originals =
+                    ((*xfer).stats.this_flow_originals).wrapping_add(1);
                 (*xfer).stats.this_flow_originals;
             } else {
-                (*xfer)
-                    .stats
-                    .this_flow_retransmitteds = ((*xfer).stats.this_flow_retransmitteds)
-                    .wrapping_add(1);
+                (*xfer).stats.this_flow_retransmitteds =
+                    ((*xfer).stats.this_flow_retransmitteds).wrapping_add(1);
                 (*xfer).stats.this_flow_retransmitteds;
-                (*xfer)
-                    .stats
-                    .total_recvd_retransmits = ((*xfer).stats.total_recvd_retransmits)
-                    .wrapping_add(1);
+                (*xfer).stats.total_recvd_retransmits =
+                    ((*xfer).stats.total_recvd_retransmits).wrapping_add(1);
                 (*xfer).stats.total_recvd_retransmits;
             }
             if ring_full((*xfer).ring_buffer) == 0 {
@@ -1079,20 +1037,17 @@ pub unsafe extern "C" fn command_get(
                             error_handler(
                                 b"command.c\0" as *const u8 as *const libc::c_char,
                                 475 as libc::c_int,
-                                b"Error in accepting block\0" as *const u8
-                                    as *const libc::c_char,
+                                b"Error in accepting block\0" as *const u8 as *const libc::c_char,
                                 0 as libc::c_int,
                             );
                             current_block = 78252603380123710;
                             break 's_202;
                         } else {
                             let ref mut fresh1 = *((*xfer).received)
-                                .offset(
-                                    (this_block / 8 as libc::c_int as u_int32_t) as isize,
-                                );
+                                .offset((this_block / 8 as libc::c_int as u_int32_t) as isize);
                             *fresh1 = (*fresh1 as libc::c_int
-                                | (1 as libc::c_int)
-                                    << this_block % 8 as libc::c_int as u_int32_t) as u_char;
+                                | (1 as libc::c_int) << this_block % 8 as libc::c_int as u_int32_t)
+                                as u_char;
                             if (*xfer).blocks_left > 0 as libc::c_int as u_int32_t {
                                 (*xfer).blocks_left = ((*xfer).blocks_left).wrapping_sub(1);
                                 (*xfer).blocks_left;
@@ -1135,32 +1090,39 @@ pub unsafe extern "C" fn command_get(
                                         path_capability = 0.8f64
                                             * ((*xfer).stats.this_transmit_rate
                                                 + (*xfer).stats.this_retransmit_rate);
-                                        path_capability
-                                            *= 0.001f64
-                                                * (*(*session).parameter).losswindow_ms as libc::c_double;
+                                        path_capability *= 0.001f64
+                                            * (*(*session).parameter).losswindow_ms
+                                                as libc::c_double;
                                         let mut earliest_block: u_int32_t = (this_block
                                             as libc::c_double
                                             - (if ((1024 as libc::c_int * 1024 as libc::c_int)
-                                                as libc::c_double * path_capability
+                                                as libc::c_double
+                                                * path_capability
                                                 / (8 as libc::c_int as u_int32_t
-                                                    * (*(*session).parameter).block_size) as libc::c_double)
+                                                    * (*(*session).parameter).block_size)
+                                                    as libc::c_double)
                                                 < this_block.wrapping_sub((*xfer).gapless_to_block)
                                                     as libc::c_double
                                             {
                                                 (1024 as libc::c_int * 1024 as libc::c_int)
-                                                    as libc::c_double * path_capability
+                                                    as libc::c_double
+                                                    * path_capability
                                                     / (8 as libc::c_int as u_int32_t
-                                                        * (*(*session).parameter).block_size) as libc::c_double
+                                                        * (*(*session).parameter).block_size)
+                                                        as libc::c_double
                                             } else {
                                                 this_block.wrapping_sub((*xfer).gapless_to_block)
                                                     as libc::c_double
-                                            })) as u_int32_t;
+                                            }))
+                                            as u_int32_t;
                                         block = earliest_block;
                                         while block < this_block {
-                                            if ttp_request_retransmit(session, block) < 0 as libc::c_int
+                                            if ttp_request_retransmit(session, block)
+                                                < 0 as libc::c_int
                                             {
                                                 error_handler(
-                                                    b"command.c\0" as *const u8 as *const libc::c_char,
+                                                    b"command.c\0" as *const u8
+                                                        as *const libc::c_char,
                                                     515 as libc::c_int,
                                                     b"Retransmission request failed\0" as *const u8
                                                         as *const libc::c_char,
@@ -1201,17 +1163,16 @@ pub unsafe extern "C" fn command_get(
                                 session,
                                 ((*xfer).gapless_to_block)
                                     .wrapping_add(1 as libc::c_int as u_int32_t),
-                            ) != 0 && (*xfer).gapless_to_block < (*xfer).block_count
+                            ) != 0
+                                && (*xfer).gapless_to_block < (*xfer).block_count
                             {
-                                (*xfer)
-                                    .gapless_to_block = ((*xfer).gapless_to_block)
-                                    .wrapping_add(1);
+                                (*xfer).gapless_to_block =
+                                    ((*xfer).gapless_to_block).wrapping_add(1);
                                 (*xfer).gapless_to_block;
                             }
                             if this_type as libc::c_int == 'O' as i32 {
-                                (*xfer)
-                                    .next_block = this_block
-                                    .wrapping_add(1 as libc::c_int as u_int32_t);
+                                (*xfer).next_block =
+                                    this_block.wrapping_add(1 as libc::c_int as u_int32_t);
                             }
                             if (*xfer).restart_pending as libc::c_int != 0
                                 && (*xfer).next_block >= (*xfer).restart_lastidx
@@ -1232,8 +1193,7 @@ pub unsafe extern "C" fn command_get(
                                 block = ((*xfer).gapless_to_block)
                                     .wrapping_add(1 as libc::c_int as u_int32_t);
                                 while block < (*xfer).block_count {
-                                    if ttp_request_retransmit(session, block) < 0 as libc::c_int
-                                    {
+                                    if ttp_request_retransmit(session, block) < 0 as libc::c_int {
                                         error_handler(
                                             b"command.c\0" as *const u8 as *const libc::c_char,
                                             571 as libc::c_int,
@@ -1289,16 +1249,15 @@ pub unsafe extern "C" fn command_get(
             }
         }
         printf(
-            b"Transfer complete. Flushing to disk and signaling server to stop...\n\0"
-                as *const u8 as *const libc::c_char,
+            b"Transfer complete. Flushing to disk and signaling server to stop...\n\0" as *const u8
+                as *const libc::c_char,
         );
         close((*xfer).udp_fd);
         if ttp_request_stop(session) < 0 as libc::c_int {
             error_handler(
                 b"command.c\0" as *const u8 as *const libc::c_char,
                 619 as libc::c_int,
-                b"Could not request end of transfer\0" as *const u8
-                    as *const libc::c_char,
+                b"Could not request end of transfer\0" as *const u8 as *const libc::c_char,
                 0 as libc::c_int,
             );
             current_block = 78252603380123710;
@@ -1310,19 +1269,15 @@ pub unsafe extern "C" fn command_get(
                 error_handler(
                     b"command.c\0" as *const u8 as *const libc::c_char,
                     627 as libc::c_int,
-                    b"Error in terminating disk thread\0" as *const u8
-                        as *const libc::c_char,
+                    b"Error in terminating disk thread\0" as *const u8 as *const libc::c_char,
                     0 as libc::c_int,
                 );
             }
-            if pthread_join(disk_thread_id, 0 as *mut *mut libc::c_void)
-                < 0 as libc::c_int
-            {
+            if pthread_join(disk_thread_id, 0 as *mut *mut libc::c_void) < 0 as libc::c_int {
                 error_handler(
                     b"command.c\0" as *const u8 as *const libc::c_char,
                     631 as libc::c_int,
-                    b"Disk thread terminated with error\0" as *const u8
-                        as *const libc::c_char,
+                    b"Disk thread terminated with error\0" as *const u8 as *const libc::c_char,
                     0 as libc::c_int,
                 );
             }
@@ -1332,18 +1287,18 @@ pub unsafe extern "C" fn command_get(
             block = 1 as libc::c_int as u_int32_t;
             while block <= (*xfer).block_count {
                 if got_block(session, block) == 0 {
-                    (*xfer)
-                        .stats
-                        .total_lost = ((*xfer).stats.total_lost).wrapping_add(1);
+                    (*xfer).stats.total_lost = ((*xfer).stats.total_lost).wrapping_add(1);
                     (*xfer).stats.total_lost;
                 }
                 block = block.wrapping_add(1);
                 block;
             }
-            mbit_thru = 8.0f64 * (*xfer).stats.total_blocks as libc::c_double
+            mbit_thru = 8.0f64
+                * (*xfer).stats.total_blocks as libc::c_double
                 * (*(*session).parameter).block_size as libc::c_double;
             mbit_good = mbit_thru
-                - 8.0f64 * (*xfer).stats.total_recvd_retransmits as libc::c_double
+                - 8.0f64
+                    * (*xfer).stats.total_recvd_retransmits as libc::c_double
                     * (*(*session).parameter).block_size as libc::c_double;
             mbit_file = 8.0f64 * (*xfer).file_size as libc::c_double;
             mbit_thru /= 1024.0f64 * 1024.0f64;
@@ -1357,38 +1312,31 @@ pub unsafe extern "C" fn command_get(
                     .wrapping_sub((*xfer).stats.start_udp_errors) as ull_t,
             );
             printf(
-                b"Transfer duration     : %0.2f seconds\n\0" as *const u8
-                    as *const libc::c_char,
+                b"Transfer duration     : %0.2f seconds\n\0" as *const u8 as *const libc::c_char,
                 time_secs,
             );
             printf(
-                b"Total packet data     : %0.2f Mbit\n\0" as *const u8
-                    as *const libc::c_char,
+                b"Total packet data     : %0.2f Mbit\n\0" as *const u8 as *const libc::c_char,
                 mbit_thru,
             );
             printf(
-                b"Goodput data          : %0.2f Mbit\n\0" as *const u8
-                    as *const libc::c_char,
+                b"Goodput data          : %0.2f Mbit\n\0" as *const u8 as *const libc::c_char,
                 mbit_good,
             );
             printf(
-                b"File data             : %0.2f Mbit\n\0" as *const u8
-                    as *const libc::c_char,
+                b"File data             : %0.2f Mbit\n\0" as *const u8 as *const libc::c_char,
                 mbit_file,
             );
             printf(
-                b"Throughput            : %0.2f Mbps\n\0" as *const u8
-                    as *const libc::c_char,
+                b"Throughput            : %0.2f Mbps\n\0" as *const u8 as *const libc::c_char,
                 mbit_thru / time_secs,
             );
             printf(
-                b"Goodput w/ restarts   : %0.2f Mbps\n\0" as *const u8
-                    as *const libc::c_char,
+                b"Goodput w/ restarts   : %0.2f Mbps\n\0" as *const u8 as *const libc::c_char,
                 mbit_good / time_secs,
             );
             printf(
-                b"Final file rate       : %0.2f Mbps\n\0" as *const u8
-                    as *const libc::c_char,
+                b"Final file rate       : %0.2f Mbps\n\0" as *const u8 as *const libc::c_char,
                 mbit_file / time_secs,
             );
             printf(b"Transfer mode         : \0" as *const u8 as *const libc::c_char);
@@ -1403,13 +1351,11 @@ pub unsafe extern "C" fn command_get(
                     );
                 }
             } else {
-                if (*(*session).parameter).losswindow_ms == 0 as libc::c_int as u_int32_t
-                {
+                if (*(*session).parameter).losswindow_ms == 0 as libc::c_int as u_int32_t {
                     printf(b"lossy\n\0" as *const u8 as *const libc::c_char);
                 } else {
                     printf(
-                        b"semi-lossy, time window %d ms\n\0" as *const u8
-                            as *const libc::c_char,
+                        b"semi-lossy, time window %d ms\n\0" as *const u8 as *const libc::c_char,
                         (*(*session).parameter).losswindow_ms,
                     );
                 }
@@ -1447,14 +1393,12 @@ pub unsafe extern "C" fn command_get(
                 local_datagram = 0 as *mut u_char;
             }
             if (*(*session).parameter).rate_adjust != 0 {
-                (*(*session).parameter)
-                    .target_rate = (1.15f64 * 1e6f64 * (mbit_file / time_secs))
-                    as u_int32_t;
+                (*(*session).parameter).target_rate =
+                    (1.15f64 * 1e6f64 * (mbit_file / time_secs)) as u_int32_t;
                 printf(
-                    b"Adjusting target rate to %d Mbps for next transfer.\n\0"
-                        as *const u8 as *const libc::c_char,
-                    ((*(*session).parameter).target_rate as libc::c_double / 1e6f64)
-                        as libc::c_int,
+                    b"Adjusting target rate to %d Mbps for next transfer.\n\0" as *const u8
+                        as *const libc::c_char,
+                    ((*(*session).parameter).target_rate as libc::c_double / 1e6f64) as libc::c_int,
                 );
             }
             f_counter = f_counter.wrapping_add(1);
@@ -1516,8 +1460,8 @@ pub unsafe extern "C" fn command_help(
                 as *const libc::c_char,
         );
         printf(
-            b"    close    connect    get    dir    help    quit    set\n\n\0"
-                as *const u8 as *const libc::c_char,
+            b"    close    connect    get    dir    help    quit    set\n\n\0" as *const u8
+                as *const libc::c_char,
         );
         printf(
             b"Use 'help <command>' for help on an individual command.\n\n\0" as *const u8
@@ -1530,8 +1474,8 @@ pub unsafe extern "C" fn command_help(
     {
         printf(b"Usage: close\n\n\0" as *const u8 as *const libc::c_char);
         printf(
-            b"Closes the current connection to a remote Tsunami server.\n\n\0"
-                as *const u8 as *const libc::c_char,
+            b"Closes the current connection to a remote Tsunami server.\n\n\0" as *const u8
+                as *const libc::c_char,
         );
     } else if strcasecmp(
         (*command).text[1 as libc::c_int as usize],
@@ -1541,12 +1485,11 @@ pub unsafe extern "C" fn command_help(
         printf(b"Usage: connect\n\0" as *const u8 as *const libc::c_char);
         printf(b"       connect <remote-host>\n\0" as *const u8 as *const libc::c_char);
         printf(
-            b"       connect <remote-host> <remote-port>\n\n\0" as *const u8
-                as *const libc::c_char,
+            b"       connect <remote-host> <remote-port>\n\n\0" as *const u8 as *const libc::c_char,
         );
         printf(
-            b"Opens a connection to a remote Tsunami server.  If the host and port\n\0"
-                as *const u8 as *const libc::c_char,
+            b"Opens a connection to a remote Tsunami server.  If the host and port\n\0" as *const u8
+                as *const libc::c_char,
         );
         printf(
             b"are not specified, default values are used.  (Use the 'set' command to\n\0"
@@ -1554,8 +1497,8 @@ pub unsafe extern "C" fn command_help(
         );
         printf(b"modify these values.)\n\n\0" as *const u8 as *const libc::c_char);
         printf(
-            b"After connecting, you will be prompted to enter a shared secret for\n\0"
-                as *const u8 as *const libc::c_char,
+            b"After connecting, you will be prompted to enter a shared secret for\n\0" as *const u8
+                as *const libc::c_char,
         );
         printf(b"authentication.\n\n\0" as *const u8 as *const libc::c_char);
     } else if strcasecmp(
@@ -1564,17 +1507,14 @@ pub unsafe extern "C" fn command_help(
     ) == 0
     {
         printf(b"Usage: get <remote-file>\n\0" as *const u8 as *const libc::c_char);
+        printf(b"       get <remote-file> <local-file>\n\n\0" as *const u8 as *const libc::c_char);
         printf(
-            b"       get <remote-file> <local-file>\n\n\0" as *const u8
+            b"Attempts to retrieve the remote file with the given name using the\n\0" as *const u8
                 as *const libc::c_char,
         );
         printf(
-            b"Attempts to retrieve the remote file with the given name using the\n\0"
-                as *const u8 as *const libc::c_char,
-        );
-        printf(
-            b"Tsunami file transfer protocol.  If the local filename is not\n\0"
-                as *const u8 as *const libc::c_char,
+            b"Tsunami file transfer protocol.  If the local filename is not\n\0" as *const u8
+                as *const libc::c_char,
         );
         printf(
             b"specified, the final part of the remote filename (after the last path\n\0"
@@ -1597,8 +1537,7 @@ pub unsafe extern "C" fn command_help(
     ) == 0
     {
         printf(
-            b"Come on.  You know what that command does.\n\n\0" as *const u8
-                as *const libc::c_char,
+            b"Come on.  You know what that command does.\n\n\0" as *const u8 as *const libc::c_char,
         );
     } else if strcasecmp(
         (*command).text[1 as libc::c_int as usize],
@@ -1607,8 +1546,8 @@ pub unsafe extern "C" fn command_help(
     {
         printf(b"Usage: quit\n\n\0" as *const u8 as *const libc::c_char);
         printf(
-            b"Closes any open connection to a remote Tsunami server and exits the\n\0"
-                as *const u8 as *const libc::c_char,
+            b"Closes any open connection to a remote Tsunami server and exits the\n\0" as *const u8
+                as *const libc::c_char,
         );
         printf(b"Tsunami client.\n\n\0" as *const u8 as *const libc::c_char);
     } else if strcasecmp(
@@ -1624,22 +1563,19 @@ pub unsafe extern "C" fn command_help(
                 as *const u8 as *const libc::c_char,
         );
         printf(
-            b"the current value of the field is returned.  If the field is also\n\0"
-                as *const u8 as *const libc::c_char,
+            b"the current value of the field is returned.  If the field is also\n\0" as *const u8
+                as *const libc::c_char,
         );
         printf(
-            b"omitted, the current values of all defaults are returned.\n\n\0"
-                as *const u8 as *const libc::c_char,
+            b"omitted, the current values of all defaults are returned.\n\n\0" as *const u8
+                as *const libc::c_char,
         );
     } else {
         printf(
             b"'%s' is not a recognized command.\n\0" as *const u8 as *const libc::c_char,
             (*command).text[1 as libc::c_int as usize],
         );
-        printf(
-            b"Use 'help' for a list of commands.\n\n\0" as *const u8
-                as *const libc::c_char,
-        );
+        printf(b"Use 'help' for a list of commands.\n\n\0" as *const u8 as *const libc::c_char);
     }
     return 0 as libc::c_int;
 }
@@ -1657,8 +1593,8 @@ pub unsafe extern "C" fn command_quit(
             as *const libc::c_char,
     );
     printf(
-        b"The SourceForge site can be found at: http://tsunami-udp.sf.net/\n\n\0"
-            as *const u8 as *const libc::c_char,
+        b"The SourceForge site can be found at: http://tsunami-udp.sf.net/\n\n\0" as *const u8
+            as *const libc::c_char,
     );
     exit(1 as libc::c_int);
 }
@@ -1667,8 +1603,8 @@ pub unsafe extern "C" fn command_set(
     mut command: *mut command_t,
     mut parameter: *mut ttp_parameter_t,
 ) -> libc::c_int {
-    let mut do_all: libc::c_int = ((*command).count as libc::c_int == 1 as libc::c_int)
-        as libc::c_int;
+    let mut do_all: libc::c_int =
+        ((*command).count as libc::c_int == 1 as libc::c_int) as libc::c_int;
     if (*command).count as libc::c_int == 3 as libc::c_int {
         if strcasecmp(
             (*command).text[1 as libc::c_int as usize],
@@ -1678,14 +1614,12 @@ pub unsafe extern "C" fn command_set(
             if !((*parameter).server_name).is_null() {
                 free((*parameter).server_name as *mut libc::c_void);
             }
-            (*parameter)
-                .server_name = strdup((*command).text[2 as libc::c_int as usize]);
+            (*parameter).server_name = strdup((*command).text[2 as libc::c_int as usize]);
             if ((*parameter).server_name).is_null() {
                 error_handler(
                     b"command.c\0" as *const u8 as *const libc::c_char,
                     851 as libc::c_int,
-                    b"Could not update server name\0" as *const u8
-                        as *const libc::c_char,
+                    b"Could not update server name\0" as *const u8 as *const libc::c_char,
                     1 as libc::c_int,
                 );
             }
@@ -1694,40 +1628,33 @@ pub unsafe extern "C" fn command_set(
             b"port\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            (*parameter)
-                .server_port = atoi((*command).text[2 as libc::c_int as usize])
-                as u_int16_t;
+            (*parameter).server_port =
+                atoi((*command).text[2 as libc::c_int as usize]) as u_int16_t;
         } else if strcasecmp(
             (*command).text[1 as libc::c_int as usize],
             b"udpport\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            (*parameter)
-                .client_port = atoi((*command).text[2 as libc::c_int as usize])
-                as u_int16_t;
+            (*parameter).client_port =
+                atoi((*command).text[2 as libc::c_int as usize]) as u_int16_t;
         } else if strcasecmp(
             (*command).text[1 as libc::c_int as usize],
             b"buffer\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            (*parameter)
-                .udp_buffer = atol((*command).text[2 as libc::c_int as usize])
-                as u_int32_t;
+            (*parameter).udp_buffer = atol((*command).text[2 as libc::c_int as usize]) as u_int32_t;
         } else if strcasecmp(
             (*command).text[1 as libc::c_int as usize],
             b"blocksize\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            (*parameter)
-                .block_size = atol((*command).text[2 as libc::c_int as usize])
-                as u_int32_t;
+            (*parameter).block_size = atol((*command).text[2 as libc::c_int as usize]) as u_int32_t;
         } else if strcasecmp(
             (*command).text[1 as libc::c_int as usize],
             b"verbose\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            (*parameter)
-                .verbose_yn = (strcmp(
+            (*parameter).verbose_yn = (strcmp(
                 (*command).text[2 as libc::c_int as usize],
                 b"yes\0" as *const u8 as *const libc::c_char,
             ) == 0 as libc::c_int) as libc::c_int as u_char;
@@ -1736,18 +1663,17 @@ pub unsafe extern "C" fn command_set(
             b"transcript\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            (*parameter)
-                .transcript_yn = (strcmp(
+            (*parameter).transcript_yn = (strcmp(
                 (*command).text[2 as libc::c_int as usize],
                 b"yes\0" as *const u8 as *const libc::c_char,
-            ) == 0 as libc::c_int) as libc::c_int as u_char;
+            ) == 0 as libc::c_int) as libc::c_int
+                as u_char;
         } else if strcasecmp(
             (*command).text[1 as libc::c_int as usize],
             b"ip\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            (*parameter)
-                .ipv6_yn = (strcmp(
+            (*parameter).ipv6_yn = (strcmp(
                 (*command).text[2 as libc::c_int as usize],
                 b"v6\0" as *const u8 as *const libc::c_char,
             ) == 0 as libc::c_int) as libc::c_int as u_char;
@@ -1756,8 +1682,7 @@ pub unsafe extern "C" fn command_set(
             b"output\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            (*parameter)
-                .output_mode = (if strcmp(
+            (*parameter).output_mode = (if strcmp(
                 (*command).text[2 as libc::c_int as usize],
                 b"screen\0" as *const u8 as *const libc::c_char,
             ) != 0
@@ -1771,8 +1696,7 @@ pub unsafe extern "C" fn command_set(
             b"rateadjust\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            (*parameter)
-                .rate_adjust = (strcmp(
+            (*parameter).rate_adjust = (strcmp(
                 (*command).text[2 as libc::c_int as usize],
                 b"yes\0" as *const u8 as *const libc::c_char,
             ) == 0 as libc::c_int) as libc::c_int as u_char;
@@ -1782,8 +1706,8 @@ pub unsafe extern "C" fn command_set(
         ) == 0
         {
             let mut multiplier: libc::c_long = 1 as libc::c_int as libc::c_long;
-            let mut cmd: *mut libc::c_char = (*command).text[2 as libc::c_int as usize]
-                as *mut libc::c_char;
+            let mut cmd: *mut libc::c_char =
+                (*command).text[2 as libc::c_int as usize] as *mut libc::c_char;
             let mut cpy: [libc::c_char; 256] = [0; 256];
             let mut l: libc::c_int = strlen(cmd) as libc::c_int;
             strcpy(cpy.as_mut_ptr(), cmd);
@@ -1794,25 +1718,19 @@ pub unsafe extern "C" fn command_set(
                         > 1 as libc::c_int as libc::c_ulong
                     {
                         if 0 != 0 {
-                            let mut __c: libc::c_int = cpy[(l - 1 as libc::c_int)
-                                as usize] as libc::c_int;
-                            __res = (if __c < -(128 as libc::c_int)
-                                || __c > 255 as libc::c_int
-                            {
+                            let mut __c: libc::c_int =
+                                cpy[(l - 1 as libc::c_int) as usize] as libc::c_int;
+                            __res = (if __c < -(128 as libc::c_int) || __c > 255 as libc::c_int {
                                 __c
                             } else {
                                 *(*__ctype_toupper_loc()).offset(__c as isize)
                             });
                         } else {
-                            __res = toupper(
-                                cpy[(l - 1 as libc::c_int) as usize] as libc::c_int,
-                            );
+                            __res = toupper(cpy[(l - 1 as libc::c_int) as usize] as libc::c_int);
                         }
                     } else {
                         __res = *(*__ctype_toupper_loc())
-                            .offset(
-                                cpy[(l - 1 as libc::c_int) as usize] as libc::c_int as isize,
-                            );
+                            .offset(cpy[(l - 1 as libc::c_int) as usize] as libc::c_int as isize);
                     }
                     __res
                 }) == 'M' as i32
@@ -1826,25 +1744,19 @@ pub unsafe extern "C" fn command_set(
                         > 1 as libc::c_int as libc::c_ulong
                     {
                         if 0 != 0 {
-                            let mut __c: libc::c_int = cpy[(l - 1 as libc::c_int)
-                                as usize] as libc::c_int;
-                            __res = (if __c < -(128 as libc::c_int)
-                                || __c > 255 as libc::c_int
-                            {
+                            let mut __c: libc::c_int =
+                                cpy[(l - 1 as libc::c_int) as usize] as libc::c_int;
+                            __res = (if __c < -(128 as libc::c_int) || __c > 255 as libc::c_int {
                                 __c
                             } else {
                                 *(*__ctype_toupper_loc()).offset(__c as isize)
                             });
                         } else {
-                            __res = toupper(
-                                cpy[(l - 1 as libc::c_int) as usize] as libc::c_int,
-                            );
+                            __res = toupper(cpy[(l - 1 as libc::c_int) as usize] as libc::c_int);
                         }
                     } else {
                         __res = *(*__ctype_toupper_loc())
-                            .offset(
-                                cpy[(l - 1 as libc::c_int) as usize] as libc::c_int as isize,
-                            );
+                            .offset(cpy[(l - 1 as libc::c_int) as usize] as libc::c_int as isize);
                     }
                     __res
                 }) == 'G' as i32
@@ -1852,16 +1764,14 @@ pub unsafe extern "C" fn command_set(
                 multiplier = 1000000000 as libc::c_int as libc::c_long;
                 cpy[(l - 1 as libc::c_int) as usize] = '\0' as i32 as libc::c_char;
             }
-            (*parameter)
-                .target_rate = (multiplier * atol(cpy.as_mut_ptr())) as u_int32_t;
+            (*parameter).target_rate = (multiplier * atol(cpy.as_mut_ptr())) as u_int32_t;
         } else if strcasecmp(
             (*command).text[1 as libc::c_int as usize],
             b"error\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            (*parameter)
-                .error_rate = (atof((*command).text[2 as libc::c_int as usize])
-                * 1000.0f64) as u_int32_t;
+            (*parameter).error_rate =
+                (atof((*command).text[2 as libc::c_int as usize]) * 1000.0f64) as u_int32_t;
         } else if strcasecmp(
             (*command).text[1 as libc::c_int as usize],
             b"slowdown\0" as *const u8 as *const libc::c_char,
@@ -1887,15 +1797,13 @@ pub unsafe extern "C" fn command_set(
             b"history\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            (*parameter)
-                .history = atoi((*command).text[2 as libc::c_int as usize]) as u_int16_t;
+            (*parameter).history = atoi((*command).text[2 as libc::c_int as usize]) as u_int16_t;
         } else if strcasecmp(
             (*command).text[1 as libc::c_int as usize],
             b"lossless\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            (*parameter)
-                .lossless = (strcmp(
+            (*parameter).lossless = (strcmp(
                 (*command).text[2 as libc::c_int as usize],
                 b"yes\0" as *const u8 as *const libc::c_char,
             ) == 0 as libc::c_int) as libc::c_int as u_char;
@@ -1904,16 +1812,14 @@ pub unsafe extern "C" fn command_set(
             b"losswindow\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            (*parameter)
-                .losswindow_ms = atol((*command).text[2 as libc::c_int as usize])
-                as u_int32_t;
+            (*parameter).losswindow_ms =
+                atol((*command).text[2 as libc::c_int as usize]) as u_int32_t;
         } else if strcasecmp(
             (*command).text[1 as libc::c_int as usize],
             b"blockdump\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            (*parameter)
-                .blockdump = (strcmp(
+            (*parameter).blockdump = (strcmp(
                 (*command).text[2 as libc::c_int as usize],
                 b"yes\0" as *const u8 as *const libc::c_char,
             ) == 0 as libc::c_int) as libc::c_int as u_char;
@@ -2192,9 +2098,7 @@ pub unsafe extern "C" fn disk_thread(mut arg: *mut libc::c_void) -> *mut libc::c
     loop {
         datagram = ring_peek((*session).transfer.ring_buffer);
         block_index = __bswap_32(*(datagram as *mut u_int32_t));
-        block_type = __bswap_16(
-            *(datagram.offset(4 as libc::c_int as isize) as *mut u_int16_t),
-        );
+        block_type = __bswap_16(*(datagram.offset(4 as libc::c_int as isize) as *mut u_int16_t));
         if block_index == 0 as libc::c_int as u_int32_t {
             printf(b"!!!!\n\0" as *const u8 as *const libc::c_char);
             return 0 as *mut libc::c_void;
@@ -2214,7 +2118,7 @@ pub unsafe extern "C" fn disk_thread(mut arg: *mut libc::c_void) -> *mut libc::c
             return 0 as *mut libc::c_void;
         }
         ring_pop((*session).transfer.ring_buffer);
-    };
+    }
 }
 #[no_mangle]
 pub unsafe extern "C" fn parse_fraction(
@@ -2282,8 +2186,7 @@ pub unsafe extern "C" fn dump_blockmap(
     } else {
         fprintf(
             stderr,
-            b"Could not create a file for the blockmap dump\0" as *const u8
-                as *const libc::c_char,
+            b"Could not create a file for the blockmap dump\0" as *const u8 as *const libc::c_char,
         );
     }
     free(fname as *mut libc::c_void);

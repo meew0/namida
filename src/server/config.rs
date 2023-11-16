@@ -1,10 +1,6 @@
 use ::libc;
 extern "C" {
-    fn memset(
-        _: *mut libc::c_void,
-        _: libc::c_int,
-        _: libc::c_ulong,
-    ) -> *mut libc::c_void;
+    fn memset(_: *mut libc::c_void, _: libc::c_int, _: libc::c_ulong) -> *mut libc::c_void;
 }
 pub type size_t = libc::c_ulong;
 pub type __u_char = libc::c_uchar;
@@ -53,8 +49,8 @@ pub struct ttp_parameter_t {
     pub wait_u_sec: libc::c_long,
 }
 pub static mut DEFAULT_BLOCK_SIZE: u_int32_t = 1024 as libc::c_int as u_int32_t;
-pub static mut DEFAULT_SECRET: *const u_char = b"kitten\0" as *const u8
-    as *const libc::c_char as *mut u_char;
+pub static mut DEFAULT_SECRET: *const u_char =
+    b"kitten\0" as *const u8 as *const libc::c_char as *mut u_char;
 pub static mut DEFAULT_TCP_PORT: u_int16_t = 51038 as libc::c_int as u_int16_t;
 pub static mut DEFAULT_UDP_BUFFER: u_int32_t = 20000000 as libc::c_int as u_int32_t;
 pub static mut DEFAULT_VERBOSE_YN: u_char = 1 as libc::c_int as u_char;

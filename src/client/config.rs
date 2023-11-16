@@ -1,11 +1,7 @@
 use ::libc;
 extern "C" {
     fn free(_: *mut libc::c_void);
-    fn memset(
-        _: *mut libc::c_void,
-        _: libc::c_int,
-        _: libc::c_ulong,
-    ) -> *mut libc::c_void;
+    fn memset(_: *mut libc::c_void, _: libc::c_int, _: libc::c_ulong) -> *mut libc::c_void;
     fn strdup(_: *const libc::c_char) -> *mut libc::c_char;
     fn error_handler(
         file: *const libc::c_char,
@@ -48,8 +44,8 @@ pub struct ttp_parameter_t {
 }
 pub static mut DEFAULT_BLOCK_SIZE: u_int32_t = 1024 as libc::c_int as u_int32_t;
 pub static mut DEFAULT_TABLE_SIZE: libc::c_int = 4096 as libc::c_int;
-pub static mut DEFAULT_SERVER_NAME: *const libc::c_char = b"localhost\0" as *const u8
-    as *const libc::c_char;
+pub static mut DEFAULT_SERVER_NAME: *const libc::c_char =
+    b"localhost\0" as *const u8 as *const libc::c_char;
 pub static mut DEFAULT_SERVER_PORT: u_int16_t = 51038 as libc::c_int as u_int16_t;
 pub static mut DEFAULT_CLIENT_PORT: u_int16_t = 51038 as libc::c_int as u_int16_t;
 pub static mut DEFAULT_UDP_BUFFER: u_int32_t = 20000000 as libc::c_int as u_int32_t;

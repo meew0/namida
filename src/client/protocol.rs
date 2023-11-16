@@ -14,18 +14,11 @@ extern "C" {
     pub type _IO_codecvt;
     pub type _IO_marker;
     fn realloc(_: *mut libc::c_void, _: libc::c_ulong) -> *mut libc::c_void;
-    fn memset(
-        _: *mut libc::c_void,
-        _: libc::c_int,
-        _: libc::c_ulong,
-    ) -> *mut libc::c_void;
+    fn memset(_: *mut libc::c_void, _: libc::c_int, _: libc::c_ulong) -> *mut libc::c_void;
     fn strlen(_: *const libc::c_char) -> libc::c_ulong;
     fn rindex(_: *const libc::c_char, _: libc::c_int) -> *mut libc::c_char;
-    fn getsockname(
-        __fd: libc::c_int,
-        __addr: __SOCKADDR_ARG,
-        __len: *mut socklen_t,
-    ) -> libc::c_int;
+    fn getsockname(__fd: libc::c_int, __addr: __SOCKADDR_ARG, __len: *mut socklen_t)
+        -> libc::c_int;
     fn gettimeofday(__tv: *mut timeval, __tz: *mut libc::c_void) -> libc::c_int;
     fn time(__timer: *mut time_t) -> time_t;
     fn ctime(__timer: *const time_t) -> *mut libc::c_char;
@@ -418,8 +411,7 @@ pub unsafe extern "C" fn ttp_authenticate_client(
         return error_handler(
             b"protocol.c\0" as *const u8 as *const libc::c_char,
             114 as libc::c_int,
-            b"Could not send authentication response\0" as *const u8
-                as *const libc::c_char,
+            b"Could not send authentication response\0" as *const u8 as *const libc::c_char,
             0 as libc::c_int,
         );
     }
@@ -433,8 +425,7 @@ pub unsafe extern "C" fn ttp_authenticate_client(
         return error_handler(
             b"protocol.c\0" as *const u8 as *const libc::c_char,
             119 as libc::c_int,
-            b"Could not read authentication status\0" as *const u8
-                as *const libc::c_char,
+            b"Could not read authentication status\0" as *const u8 as *const libc::c_char,
             0 as libc::c_int,
         );
     }
@@ -459,8 +450,7 @@ pub unsafe extern "C" fn ttp_negotiate_client(mut session: *mut ttp_session_t) -
         return error_handler(
             b"protocol.c\0" as *const u8 as *const libc::c_char,
             145 as libc::c_int,
-            b"Could not send protocol revision number\0" as *const u8
-                as *const libc::c_char,
+            b"Could not send protocol revision number\0" as *const u8 as *const libc::c_char,
             0 as libc::c_int,
         );
     }
@@ -474,8 +464,7 @@ pub unsafe extern "C" fn ttp_negotiate_client(mut session: *mut ttp_session_t) -
         return error_handler(
             b"protocol.c\0" as *const u8 as *const libc::c_char,
             150 as libc::c_int,
-            b"Could not read protocol revision number\0" as *const u8
-                as *const libc::c_char,
+            b"Could not read protocol revision number\0" as *const u8 as *const libc::c_char,
             0 as libc::c_int,
         );
     }
@@ -520,8 +509,7 @@ pub unsafe extern "C" fn ttp_open_transfer_client(
         return error_handler(
             b"protocol.c\0" as *const u8 as *const libc::c_char,
             185 as libc::c_int,
-            b"Could not read response to file request\0" as *const u8
-                as *const libc::c_char,
+            b"Could not read response to file request\0" as *const u8 as *const libc::c_char,
             0 as libc::c_int,
         );
     }
@@ -613,8 +601,7 @@ pub unsafe extern "C" fn ttp_open_transfer_client(
         return error_handler(
             b"protocol.c\0" as *const u8 as *const libc::c_char,
             200 as libc::c_int,
-            b"Could not submit slowdown denominator\0" as *const u8
-                as *const libc::c_char,
+            b"Could not submit slowdown denominator\0" as *const u8 as *const libc::c_char,
             0 as libc::c_int,
         );
     }
@@ -644,8 +631,7 @@ pub unsafe extern "C" fn ttp_open_transfer_client(
         return error_handler(
             b"protocol.c\0" as *const u8 as *const libc::c_char,
             202 as libc::c_int,
-            b"Could not submit speedup denominator\0" as *const u8
-                as *const libc::c_char,
+            b"Could not submit speedup denominator\0" as *const u8 as *const libc::c_char,
             0 as libc::c_int,
         );
     }
@@ -734,13 +720,11 @@ pub unsafe extern "C" fn ttp_open_transfer_client(
     (*xfer).blocks_left = (*xfer).block_count;
     if access((*xfer).local_filename, 0 as libc::c_int) == 0 {
         printf(
-            b"Warning: overwriting existing file '%s'\n\0" as *const u8
-                as *const libc::c_char,
+            b"Warning: overwriting existing file '%s'\n\0" as *const u8 as *const libc::c_char,
             local_filename,
         );
     }
-    (*xfer)
-        .file = fopen(
+    (*xfer).file = fopen(
         (*xfer).local_filename,
         b"wb\0" as *const u8 as *const libc::c_char,
     );
@@ -760,8 +744,7 @@ pub unsafe extern "C" fn ttp_open_transfer_client(
                     (*xfer).local_filename,
                 );
             }
-            (*xfer)
-                .file = fopen(
+            (*xfer).file = fopen(
                 (*xfer).local_filename,
                 b"wb\0" as *const u8 as *const libc::c_char,
             );
@@ -770,18 +753,15 @@ pub unsafe extern "C" fn ttp_open_transfer_client(
             return error_handler(
                 b"protocol.c\0" as *const u8 as *const libc::c_char,
                 234 as libc::c_int,
-                b"Could not open local file for writing\0" as *const u8
-                    as *const libc::c_char,
+                b"Could not open local file for writing\0" as *const u8 as *const libc::c_char,
                 0 as libc::c_int,
             );
         }
     }
-    (*xfer)
-        .on_wire_estimate = (0.5f64 * (*param).target_rate as libc::c_double
+    (*xfer).on_wire_estimate = (0.5f64 * (*param).target_rate as libc::c_double
         / (8 as libc::c_int as u_int32_t * (*param).block_size) as libc::c_double)
         as u_int32_t;
-    (*xfer)
-        .on_wire_estimate = if (*xfer).block_count < (*xfer).on_wire_estimate {
+    (*xfer).on_wire_estimate = if (*xfer).block_count < (*xfer).on_wire_estimate {
         (*xfer).block_count
     } else {
         (*xfer).on_wire_estimate
@@ -797,8 +777,8 @@ pub unsafe extern "C" fn ttp_open_port_client(mut session: *mut ttp_session_t) -
         sa_family: 0,
         sa_data: [0; 14],
     };
-    let mut udp_length: libc::c_uint = ::core::mem::size_of::<sockaddr>()
-        as libc::c_ulong as libc::c_uint;
+    let mut udp_length: libc::c_uint =
+        ::core::mem::size_of::<sockaddr>() as libc::c_ulong as libc::c_uint;
     let mut status: libc::c_int = 0;
     let mut port: *mut u_int16_t = 0 as *mut u_int16_t;
     (*session).transfer.udp_fd = create_udp_socket_client((*session).parameter);
@@ -845,9 +825,7 @@ pub unsafe extern "C" fn ttp_open_port_client(mut session: *mut ttp_session_t) -
     return 0 as libc::c_int;
 }
 #[no_mangle]
-pub unsafe extern "C" fn ttp_repeat_retransmit(
-    mut session: *mut ttp_session_t,
-) -> libc::c_int {
+pub unsafe extern "C" fn ttp_repeat_retransmit(mut session: *mut ttp_session_t) -> libc::c_int {
     let mut retransmission: [retransmission_t; 2048] = [retransmission_t {
         request_type: 0,
         block: 0,
@@ -887,13 +865,13 @@ pub unsafe extern "C" fn ttp_repeat_retransmit(
         } else {
             ((*xfer).gapless_to_block).wrapping_add(1 as libc::c_int as u_int32_t)
         }) as libc::c_int;
-        retransmission[0 as libc::c_int as usize]
-            .request_type = __bswap_16(REQUEST_RESTART);
-        retransmission[0 as libc::c_int as usize]
-            .block = __bswap_32(block as __uint32_t);
+        retransmission[0 as libc::c_int as usize].request_type = __bswap_16(REQUEST_RESTART);
+        retransmission[0 as libc::c_int as usize].block = __bswap_32(block as __uint32_t);
         status = fwrite(
-            &mut *retransmission.as_mut_ptr().offset(0 as libc::c_int as isize)
-                as *mut retransmission_t as *const libc::c_void,
+            &mut *retransmission
+                .as_mut_ptr()
+                .offset(0 as libc::c_int as isize) as *mut retransmission_t
+                as *const libc::c_void,
             ::core::mem::size_of::<retransmission_t>() as libc::c_ulong,
             1 as libc::c_int as libc::c_ulong,
             (*session).server,
@@ -902,20 +880,14 @@ pub unsafe extern "C" fn ttp_repeat_retransmit(
             return error_handler(
                 b"protocol.c\0" as *const u8 as *const libc::c_char,
                 363 as libc::c_int,
-                b"Could not send restart-at request\0" as *const u8
-                    as *const libc::c_char,
+                b"Could not send restart-at request\0" as *const u8 as *const libc::c_char,
                 0 as libc::c_int,
             );
         }
         (*xfer).restart_pending = 1 as libc::c_int as u_char;
-        (*xfer)
-            .restart_lastidx = *((*rexmit).table)
-            .offset(
-                ((*rexmit).index_max).wrapping_sub(1 as libc::c_int as u_int32_t)
-                    as isize,
-            );
-        (*xfer)
-            .restart_wireclearidx = if (*xfer).block_count
+        (*xfer).restart_lastidx = *((*rexmit).table)
+            .offset(((*rexmit).index_max).wrapping_sub(1 as libc::c_int as u_int32_t) as isize);
+        (*xfer).restart_wireclearidx = if (*xfer).block_count
             < ((*xfer).restart_lastidx).wrapping_add((*xfer).on_wire_estimate)
         {
             (*xfer).block_count
@@ -928,10 +900,8 @@ pub unsafe extern "C" fn ttp_repeat_retransmit(
     } else {
         (*rexmit).index_max = count as u_int32_t;
         (*xfer).stats.this_retransmits = count as u_int32_t;
-        (*xfer)
-            .stats
-            .total_retransmits = ((*xfer).stats.total_retransmits)
-            .wrapping_add(count as u_int32_t);
+        (*xfer).stats.total_retransmits =
+            ((*xfer).stats.total_retransmits).wrapping_add(count as u_int32_t);
         if count > 0 as libc::c_int {
             status = fwrite(
                 retransmission.as_mut_ptr() as *const libc::c_void,
@@ -943,8 +913,7 @@ pub unsafe extern "C" fn ttp_repeat_retransmit(
                 return error_handler(
                     b"protocol.c\0" as *const u8 as *const libc::c_char,
                     396 as libc::c_int,
-                    b"Could not send retransmit requests\0" as *const u8
-                        as *const libc::c_char,
+                    b"Could not send retransmit requests\0" as *const u8 as *const libc::c_char,
                     0 as libc::c_int,
                 );
             }
@@ -971,8 +940,7 @@ pub unsafe extern "C" fn ttp_request_retransmit(
         return 0 as libc::c_int;
     }
     if (*rexmit).index_max >= (*rexmit).table_size {
-        if (*rexmit).index_max >= (32 as libc::c_int * 2048 as libc::c_int) as u_int32_t
-        {
+        if (*rexmit).index_max >= (32 as libc::c_int * 2048 as libc::c_int) as u_int32_t {
             return 0 as libc::c_int;
         }
         ptr = realloc(
@@ -985,8 +953,7 @@ pub unsafe extern "C" fn ttp_request_retransmit(
             return error_handler(
                 b"protocol.c\0" as *const u8 as *const libc::c_char,
                 446 as libc::c_int,
-                b"Could not grow retransmission table\0" as *const u8
-                    as *const libc::c_char,
+                b"Could not grow retransmission table\0" as *const u8 as *const libc::c_char,
                 0 as libc::c_int,
             );
         }
@@ -1005,9 +972,7 @@ pub unsafe extern "C" fn ttp_request_retransmit(
     return 0 as libc::c_int;
 }
 #[no_mangle]
-pub unsafe extern "C" fn ttp_request_stop(
-    mut session: *mut ttp_session_t,
-) -> libc::c_int {
+pub unsafe extern "C" fn ttp_request_stop(mut session: *mut ttp_session_t) -> libc::c_int {
     let mut retransmission: retransmission_t = {
         let mut init = retransmission_t {
             request_type: 0 as libc::c_int as u_int16_t,
@@ -1028,17 +993,14 @@ pub unsafe extern "C" fn ttp_request_stop(
         return error_handler(
             b"protocol.c\0" as *const u8 as *const libc::c_char,
             522 as libc::c_int,
-            b"Could not request end of transmission\0" as *const u8
-                as *const libc::c_char,
+            b"Could not request end of transmission\0" as *const u8 as *const libc::c_char,
             0 as libc::c_int,
         );
     }
     return 0 as libc::c_int;
 }
 #[no_mangle]
-pub unsafe extern "C" fn ttp_update_stats(
-    mut session: *mut ttp_session_t,
-) -> libc::c_int {
+pub unsafe extern "C" fn ttp_update_stats(mut session: *mut ttp_session_t) -> libc::c_int {
     let mut now_epoch: time_t = time(0 as *mut time_t);
     let mut delta: u_int64_t = 0;
     let mut d_seconds: libc::c_double = 0.;
@@ -1069,15 +1031,14 @@ pub unsafe extern "C" fn ttp_update_stats(
     static mut stats_flags: [libc::c_char; 8] = [0; 8];
     let mut ff: libc::c_double = 0.;
     let mut fb: libc::c_double = 0.;
-    let u_mega: libc::c_double = (1024 as libc::c_int * 1024 as libc::c_int)
-        as libc::c_double;
-    let u_giga: libc::c_double = (1024 as libc::c_int * 1024 as libc::c_int
-        * 1024 as libc::c_int) as libc::c_double;
+    let u_mega: libc::c_double = (1024 as libc::c_int * 1024 as libc::c_int) as libc::c_double;
+    let u_giga: libc::c_double =
+        (1024 as libc::c_int * 1024 as libc::c_int * 1024 as libc::c_int) as libc::c_double;
     delta = get_usec_since(&mut (*stats).this_time);
     temp = get_usec_since(&mut (*stats).start_time);
     delta_total = temp;
-    milliseconds = (temp % 1000000 as libc::c_int as u_int64_t
-        / 1000 as libc::c_int as u_int64_t) as libc::c_int;
+    milliseconds = (temp % 1000000 as libc::c_int as u_int64_t / 1000 as libc::c_int as u_int64_t)
+        as libc::c_int;
     temp = temp / 1000000 as libc::c_int as u_int64_t;
     seconds = (temp % 60 as libc::c_int as u_int64_t) as libc::c_int;
     temp = temp / 60 as libc::c_int as u_int64_t;
@@ -1096,11 +1057,12 @@ pub unsafe extern "C" fn ttp_update_stats(
         * (*stats).this_flow_originals as libc::c_double;
     (*stats).this_udp_errors = get_udp_in_errors();
     retransmits_fraction = (*stats).this_retransmits as libc::c_double
-        / (1.0f64 + (*stats).this_retransmits as libc::c_double
+        / (1.0f64
+            + (*stats).this_retransmits as libc::c_double
             + (*stats).total_blocks as libc::c_double
             - (*stats).this_blocks as libc::c_double);
-    ringfill_fraction = ((*(*session).transfer.ring_buffer).count_data
-        / 4096 as libc::c_int) as libc::c_double;
+    ringfill_fraction =
+        ((*(*session).transfer.ring_buffer).count_data / 4096 as libc::c_int) as libc::c_double;
     total_retransmits_fraction = ((*stats).total_retransmits
         / ((*stats).total_retransmits).wrapping_add((*stats).total_blocks))
         as libc::c_double;
@@ -1109,10 +1071,8 @@ pub unsafe extern "C" fn ttp_update_stats(
     data_total_rate = 8.0f64 * data_total / (d_seconds_total * u_mega);
     fb = (*(*session).parameter).history as libc::c_int as libc::c_double / 100.0f64;
     ff = 1.0f64 - fb;
-    (*stats)
-        .transmit_rate = fb * (*stats).transmit_rate + ff * (*stats).this_transmit_rate;
-    (*stats)
-        .error_rate = fb * (*stats).error_rate
+    (*stats).transmit_rate = fb * (*stats).transmit_rate + ff * (*stats).this_transmit_rate;
+    (*stats).error_rate = fb * (*stats).error_rate
         + ff * 500 as libc::c_int as libc::c_double
             * 100 as libc::c_int as libc::c_double
             * (retransmits_fraction + ringfill_fraction);
@@ -1122,10 +1082,8 @@ pub unsafe extern "C" fn ttp_update_stats(
         ::core::mem::size_of::<retransmission_t>() as libc::c_ulong,
     );
     retransmission.request_type = __bswap_16(REQUEST_ERROR_RATE);
-    retransmission
-        .error_rate = __bswap_32(
-        (*session).transfer.stats.error_rate as u_int64_t as __uint32_t,
-    );
+    retransmission.error_rate =
+        __bswap_32((*session).transfer.stats.error_rate as u_int64_t as __uint32_t);
     status = fwrite(
         &mut retransmission as *mut retransmission_t as *const libc::c_void,
         ::core::mem::size_of::<retransmission_t>() as libc::c_ulong,
@@ -1136,8 +1094,7 @@ pub unsafe extern "C" fn ttp_update_stats(
         return error_handler(
             b"protocol.c\0" as *const u8 as *const libc::c_char,
             619 as libc::c_int,
-            b"Could not send error rate information\0" as *const u8
-                as *const libc::c_char,
+            b"Could not send error rate information\0" as *const u8 as *const libc::c_char,
             0 as libc::c_int,
         );
     }
@@ -1186,8 +1143,7 @@ pub unsafe extern "C" fn ttp_update_stats(
                 ctime(&mut now_epoch),
             );
             printf(
-                b"Elapsed time:   %02d:%02d:%02d.%03d\n\n\0" as *const u8
-                    as *const libc::c_char,
+                b"Elapsed time:   %02d:%02d:%02d.%03d\n\n\0" as *const u8 as *const libc::c_char,
                 hours,
                 minutes,
                 seconds,
@@ -1210,14 +1166,13 @@ pub unsafe extern "C" fn ttp_update_stats(
                 (*stats).this_transmit_rate,
             );
             printf(
-                b"Retransmissions:  %u (%0.2f%%)\n\n\0" as *const u8
-                    as *const libc::c_char,
+                b"Retransmissions:  %u (%0.2f%%)\n\n\0" as *const u8 as *const libc::c_char,
                 (*stats).this_retransmits,
                 100.0f64 * retransmits_fraction,
             );
             printf(
-                b"Cumulative\n--------------------------------------------------\n\0"
-                    as *const u8 as *const libc::c_char,
+                b"Cumulative\n--------------------------------------------------\n\0" as *const u8
+                    as *const libc::c_char,
             );
             printf(
                 b"Blocks count:     %u\n\0" as *const u8 as *const libc::c_char,
@@ -1232,8 +1187,7 @@ pub unsafe extern "C" fn ttp_update_stats(
                 data_total_rate,
             );
             printf(
-                b"Retransmissions:  %u (%0.2f%%)\n\0" as *const u8
-                    as *const libc::c_char,
+                b"Retransmissions:  %u (%0.2f%%)\n\0" as *const u8 as *const libc::c_char,
                 (*stats).total_retransmits,
                 100.0f64 * total_retransmits_fraction,
             );
@@ -1243,8 +1197,7 @@ pub unsafe extern "C" fn ttp_update_stats(
             );
             printf(
                 b"OS UDP rx errors: %llu\n\0" as *const u8 as *const libc::c_char,
-                ((*stats).this_udp_errors).wrapping_sub((*stats).start_udp_errors)
-                    as ull_t,
+                ((*stats).this_udp_errors).wrapping_sub((*stats).start_udp_errors) as ull_t,
             );
         } else {
             let fresh1 = iteration;
@@ -1259,7 +1212,10 @@ pub unsafe extern "C" fn ttp_update_stats(
                         as *const u8 as *const libc::c_char,
                 );
             }
-            printf(b"%s\0" as *const u8 as *const libc::c_char, stats_line.as_mut_ptr());
+            printf(
+                b"%s\0" as *const u8 as *const libc::c_char,
+                stats_line.as_mut_ptr(),
+            );
         }
         fflush(stdout);
     }
