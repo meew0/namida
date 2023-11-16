@@ -11,7 +11,6 @@
 
 
 extern crate libc;
-pub mod src {
 pub mod client {
 pub mod command;
 pub mod config;
@@ -41,4 +40,7 @@ pub mod fusereadtest;
 pub mod readtest;
 pub mod writetest;
 } // mod util
-} // mod src
+
+pub fn main() {
+    client::main::main();
+}

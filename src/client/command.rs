@@ -121,7 +121,6 @@ extern "C" {
         message: *const libc::c_char,
         fatal_yn: libc::c_int,
     ) -> libc::c_int;
-    static DEFAULT_TABLE_SIZE: libc::c_int;
     fn ttp_request_retransmit(
         session: *mut ttp_session_t,
         block: u_int32_t,
@@ -928,7 +927,7 @@ pub unsafe extern "C" fn command_get(
         }
         (*rexmit)
             .table = calloc(
-            DEFAULT_TABLE_SIZE as libc::c_ulong,
+            super::config::DEFAULT_TABLE_SIZE as libc::c_ulong,
             ::core::mem::size_of::<u_int32_t>() as libc::c_ulong,
         ) as *mut u_int32_t;
         if ((*rexmit).table).is_null() {
@@ -987,7 +986,7 @@ pub unsafe extern "C" fn command_get(
                 1 as libc::c_int,
             );
         }
-        (*rexmit).table_size = DEFAULT_TABLE_SIZE as u_int32_t;
+        (*rexmit).table_size = super::config::DEFAULT_TABLE_SIZE as u_int32_t;
         (*rexmit).index_max = 0 as libc::c_int as u_int32_t;
         (*xfer).next_block = 1 as libc::c_int as u_int32_t;
         (*xfer).gapless_to_block = 0 as libc::c_int as u_int32_t;

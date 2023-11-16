@@ -30,7 +30,6 @@ extern "C" {
         message: *const libc::c_char,
         fatal_yn: libc::c_int,
     ) -> libc::c_int;
-    static MAX_COMMAND_LENGTH: libc::c_int;
     fn command_close(
         command: *mut command_t,
         session: *mut ttp_session_t,
@@ -297,7 +296,7 @@ unsafe fn main_0(
         count: 0,
         text: [0 as *const libc::c_char; 10],
     };
-    let vla = MAX_COMMAND_LENGTH as usize;
+    let vla = super::config::MAX_COMMAND_LENGTH as usize;
     let mut command_text: Vec::<libc::c_char> = ::std::vec::from_elem(0, vla);
     let mut session: *mut ttp_session_t = 0 as *mut ttp_session_t;
     let mut parameter: ttp_parameter_t = ttp_parameter_t {
@@ -347,7 +346,7 @@ unsafe fn main_0(
         if argc <= 1 as libc::c_int || argc_curr >= argc {
             fprintf(stdout, b"tsunami> \0" as *const u8 as *const libc::c_char);
             fflush(stdout);
-            if (fgets(command_text.as_mut_ptr(), MAX_COMMAND_LENGTH, stdin)).is_null() {
+            if (fgets(command_text.as_mut_ptr(), super::config::MAX_COMMAND_LENGTH, stdin)).is_null() {
                 error_handler(
                     b"main.c\0" as *const u8 as *const libc::c_char,
                     121 as libc::c_int,
