@@ -401,7 +401,7 @@ unsafe extern "C" fn __bswap_16(mut __bsx: __uint16_t) -> __uint16_t {
         as __uint16_t;
 }
 #[no_mangle]
-pub unsafe extern "C" fn create_tcp_socket(
+pub unsafe extern "C" fn create_tcp_socket_client(
     mut session: *mut ttp_session_t,
     mut server_name: *const libc::c_char,
     mut server_port: u_int16_t,
@@ -543,7 +543,7 @@ pub unsafe extern "C" fn create_tcp_socket(
     return socket_fd;
 }
 #[no_mangle]
-pub unsafe extern "C" fn create_udp_socket(
+pub unsafe extern "C" fn create_udp_socket_client(
     mut parameter: *mut ttp_parameter_t,
 ) -> libc::c_int {
     let mut hints: addrinfo = addrinfo {

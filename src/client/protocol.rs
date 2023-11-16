@@ -49,7 +49,7 @@ extern "C" {
         _: libc::c_ulong,
         _: *mut FILE,
     ) -> libc::c_ulong;
-    fn xscript_data_log(session: *mut ttp_session_t, logline: *const libc::c_char);
+    fn xscript_data_log_client(session: *mut ttp_session_t, logline: *const libc::c_char);
     static PROTOCOL_REVISION: u_int32_t;
     static REQUEST_RETRANSMIT: u_int16_t;
     static REQUEST_RESTART: u_int16_t;
@@ -71,8 +71,8 @@ extern "C" {
         fatal_yn: libc::c_int,
     ) -> libc::c_int;
     fn got_block(session: *mut ttp_session_t, blocknr: u_int32_t) -> libc::c_int;
-    fn create_udp_socket(parameter: *mut ttp_parameter_t) -> libc::c_int;
-    fn xscript_open(session: *mut ttp_session_t);
+    fn create_udp_socket_client(parameter: *mut ttp_parameter_t) -> libc::c_int;
+    fn xscript_open_client(session: *mut ttp_session_t);
 }
 pub type size_t = libc::c_ulong;
 pub type __u_char = libc::c_uchar;
@@ -374,7 +374,7 @@ unsafe extern "C" fn __bswap_32(mut __bsx: __uint32_t) -> __uint32_t {
         | (__bsx & 0xff as libc::c_uint) << 24 as libc::c_int;
 }
 #[no_mangle]
-pub unsafe extern "C" fn ttp_authenticate(
+pub unsafe extern "C" fn ttp_authenticate_client(
     mut session: *mut ttp_session_t,
     mut secret: *mut u_char,
 ) -> libc::c_int {
@@ -445,7 +445,7 @@ pub unsafe extern "C" fn ttp_authenticate(
     };
 }
 #[no_mangle]
-pub unsafe extern "C" fn ttp_negotiate(mut session: *mut ttp_session_t) -> libc::c_int {
+pub unsafe extern "C" fn ttp_negotiate_client(mut session: *mut ttp_session_t) -> libc::c_int {
     let mut server_revision: u_int32_t = 0;
     let mut client_revision: u_int32_t = __bswap_32(PROTOCOL_REVISION);
     let mut status: libc::c_int = 0;
@@ -486,7 +486,7 @@ pub unsafe extern "C" fn ttp_negotiate(mut session: *mut ttp_session_t) -> libc:
     };
 }
 #[no_mangle]
-pub unsafe extern "C" fn ttp_open_transfer(
+pub unsafe extern "C" fn ttp_open_transfer_client(
     mut session: *mut ttp_session_t,
     mut remote_filename: *const libc::c_char,
     mut local_filename: *const libc::c_char,
@@ -787,12 +787,12 @@ pub unsafe extern "C" fn ttp_open_transfer(
         (*xfer).on_wire_estimate
     };
     if (*param).transcript_yn != 0 {
-        xscript_open(session);
+        xscript_open_client(session);
     }
     return 0 as libc::c_int;
 }
 #[no_mangle]
-pub unsafe extern "C" fn ttp_open_port(mut session: *mut ttp_session_t) -> libc::c_int {
+pub unsafe extern "C" fn ttp_open_port_client(mut session: *mut ttp_session_t) -> libc::c_int {
     let mut udp_address: sockaddr = sockaddr {
         sa_family: 0,
         sa_data: [0; 14],
@@ -801,7 +801,7 @@ pub unsafe extern "C" fn ttp_open_port(mut session: *mut ttp_session_t) -> libc:
         as libc::c_ulong as libc::c_uint;
     let mut status: libc::c_int = 0;
     let mut port: *mut u_int16_t = 0 as *mut u_int16_t;
-    (*session).transfer.udp_fd = create_udp_socket((*session).parameter);
+    (*session).transfer.udp_fd = create_udp_socket_client((*session).parameter);
     if (*session).transfer.udp_fd < 0 as libc::c_int {
         return error_handler(
             b"protocol.c\0" as *const u8 as *const libc::c_char,
@@ -1264,7 +1264,7 @@ pub unsafe extern "C" fn ttp_update_stats(
         fflush(stdout);
     }
     if (*(*session).parameter).transcript_yn != 0 {
-        xscript_data_log(session, stats_line.as_mut_ptr());
+        xscript_data_log_client(session, stats_line.as_mut_ptr());
     }
     (*stats).this_blocks = (*stats).total_blocks;
     (*stats).this_retransmits = 0 as libc::c_int as u_int32_t;

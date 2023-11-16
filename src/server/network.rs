@@ -184,7 +184,7 @@ pub struct ttp_parameter_t {
     pub wait_u_sec: libc::c_long,
 }
 #[no_mangle]
-pub unsafe extern "C" fn create_tcp_socket(
+pub unsafe extern "C" fn create_tcp_socket_server(
     mut parameter: *mut ttp_parameter_t,
 ) -> libc::c_int {
     let mut hints: addrinfo = addrinfo {
@@ -287,7 +287,7 @@ pub unsafe extern "C" fn create_tcp_socket(
     return socket_fd;
 }
 #[no_mangle]
-pub unsafe extern "C" fn create_udp_socket(
+pub unsafe extern "C" fn create_udp_socket_server(
     mut parameter: *mut ttp_parameter_t,
 ) -> libc::c_int {
     let mut socket_fd: libc::c_int = 0;

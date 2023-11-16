@@ -91,23 +91,23 @@ extern "C" {
         block_type: u_int16_t,
         datagram: *mut u_char,
     ) -> libc::c_int;
-    fn create_tcp_socket(parameter: *mut ttp_parameter_t) -> libc::c_int;
+    fn create_tcp_socket_server(parameter: *mut ttp_parameter_t) -> libc::c_int;
     fn ttp_accept_retransmit(
         session: *mut ttp_session_t,
         retransmission: *mut retransmission_t,
         datagram: *mut u_char,
     ) -> libc::c_int;
-    fn ttp_authenticate(
+    fn ttp_authenticate_server(
         session: *mut ttp_session_t,
         secret: *const u_char,
     ) -> libc::c_int;
-    fn ttp_negotiate(session: *mut ttp_session_t) -> libc::c_int;
-    fn ttp_open_port(session: *mut ttp_session_t) -> libc::c_int;
-    fn ttp_open_transfer(session: *mut ttp_session_t) -> libc::c_int;
-    fn xscript_close(session: *mut ttp_session_t, delta: u_int64_t);
-    fn xscript_data_log(session: *mut ttp_session_t, logline: *const libc::c_char);
-    fn xscript_data_start(session: *mut ttp_session_t, epoch: *const timeval);
-    fn xscript_data_stop(session: *mut ttp_session_t, epoch: *const timeval);
+    fn ttp_negotiate_server(session: *mut ttp_session_t) -> libc::c_int;
+    fn ttp_open_port_server(session: *mut ttp_session_t) -> libc::c_int;
+    fn ttp_open_transfer_server(session: *mut ttp_session_t) -> libc::c_int;
+    fn xscript_close_server(session: *mut ttp_session_t, delta: u_int64_t);
+    fn xscript_data_log_server(session: *mut ttp_session_t, logline: *const libc::c_char);
+    fn xscript_data_start_server(session: *mut ttp_session_t, epoch: *const timeval);
+    fn xscript_data_stop_server(session: *mut ttp_session_t, epoch: *const timeval);
     fn usleep_that_works(usec: u_int64_t);
     fn error_handler(
         file: *const libc::c_char,
@@ -461,7 +461,7 @@ unsafe fn main_0(
     );
     reset_server(&mut parameter);
     process_options(argc, argv, &mut parameter);
-    server_fd = create_tcp_socket(&mut parameter);
+    server_fd = create_tcp_socket_server(&mut parameter);
     if server_fd < 0 as libc::c_int {
         sprintf(
             g_error.as_mut_ptr(),
@@ -565,7 +565,7 @@ pub unsafe extern "C" fn client_handler(mut session: *mut ttp_session_t) {
     let mut param: *mut ttp_parameter_t = (*session).parameter;
     let mut delta: u_int64_t = 0;
     let mut block_type: u_char = 0;
-    status = ttp_negotiate(session);
+    status = ttp_negotiate_server(session);
     if status < 0 as libc::c_int {
         error_handler(
             b"main.c\0" as *const u8 as *const libc::c_char,
@@ -574,7 +574,7 @@ pub unsafe extern "C" fn client_handler(mut session: *mut ttp_session_t) {
             1 as libc::c_int,
         );
     }
-    status = ttp_authenticate(session, (*(*session).parameter).secret);
+    status = ttp_authenticate_server(session, (*(*session).parameter).secret);
     if status < 0 as libc::c_int {
         error_handler(
             b"main.c\0" as *const u8 as *const libc::c_char,
@@ -616,7 +616,7 @@ pub unsafe extern "C" fn client_handler(mut session: *mut ttp_session_t) {
                 1 as libc::c_int,
             );
         }
-        status = ttp_open_transfer(session);
+        status = ttp_open_transfer_server(session);
         if status < 0 as libc::c_int {
             error_handler(
                 b"main.c\0" as *const u8 as *const libc::c_char,
@@ -625,7 +625,7 @@ pub unsafe extern "C" fn client_handler(mut session: *mut ttp_session_t) {
                 0 as libc::c_int,
             );
         } else {
-            status = ttp_open_port(session);
+            status = ttp_open_port_server(session);
             if status < 0 as libc::c_int {
                 error_handler(
                     b"main.c\0" as *const u8 as *const libc::c_char,
@@ -650,7 +650,7 @@ pub unsafe extern "C" fn client_handler(mut session: *mut ttp_session_t) {
                 }
                 gettimeofday(&mut start, 0 as *mut libc::c_void);
                 if (*param).transcript_yn != 0 {
-                    xscript_data_start(session, &mut start);
+                    xscript_data_start_server(session, &mut start);
                 }
                 lasthblostreport = start;
                 lastfeedback = start;
@@ -877,7 +877,7 @@ pub unsafe extern "C" fn client_handler(mut session: *mut ttp_session_t) {
                             1e-6f64 * delta as libc::c_double,
                         );
                         if (*param).transcript_yn != 0 {
-                            xscript_data_log(session, stats_line.as_mut_ptr());
+                            xscript_data_log_server(session, stats_line.as_mut_ptr());
                         }
                         fprintf(
                             stderr,
@@ -907,7 +907,7 @@ pub unsafe extern "C" fn client_handler(mut session: *mut ttp_session_t) {
                 }
                 gettimeofday(&mut stop, 0 as *mut libc::c_void);
                 if (*param).transcript_yn != 0 {
-                    xscript_data_stop(session, &mut stop);
+                    xscript_data_stop_server(session, &mut stop);
                 }
                 delta = (1000000 as libc::c_longlong
                     * (stop.tv_sec - start.tv_sec) as libc::c_longlong
@@ -928,7 +928,7 @@ pub unsafe extern "C" fn client_handler(mut session: *mut ttp_session_t) {
                     );
                 }
                 if (*param).transcript_yn != 0 {
-                    xscript_close(session, delta);
+                    xscript_close_server(session, delta);
                 }
                 fclose((*xfer).file);
                 close((*xfer).udp_fd);

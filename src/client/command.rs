@@ -91,12 +91,12 @@ extern "C" {
         _: libc::c_ulong,
         _: *mut FILE,
     ) -> libc::c_ulong;
-    fn ttp_open_transfer(
+    fn ttp_open_transfer_client(
         session: *mut ttp_session_t,
         remote_filename: *const libc::c_char,
         local_filename: *const libc::c_char,
     ) -> libc::c_int;
-    fn ttp_open_port(session: *mut ttp_session_t) -> libc::c_int;
+    fn ttp_open_port_client(session: *mut ttp_session_t) -> libc::c_int;
     fn ring_create(session: *mut ttp_session_t) -> *mut ring_buffer_t;
     fn ring_peek(ring: *mut ring_buffer_t) -> *mut u_char;
     fn accept_block(
@@ -105,7 +105,7 @@ extern "C" {
         block: *mut u_char,
     ) -> libc::c_int;
     fn ring_pop(ring: *mut ring_buffer_t) -> libc::c_int;
-    fn xscript_data_start(session: *mut ttp_session_t, epoch: *const timeval);
+    fn xscript_data_start_client(session: *mut ttp_session_t, epoch: *const timeval);
     fn ring_full(ring: *mut ring_buffer_t) -> libc::c_int;
     static mut g_error: [libc::c_char; 0];
     fn get_usec_since(old_time: *mut timeval) -> u_int64_t;
@@ -126,9 +126,9 @@ extern "C" {
         session: *mut ttp_session_t,
         block: u_int32_t,
     ) -> libc::c_int;
-    fn ttp_authenticate(session: *mut ttp_session_t, secret: *mut u_char) -> libc::c_int;
-    fn ttp_negotiate(session: *mut ttp_session_t) -> libc::c_int;
-    fn create_tcp_socket(
+    fn ttp_authenticate_client(session: *mut ttp_session_t, secret: *mut u_char) -> libc::c_int;
+    fn ttp_negotiate_client(session: *mut ttp_session_t) -> libc::c_int;
+    fn create_tcp_socket_client(
         session: *mut ttp_session_t,
         server_name: *const libc::c_char,
         server_port: u_int16_t,
@@ -136,8 +136,8 @@ extern "C" {
     fn ttp_repeat_retransmit(session: *mut ttp_session_t) -> libc::c_int;
     fn ring_destroy(ring: *mut ring_buffer_t) -> libc::c_int;
     fn ttp_update_stats(session: *mut ttp_session_t) -> libc::c_int;
-    fn xscript_close(session: *mut ttp_session_t, delta: u_int64_t);
-    fn xscript_data_stop(session: *mut ttp_session_t, epoch: *const timeval);
+    fn xscript_close_client(session: *mut ttp_session_t, delta: u_int64_t);
+    fn xscript_data_stop_client(session: *mut ttp_session_t, epoch: *const timeval);
     fn ttp_request_stop(session: *mut ttp_session_t) -> libc::c_int;
     fn ring_confirm(ring: *mut ring_buffer_t) -> libc::c_int;
     fn ring_reserve(ring: *mut ring_buffer_t) -> *mut u_char;
@@ -538,7 +538,7 @@ pub unsafe extern "C" fn command_connect(
         );
     }
     (*session).parameter = parameter;
-    server_fd = create_tcp_socket(
+    server_fd = create_tcp_socket_client(
         session,
         (*parameter).server_name,
         (*parameter).server_port,
@@ -571,7 +571,7 @@ pub unsafe extern "C" fn command_connect(
         free(session as *mut libc::c_void);
         return 0 as *mut ttp_session_t;
     }
-    if ttp_negotiate(session) < 0 as libc::c_int {
+    if ttp_negotiate_client(session) < 0 as libc::c_int {
         error_handler(
             b"command.c\0" as *const u8 as *const libc::c_char,
             166 as libc::c_int,
@@ -587,7 +587,7 @@ pub unsafe extern "C" fn command_connect(
     } else {
         secret = strdup((*parameter).passphrase);
     }
-    if ttp_authenticate(session, secret as *mut u_char) < 0 as libc::c_int {
+    if ttp_authenticate_client(session, secret as *mut u_char) < 0 as libc::c_int {
         error_handler(
             b"command.c\0" as *const u8 as *const libc::c_char,
             182 as libc::c_int,
@@ -908,7 +908,7 @@ pub unsafe extern "C" fn command_get(
                 (*xfer).local_filename,
             );
         }
-        if ttp_open_transfer(session, (*xfer).remote_filename, (*xfer).local_filename)
+        if ttp_open_transfer_client(session, (*xfer).remote_filename, (*xfer).local_filename)
             < 0 as libc::c_int
         {
             return error_handler(
@@ -918,7 +918,7 @@ pub unsafe extern "C" fn command_get(
                 0 as libc::c_int,
             );
         }
-        if ttp_open_port(session) < 0 as libc::c_int {
+        if ttp_open_port_client(session) < 0 as libc::c_int {
             return error_handler(
                 b"command.c\0" as *const u8 as *const libc::c_char,
                 391 as libc::c_int,
@@ -1001,7 +1001,7 @@ pub unsafe extern "C" fn command_get(
         gettimeofday(&mut (*xfer).stats.start_time, 0 as *mut libc::c_void);
         gettimeofday(&mut (*xfer).stats.this_time, 0 as *mut libc::c_void);
         if (*(*session).parameter).transcript_yn != 0 {
-            xscript_data_start(session, &mut (*xfer).stats.start_time);
+            xscript_data_start_client(session, &mut (*xfer).stats.start_time);
         }
         loop {
             status = recvfrom(
@@ -1424,8 +1424,8 @@ pub unsafe extern "C" fn command_get(
             }
             printf(b"\n\0" as *const u8 as *const libc::c_char);
             if (*(*session).parameter).transcript_yn != 0 {
-                xscript_data_stop(session, &mut (*xfer).stats.stop_time);
-                xscript_close(session, delta);
+                xscript_data_stop_client(session, &mut (*xfer).stats.stop_time);
+                xscript_close_client(session, delta);
             }
             if (*(*session).parameter).blockdump != 0 {
                 dump_blockmap(b".blockmap\0" as *const u8 as *const libc::c_char, xfer);

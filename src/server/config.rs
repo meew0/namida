@@ -52,22 +52,14 @@ pub struct ttp_parameter_t {
     pub total_files: u_int16_t,
     pub wait_u_sec: libc::c_long,
 }
-#[no_mangle]
 pub static mut DEFAULT_BLOCK_SIZE: u_int32_t = 1024 as libc::c_int as u_int32_t;
-#[no_mangle]
 pub static mut DEFAULT_SECRET: *const u_char = b"kitten\0" as *const u8
     as *const libc::c_char as *mut u_char;
-#[no_mangle]
 pub static mut DEFAULT_TCP_PORT: u_int16_t = 51038 as libc::c_int as u_int16_t;
-#[no_mangle]
 pub static mut DEFAULT_UDP_BUFFER: u_int32_t = 20000000 as libc::c_int as u_int32_t;
-#[no_mangle]
 pub static mut DEFAULT_VERBOSE_YN: u_char = 1 as libc::c_int as u_char;
-#[no_mangle]
 pub static mut DEFAULT_TRANSCRIPT_YN: u_char = 0 as libc::c_int as u_char;
-#[no_mangle]
 pub static mut DEFAULT_IPV6_YN: u_char = 0 as libc::c_int as u_char;
-#[no_mangle]
 pub static mut DEFAULT_HEARTBEAT_TIMEOUT: u_int16_t = 15 as libc::c_int as u_int16_t;
 #[no_mangle]
 pub unsafe extern "C" fn reset_server(mut parameter: *mut ttp_parameter_t) {

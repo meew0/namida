@@ -143,7 +143,7 @@ pub struct ttp_session_t {
     pub session_id: libc::c_int,
 }
 #[no_mangle]
-pub unsafe extern "C" fn xscript_close(
+pub unsafe extern "C" fn xscript_close_server(
     mut session: *mut ttp_session_t,
     mut delta: u_int64_t,
 ) {
@@ -169,7 +169,7 @@ pub unsafe extern "C" fn xscript_close(
     fclose((*xfer).transcript);
 }
 #[no_mangle]
-pub unsafe extern "C" fn xscript_data_log(
+pub unsafe extern "C" fn xscript_data_log_server(
     mut session: *mut ttp_session_t,
     mut logline: *const libc::c_char,
 ) {
@@ -181,7 +181,7 @@ pub unsafe extern "C" fn xscript_data_log(
     fflush((*session).transfer.transcript);
 }
 #[no_mangle]
-pub unsafe extern "C" fn xscript_data_start(
+pub unsafe extern "C" fn xscript_data_start_server(
     mut session: *mut ttp_session_t,
     mut epoch: *const timeval,
 ) {
@@ -194,7 +194,7 @@ pub unsafe extern "C" fn xscript_data_start(
     fflush((*session).transfer.transcript);
 }
 #[no_mangle]
-pub unsafe extern "C" fn xscript_data_stop(
+pub unsafe extern "C" fn xscript_data_stop_server(
     mut session: *mut ttp_session_t,
     mut epoch: *const timeval,
 ) {
@@ -207,7 +207,7 @@ pub unsafe extern "C" fn xscript_data_stop(
     fflush((*session).transfer.transcript);
 }
 #[no_mangle]
-pub unsafe extern "C" fn xscript_open(mut session: *mut ttp_session_t) {
+pub unsafe extern "C" fn xscript_open_server(mut session: *mut ttp_session_t) {
     let mut xfer: *mut ttp_transfer_t = &mut (*session).transfer;
     let mut param: *mut ttp_parameter_t = (*session).parameter;
     let mut filename: [libc::c_char; 64] = [0; 64];

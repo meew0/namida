@@ -46,52 +46,29 @@ pub struct ttp_parameter_t {
     pub passphrase: *mut libc::c_char,
     pub ringbuf: *mut libc::c_char,
 }
-#[no_mangle]
 pub static mut DEFAULT_BLOCK_SIZE: u_int32_t = 1024 as libc::c_int as u_int32_t;
-#[no_mangle]
 pub static mut DEFAULT_TABLE_SIZE: libc::c_int = 4096 as libc::c_int;
-#[no_mangle]
 pub static mut DEFAULT_SERVER_NAME: *const libc::c_char = b"localhost\0" as *const u8
     as *const libc::c_char;
-#[no_mangle]
 pub static mut DEFAULT_SERVER_PORT: u_int16_t = 51038 as libc::c_int as u_int16_t;
-#[no_mangle]
 pub static mut DEFAULT_CLIENT_PORT: u_int16_t = 51038 as libc::c_int as u_int16_t;
-#[no_mangle]
 pub static mut DEFAULT_UDP_BUFFER: u_int32_t = 20000000 as libc::c_int as u_int32_t;
-#[no_mangle]
 pub static mut DEFAULT_VERBOSE_YN: u_char = 1 as libc::c_int as u_char;
-#[no_mangle]
 pub static mut DEFAULT_TRANSCRIPT_YN: u_char = 0 as libc::c_int as u_char;
-#[no_mangle]
 pub static mut DEFAULT_IPV6_YN: u_char = 0 as libc::c_int as u_char;
-#[no_mangle]
 pub static mut DEFAULT_OUTPUT_MODE: u_char = 1 as libc::c_int as u_char;
-#[no_mangle]
 pub static mut DEFAULT_RATE_ADJUST: u_char = 0 as libc::c_int as u_char;
-#[no_mangle]
 pub static mut DEFAULT_TARGET_RATE: u_int32_t = 650000000 as libc::c_int as u_int32_t;
-#[no_mangle]
 pub static mut DEFAULT_ERROR_RATE: u_int32_t = 7500 as libc::c_int as u_int32_t;
-#[no_mangle]
 pub static mut DEFAULT_SLOWER_NUM: u_int16_t = 25 as libc::c_int as u_int16_t;
-#[no_mangle]
 pub static mut DEFAULT_SLOWER_DEN: u_int16_t = 24 as libc::c_int as u_int16_t;
-#[no_mangle]
 pub static mut DEFAULT_FASTER_NUM: u_int16_t = 5 as libc::c_int as u_int16_t;
-#[no_mangle]
 pub static mut DEFAULT_FASTER_DEN: u_int16_t = 6 as libc::c_int as u_int16_t;
-#[no_mangle]
 pub static mut DEFAULT_HISTORY: u_int16_t = 25 as libc::c_int as u_int16_t;
-#[no_mangle]
 pub static mut DEFAULT_NO_RETRANSMIT: u_char = 0 as libc::c_int as u_char;
-#[no_mangle]
 pub static mut DEFAULT_LOSSLESS: u_char = 1 as libc::c_int as u_char;
-#[no_mangle]
 pub static mut DEFAULT_LOSSWINDOW_MS: u_int32_t = 1000 as libc::c_int as u_int32_t;
-#[no_mangle]
 pub static mut DEFAULT_BLOCKDUMP: u_char = 0 as libc::c_int as u_char;
-#[no_mangle]
 pub static mut MAX_COMMAND_LENGTH: libc::c_int = 1024 as libc::c_int;
 #[no_mangle]
 pub unsafe extern "C" fn reset_client(mut parameter: *mut ttp_parameter_t) {
