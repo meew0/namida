@@ -505,10 +505,7 @@ pub unsafe extern "C" fn ttp_authenticate_server(
             0 as libc::c_int,
         );
     }
-    let server_digest: [u8; 16] = crate::common::common::prepare_proof(
-        &mut random,
-        secret,
-    ).into();
+    let server_digest: [u8; 16] = crate::common::common::prepare_proof(&mut random, secret).into();
     i = 0 as libc::c_int;
     while i < 16 as libc::c_int {
         if client_digest[i as usize] as libc::c_int != server_digest[i as usize] as libc::c_int {

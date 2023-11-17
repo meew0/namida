@@ -371,7 +371,7 @@ unsafe extern "C" fn __bswap_16(mut __bsx: __uint16_t) -> __uint16_t {
         | (__bsx as libc::c_int & 0xff as libc::c_int) << 8 as libc::c_int)
         as __uint16_t;
 }
-unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) -> libc::c_int {
+pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) -> libc::c_int {
     let mut server_fd: libc::c_int = 0;
     let mut client_fd: libc::c_int = 0;
     let mut remote_address: sockaddr_in = sockaddr_in {
@@ -1178,32 +1178,32 @@ pub unsafe extern "C" fn process_options(
                 fprintf(
                     stderr,
                     b"Defaults: verbose    = %d\n\0" as *const u8 as *const libc::c_char,
-                    DEFAULT_VERBOSE_YN as libc::c_int,
+                    super::config::DEFAULT_VERBOSE_YN as libc::c_int,
                 );
                 fprintf(
                     stderr,
                     b"          transcript = %d\n\0" as *const u8 as *const libc::c_char,
-                    DEFAULT_TRANSCRIPT_YN as libc::c_int,
+                    super::config::DEFAULT_TRANSCRIPT_YN as libc::c_int,
                 );
                 fprintf(
                     stderr,
                     b"          v6         = %d\n\0" as *const u8 as *const libc::c_char,
-                    DEFAULT_IPV6_YN as libc::c_int,
+                    super::config::DEFAULT_IPV6_YN as libc::c_int,
                 );
                 fprintf(
                     stderr,
                     b"          port       = %d\n\0" as *const u8 as *const libc::c_char,
-                    DEFAULT_TCP_PORT as libc::c_int,
+                    super::config::DEFAULT_TCP_PORT as libc::c_int,
                 );
                 fprintf(
                     stderr,
                     b"          buffer     = %d bytes\n\0" as *const u8 as *const libc::c_char,
-                    DEFAULT_UDP_BUFFER,
+                    super::config::DEFAULT_UDP_BUFFER,
                 );
                 fprintf(
                     stderr,
                     b"          hbtimeout  = %d seconds\n\0" as *const u8 as *const libc::c_char,
-                    DEFAULT_HEARTBEAT_TIMEOUT as libc::c_int,
+                    super::config::DEFAULT_HEARTBEAT_TIMEOUT as libc::c_int,
                 );
                 fprintf(stderr, b"\n\0" as *const u8 as *const libc::c_char);
                 exit(1 as libc::c_int);

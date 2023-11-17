@@ -40,5 +40,17 @@ pub mod util {
 } // mod util
 
 pub fn main() {
-    client::main::main();
+    unsafe {
+        match std::env::args().skip(1).next().as_deref() {
+            Some("client") => {
+                client::main::main_0(0, std::ptr::null_mut());
+            }
+            Some("server") => {
+                server::main::main_0(0, std::ptr::null_mut());
+            }
+            Some(_) | None => {
+                println!("For now, run either `namida client` or `namida server`.");
+            }
+        }
+    }
 }

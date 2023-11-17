@@ -274,7 +274,7 @@ pub struct ttp_session_t {
     pub server_address: *mut sockaddr,
     pub server_address_length: socklen_t,
 }
-unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *const libc::c_char) -> libc::c_int {
+pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *const libc::c_char) -> libc::c_int {
     let mut command: command_t = command_t {
         count: 0,
         text: [0 as *const libc::c_char; 10],

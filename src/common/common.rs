@@ -223,10 +223,7 @@ pub unsafe extern "C" fn ntohll(mut value: u_int64_t) -> u_int64_t {
     return htonll(value);
 }
 
-pub fn prepare_proof(
-    mut buffer: &mut [u8],
-    mut secret: &[u8],
-) -> md5::Digest {
+pub fn prepare_proof(mut buffer: &mut [u8], mut secret: &[u8]) -> md5::Digest {
     for (offset, fresh0) in buffer.iter_mut().enumerate() {
         *fresh0 ^= secret[offset % secret.len()];
     }

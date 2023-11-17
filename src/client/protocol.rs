@@ -365,7 +365,9 @@ pub unsafe extern "C" fn ttp_authenticate_client(
     mut session: *mut ttp_session_t,
     mut secret_c: *mut u_char,
 ) -> libc::c_int {
-    let mut secret = std::ffi::CStr::from_ptr(secret_c as *const i8).to_bytes().to_owned();
+    let mut secret = std::ffi::CStr::from_ptr(secret_c as *const i8)
+        .to_bytes()
+        .to_owned();
 
     let mut random: [u_char; 64] = [0; 64];
     let mut digest: [u_char; 16] = [0; 16];
@@ -386,11 +388,8 @@ pub unsafe extern "C" fn ttp_authenticate_client(
             0 as libc::c_int,
         );
     }
-    let mut digest: [u8; 16] = crate::common::common::prepare_proof(
-        &mut random,
-        &secret,
-    ).into();
-    
+    let mut digest: [u8; 16] = crate::common::common::prepare_proof(&mut random, &secret).into();
+
     for byte in &mut secret {
         *byte = b'0';
     }
