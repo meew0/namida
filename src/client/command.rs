@@ -2097,7 +2097,7 @@ pub unsafe extern "C" fn disk_thread(mut arg: *mut libc::c_void) -> *mut libc::c
     let mut block_type: u_int16_t = 0;
     loop {
         datagram = ring_peek((*session).transfer.ring_buffer);
-        block_index = __bswap_32(*(datagram as *mut u_int32_t));
+        block_index = __bswap_32((datagram as *mut u_int32_t).read_unaligned());
         block_type = __bswap_16(*(datagram.offset(4 as libc::c_int as isize) as *mut u_int16_t));
         if block_index == 0 as libc::c_int as u_int32_t {
             printf(b"!!!!\n\0" as *const u8 as *const libc::c_char);
