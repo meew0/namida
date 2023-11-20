@@ -1,10 +1,6 @@
 use crate::extc;
 use ::libc;
 
-extern "C" {
-    static mut g_error: [libc::c_char; 0];
-}
-
 pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) -> libc::c_int {
     let mut server_fd: libc::c_int = 0;
     let mut client_fd: libc::c_int = 0;
@@ -346,18 +342,7 @@ pub unsafe fn client_handler(mut session: *mut super::ttp_session_t) {
                             (*xfer).udp_length,
                         ) as libc::c_int;
                         if status < 0 as libc::c_int {
-                            extc::sprintf(
-                                g_error.as_mut_ptr(),
-                                b"Could not transmit block #%u\0" as *const u8
-                                    as *const libc::c_char,
-                                (*xfer).block,
-                            );
-                            crate::common::error::error_handler(
-                                b"main.c\0" as *const u8 as *const libc::c_char,
-                                352 as libc::c_int,
-                                g_error.as_mut_ptr(),
-                                0 as libc::c_int,
-                            );
+                            println!("WARNING: Could not transmit block #{}", (*xfer).block);
                             continue;
                         }
                     } else if retransmitlen as libc::c_ulong
