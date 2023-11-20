@@ -618,3 +618,8 @@ pub unsafe extern "C" fn toupper(mut __c: libc::c_int) -> libc::c_int {
         __c
     };
 }
+
+pub unsafe fn gai_strerror_wrap<'a>(ecode: i32) -> &'a str {
+    let ptr = gai_strerror(ecode);
+    std::ffi::CStr::from_ptr(ptr).to_str().unwrap()
+}

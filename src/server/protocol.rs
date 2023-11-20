@@ -1,11 +1,12 @@
 use crate::extc;
 use ::libc;
+use anyhow::bail;
 
 pub unsafe fn ttp_accept_retransmit(
     mut session: *mut super::ttp_session_t,
     mut retransmission: *mut super::retransmission_t,
     mut datagram: *mut u8,
-) -> libc::c_int {
+) -> anyhow::Result<()> {
     let mut xfer: *mut super::ttp_transfer_t = &mut (*session).transfer;
     let mut param: *mut super::ttp_parameter_t = (*session).parameter;
     static mut iteration: libc::c_int = 0 as libc::c_int;
@@ -73,41 +74,20 @@ pub unsafe fn ttp_accept_retransmit(
         if (*retransmission).block == 0 as libc::c_int as u32
             || (*retransmission).block > (*param).block_count
         {
-            extc::sprintf(
-                crate::common::error::g_error.as_mut_ptr(),
-                b"Attempt to restart at illegal block %u\0" as *const u8 as *const libc::c_char,
-                (*retransmission).block,
-            );
-            return crate::common::error::error_handler(
-                b"protocol.c\0" as *const u8 as *const libc::c_char,
-                151 as libc::c_int,
-                crate::common::error::g_error.as_mut_ptr(),
-                0 as libc::c_int,
+            bail!(
+                "Attempt to restart at illegal block {}",
+                (*retransmission).block
             );
         } else {
             (*xfer).block = (*retransmission).block;
         }
     } else if type_0 as libc::c_int == crate::common::common::REQUEST_RETRANSMIT as libc::c_int {
-        status = super::io::build_datagram(
+        super::io::build_datagram(
             session,
             (*retransmission).block,
             'R' as i32 as u16,
             datagram,
-        );
-        if status < 0 as libc::c_int {
-            extc::sprintf(
-                crate::common::error::g_error.as_mut_ptr(),
-                b"Could not build retransmission for block %u\0" as *const u8
-                    as *const libc::c_char,
-                (*retransmission).block,
-            );
-            return crate::common::error::error_handler(
-                b"protocol.c\0" as *const u8 as *const libc::c_char,
-                162 as libc::c_int,
-                crate::common::error::g_error.as_mut_ptr(),
-                0 as libc::c_int,
-            );
-        }
+        )?;
         status = extc::sendto(
             (*xfer).udp_fd,
             datagram as *const libc::c_void,
@@ -119,38 +99,20 @@ pub unsafe fn ttp_accept_retransmit(
             (*xfer).udp_length,
         ) as libc::c_int;
         if status < 0 as libc::c_int {
-            extc::sprintf(
-                crate::common::error::g_error.as_mut_ptr(),
-                b"Could not retransmit block %u\0" as *const u8 as *const libc::c_char,
-                (*retransmission).block,
-            );
-            return crate::common::error::error_handler(
-                b"protocol.c\0" as *const u8 as *const libc::c_char,
-                169 as libc::c_int,
-                crate::common::error::g_error.as_mut_ptr(),
-                0 as libc::c_int,
-            );
+            bail!("Could not retransmit block {}", (*retransmission).block,);
         }
     } else {
-        extc::sprintf(
-            crate::common::error::g_error.as_mut_ptr(),
-            b"Received unknown retransmission request of type %u\0" as *const u8
-                as *const libc::c_char,
+        bail!(
+            "Received unknown retransmission request of type {}",
             extc::__bswap_16((*retransmission).request_type) as libc::c_int,
         );
-        return crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            175 as libc::c_int,
-            crate::common::error::g_error.as_mut_ptr(),
-            0 as libc::c_int,
-        );
     }
-    return 0 as libc::c_int;
+    Ok(())
 }
 pub unsafe fn ttp_authenticate_server(
     mut session: *mut super::ttp_session_t,
     mut secret_c: *const u8,
-) -> libc::c_int {
+) -> anyhow::Result<()> {
     use rand::Rng;
 
     let mut secret = std::ffi::CStr::from_ptr(secret_c as *const i8).to_bytes();
@@ -169,13 +131,7 @@ pub unsafe fn ttp_authenticate_server(
         64 as libc::c_int as u64,
     ) as libc::c_int;
     if status < 0 as libc::c_int {
-        return crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            219 as libc::c_int,
-            b"Could not send authentication challenge to client\0" as *const u8
-                as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Could not send authentication challenge to client");
     }
     status = crate::common::common::full_read(
         (*session).client_fd,
@@ -183,13 +139,7 @@ pub unsafe fn ttp_authenticate_server(
         16 as libc::c_int as u64,
     ) as libc::c_int;
     if status < 0 as libc::c_int {
-        return crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            224 as libc::c_int,
-            b"Could not read authentication response from client\0" as *const u8
-                as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Could not read authentication response from client");
     }
     let server_digest: [u8; 16] = crate::common::common::prepare_proof(&mut random, secret).into();
     i = 0 as libc::c_int;
@@ -200,12 +150,7 @@ pub unsafe fn ttp_authenticate_server(
                 b"\x01\0" as *const u8 as *const libc::c_char as *const libc::c_void,
                 1 as libc::c_int as u64,
             );
-            return crate::common::error::error_handler(
-                b"protocol.c\0" as *const u8 as *const libc::c_char,
-                231 as libc::c_int,
-                b"Authentication failed\0" as *const u8 as *const libc::c_char,
-                0 as libc::c_int,
-            );
+            bail!("Authentication failed");
         }
         i += 1;
         i;
@@ -216,19 +161,11 @@ pub unsafe fn ttp_authenticate_server(
         1 as libc::c_int as u64,
     ) as libc::c_int;
     if status < 0 as libc::c_int {
-        return crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            237 as libc::c_int,
-            b"Could not send authentication confirmation to client\0" as *const u8
-                as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Could not send authentication confirmation to client");
     }
-    return 0 as libc::c_int;
+    Ok(())
 }
-pub unsafe fn ttp_negotiate_server(
-    mut session: *mut super::ttp_session_t,
-) -> libc::c_int {
+pub unsafe fn ttp_negotiate_server(mut session: *mut super::ttp_session_t) -> anyhow::Result<()> {
     let mut server_revision: u32 = extc::__bswap_32(crate::common::common::PROTOCOL_REVISION);
     let mut client_revision: u32 = 0;
     let mut status: libc::c_int = 0;
@@ -238,12 +175,7 @@ pub unsafe fn ttp_negotiate_server(
         4 as libc::c_int as u64,
     ) as libc::c_int;
     if status < 0 as libc::c_int {
-        return crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            263 as libc::c_int,
-            b"Could not send protocol revision number\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Could not send protocol revision number");
     }
     status = crate::common::common::full_read(
         (*session).client_fd,
@@ -251,22 +183,14 @@ pub unsafe fn ttp_negotiate_server(
         4 as libc::c_int as u64,
     ) as libc::c_int;
     if status < 0 as libc::c_int {
-        return crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            268 as libc::c_int,
-            b"Could not read protocol revision number\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Could not read protocol revision number");
     }
-    return if client_revision == server_revision {
-        0 as libc::c_int
-    } else {
-        -(1 as libc::c_int)
+    if client_revision != server_revision {
+        bail!("Protocol negotiation failed");
     };
+    Ok(())
 }
-pub unsafe fn ttp_open_port_server(
-    mut session: *mut super::ttp_session_t,
-) -> libc::c_int {
+pub unsafe fn ttp_open_port_server(mut session: *mut super::ttp_session_t) -> anyhow::Result<()> {
     let mut address: *mut extc::sockaddr = 0 as *mut extc::sockaddr;
     let mut status: libc::c_int = 0;
     let mut port: u16 = 0;
@@ -280,13 +204,7 @@ pub unsafe fn ttp_open_port_server(
         address =
             extc::malloc((*session).transfer.udp_length as libc::c_ulong) as *mut extc::sockaddr;
         if address.is_null() {
-            crate::common::error::error_handler(
-                b"protocol.c\0" as *const u8 as *const libc::c_char,
-                296 as libc::c_int,
-                b"Could not allocate space for UDP socket address\0" as *const u8
-                    as *const libc::c_char,
-                1 as libc::c_int,
-            );
+            panic!("Could not allocate space for UDP socket address");
         }
         extc::getpeername(
             (*session).client_fd,
@@ -305,18 +223,10 @@ pub unsafe fn ttp_open_port_server(
             &mut result,
         );
         if status_0 != 0 {
-            extc::sprintf(
-                errmsg.as_mut_ptr(),
-                b"error in extc::getaddrinfo: %s\n\0" as *const u8 as *const libc::c_char,
-                extc::gai_strerror(status_0),
+            bail!(
+                "error in getaddrinfo: {}",
+                extc::gai_strerror_wrap(status_0),
             );
-            crate::common::error::error_handler(
-                b"protocol.c\0" as *const u8 as *const libc::c_char,
-                309 as libc::c_int,
-                errmsg.as_mut_ptr(),
-                1 as libc::c_int,
-            );
-            return 1 as libc::c_int;
         }
         if (*result).ai_family == 10 as libc::c_int {
             ipv6_yn = 1 as libc::c_int as u8;
@@ -327,13 +237,7 @@ pub unsafe fn ttp_open_port_server(
         (*session).transfer.udp_length = (*result).ai_addrlen;
         address = extc::malloc((*result).ai_addrlen as libc::c_ulong) as *mut extc::sockaddr;
         if address.is_null() {
-            crate::common::error::error_handler(
-                b"protocol.c\0" as *const u8 as *const libc::c_char,
-                323 as libc::c_int,
-                b"Could not allocate space for UDP socket address\0" as *const u8
-                    as *const libc::c_char,
-                1 as libc::c_int,
-            );
+            panic!("Could not allocate space for UDP socket address");
         }
         extc::memcpy(
             address as *mut libc::c_void,
@@ -354,12 +258,7 @@ pub unsafe fn ttp_open_port_server(
         2 as libc::c_int as u64,
     ) as libc::c_int;
     if status < 0 as libc::c_int {
-        return crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            335 as libc::c_int,
-            b"Could not read UDP port number\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Could not read UDP port number");
     }
     if ipv6_yn != 0 {
         (*(address as *mut extc::sockaddr_in6)).sin6_port = port;
@@ -372,21 +271,13 @@ pub unsafe fn ttp_open_port_server(
             extc::__bswap_16(port) as libc::c_int,
         );
     }
-    (*session).transfer.udp_fd = super::network::create_udp_socket_server((*session).parameter);
-    if (*session).transfer.udp_fd < 0 as libc::c_int {
-        return crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            348 as libc::c_int,
-            b"Could not create UDP socket\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
-    }
+    (*session).transfer.udp_fd = super::network::create_udp_socket_server((*session).parameter)?;
     (*session).transfer.udp_address = address;
-    return 0 as libc::c_int;
+    Ok(())
 }
 pub unsafe fn ttp_open_transfer_server(
     mut session: *mut super::ttp_session_t,
-) -> libc::c_int {
+) -> anyhow::Result<()> {
     let mut filename: [libc::c_char; 1024] = [0; 1024];
     let mut file_size: u64 = 0;
     let mut block_size: u32 = 0;
@@ -412,19 +303,11 @@ pub unsafe fn ttp_open_transfer_server(
         0 as libc::c_int,
         ::core::mem::size_of::<super::ttp_transfer_t>() as libc::c_ulong,
     );
-    status = crate::common::common::read_line(
+    crate::common::common::read_line(
         (*session).client_fd,
         filename.as_mut_ptr(),
         1024 as libc::c_int as usize,
-    );
-    if status < 0 as libc::c_int {
-        crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            398 as libc::c_int,
-            b"Could not read filename from client\0" as *const u8 as *const libc::c_char,
-            1 as libc::c_int,
-        );
-    }
+    ).unwrap();
     filename[(1024 as libc::c_int - 1 as libc::c_int) as usize] = '\0' as i32 as libc::c_char;
     if extc::strcmp(
         filename.as_mut_ptr(),
@@ -470,12 +353,7 @@ pub unsafe fn ttp_open_transfer_server(
             message.as_mut_ptr() as *mut libc::c_void,
             1 as libc::c_int as u64,
         );
-        return crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            414 as libc::c_int,
-            b"File list sent!\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("File list sent!");
     } else if extc::strcmp(
         filename.as_mut_ptr(),
         b"*\0" as *const u8 as *const libc::c_char,
@@ -615,20 +493,11 @@ pub unsafe fn ttp_open_transfer_server(
                     b"Sent file list, client response: %s\n\0" as *const u8 as *const libc::c_char,
                     message.as_mut_ptr(),
                 );
-                status = crate::common::common::read_line(
+                crate::common::common::read_line(
                     (*session).client_fd,
                     filename.as_mut_ptr(),
                     1024 as libc::c_int as usize,
-                );
-                if status < 0 as libc::c_int {
-                    crate::common::error::error_handler(
-                        b"protocol.c\0" as *const u8 as *const libc::c_char,
-                        489 as libc::c_int,
-                        b"Could not read filename from client\0" as *const u8
-                            as *const libc::c_char,
-                        1 as libc::c_int,
-                    );
-                }
+                )?;
             }
         } else {
             extc::memset(
@@ -706,29 +575,16 @@ pub unsafe fn ttp_open_transfer_server(
                 b"Sent file list, client response: %s\n\0" as *const u8 as *const libc::c_char,
                 message.as_mut_ptr(),
             );
-            status = crate::common::common::read_line(
+            crate::common::common::read_line(
                 (*session).client_fd,
                 filename.as_mut_ptr(),
                 1024 as libc::c_int as usize,
-            );
-            if status < 0 as libc::c_int {
-                crate::common::error::error_handler(
-                    b"protocol.c\0" as *const u8 as *const libc::c_char,
-                    520 as libc::c_int,
-                    b"Could not read filename from client\0" as *const u8 as *const libc::c_char,
-                    1 as libc::c_int,
-                );
-            }
+            )?;
         }
     }
     (*xfer).filename = extc::strdup(filename.as_mut_ptr());
     if ((*xfer).filename).is_null() {
-        return crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            527 as libc::c_int,
-            b"Memory allocation error\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Memory allocation error");
     }
     if (*param).verbose_yn != 0 {
         extc::printf(
@@ -741,29 +597,19 @@ pub unsafe fn ttp_open_transfer_server(
         b"r\0" as *const u8 as *const libc::c_char,
     );
     if ((*xfer).file).is_null() {
-        extc::sprintf(
-            crate::common::error::g_error.as_mut_ptr(),
-            b"File '%s' does not exist or cannot be read\0" as *const u8 as *const libc::c_char,
-            filename.as_mut_ptr(),
-        );
         status = crate::common::common::full_write(
             (*session).client_fd,
             b"\x08\0" as *const u8 as *const libc::c_char as *const libc::c_void,
             1 as libc::c_int as u64,
         ) as libc::c_int;
         if status < 0 as libc::c_int {
-            crate::common::error::error_handler(
-                b"protocol.c\0" as *const u8 as *const libc::c_char,
-                542 as libc::c_int,
-                b"Could not signal request failure to client\0" as *const u8 as *const libc::c_char,
-                0 as libc::c_int,
-            );
+            println!("WARNING: Could not signal request failure to client");
         }
-        return crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            543 as libc::c_int,
-            crate::common::error::g_error.as_mut_ptr(),
-            0 as libc::c_int,
+        bail!(
+            "File '{}' does not exist or cannot be read",
+            std::ffi::CStr::from_ptr(filename.as_mut_ptr())
+                .to_str()
+                .unwrap(),
         );
     }
     extc::gettimeofday(&mut ping_s, 0 as *mut libc::c_void);
@@ -773,12 +619,7 @@ pub unsafe fn ttp_open_transfer_server(
         1 as libc::c_int as u64,
     ) as libc::c_int;
     if status < 0 as libc::c_int {
-        return crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            630 as libc::c_int,
-            b"Could not signal request approval to client\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Could not signal request approval to client");
     }
     if crate::common::common::full_read(
         (*session).client_fd,
@@ -786,12 +627,7 @@ pub unsafe fn ttp_open_transfer_server(
         4 as libc::c_int as u64,
     ) < 0 as libc::c_int as i64
     {
-        return crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            633 as libc::c_int,
-            b"Could not read block size\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Could not read block size");
     }
     (*param).block_size = extc::__bswap_32((*param).block_size);
     if crate::common::common::full_read(
@@ -800,12 +636,7 @@ pub unsafe fn ttp_open_transfer_server(
         4 as libc::c_int as u64,
     ) < 0 as libc::c_int as i64
     {
-        return crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            634 as libc::c_int,
-            b"Could not read target bitrate\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Could not read target bitrate");
     }
     (*param).target_rate = extc::__bswap_32((*param).target_rate);
     if crate::common::common::full_read(
@@ -814,12 +645,7 @@ pub unsafe fn ttp_open_transfer_server(
         4 as libc::c_int as u64,
     ) < 0 as libc::c_int as i64
     {
-        return crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            635 as libc::c_int,
-            b"Could not read error rate\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Could not read error rate");
     }
     (*param).error_rate = extc::__bswap_32((*param).error_rate);
     extc::gettimeofday(&mut ping_e, 0 as *mut libc::c_void);
@@ -829,12 +655,7 @@ pub unsafe fn ttp_open_transfer_server(
         2 as libc::c_int as u64,
     ) < 0 as libc::c_int as i64
     {
-        return crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            641 as libc::c_int,
-            b"Could not read slowdown numerator\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Could not read slowdown numerator");
     }
     (*param).slower_num = extc::__bswap_16((*param).slower_num);
     if crate::common::common::full_read(
@@ -843,12 +664,7 @@ pub unsafe fn ttp_open_transfer_server(
         2 as libc::c_int as u64,
     ) < 0 as libc::c_int as i64
     {
-        return crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            642 as libc::c_int,
-            b"Could not read slowdown denominator\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Could not read slowdown denominator");
     }
     (*param).slower_den = extc::__bswap_16((*param).slower_den);
     if crate::common::common::full_read(
@@ -857,12 +673,7 @@ pub unsafe fn ttp_open_transfer_server(
         2 as libc::c_int as u64,
     ) < 0 as libc::c_int as i64
     {
-        return crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            643 as libc::c_int,
-            b"Could not read speedup numerator\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Could not read speedup numerator");
     }
     (*param).faster_num = extc::__bswap_16((*param).faster_num);
     if crate::common::common::full_read(
@@ -871,12 +682,7 @@ pub unsafe fn ttp_open_transfer_server(
         2 as libc::c_int as u64,
     ) < 0 as libc::c_int as i64
     {
-        return crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            644 as libc::c_int,
-            b"Could not read speedup denominator\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Could not read speedup denominator");
     }
     (*param).faster_den = extc::__bswap_16((*param).faster_den);
     extc::fseeko(
@@ -902,12 +708,7 @@ pub unsafe fn ttp_open_transfer_server(
         8 as libc::c_int as u64,
     ) < 0 as libc::c_int as i64
     {
-        return crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            667 as libc::c_int,
-            b"Could not submit file size\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Could not submit file size");
     }
     block_size = extc::__bswap_32((*param).block_size);
     if crate::common::common::full_write(
@@ -916,12 +717,7 @@ pub unsafe fn ttp_open_transfer_server(
         4 as libc::c_int as u64,
     ) < 0 as libc::c_int as i64
     {
-        return crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            668 as libc::c_int,
-            b"Could not submit block size\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Could not submit block size");
     }
     block_count = extc::__bswap_32((*param).block_count);
     if crate::common::common::full_write(
@@ -930,12 +726,7 @@ pub unsafe fn ttp_open_transfer_server(
         4 as libc::c_int as u64,
     ) < 0 as libc::c_int as i64
     {
-        return crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            669 as libc::c_int,
-            b"Could not submit block count\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Could not submit block count");
     }
     epoch = extc::__bswap_32((*param).epoch as u32) as extc::time_t;
     if crate::common::common::full_write(
@@ -944,12 +735,7 @@ pub unsafe fn ttp_open_transfer_server(
         4 as libc::c_int as u64,
     ) < 0 as libc::c_int as i64
     {
-        return crate::common::error::error_handler(
-            b"protocol.c\0" as *const u8 as *const libc::c_char,
-            670 as libc::c_int,
-            b"Could not submit run epoch\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Could not submit run epoch");
     }
     (*(*session).parameter).wait_u_sec = (ping_e.tv_sec - ping_s.tv_sec)
         * 1000000 as libc::c_int as extc::__time_t
@@ -965,5 +751,5 @@ pub unsafe fn ttp_open_transfer_server(
     if (*param).transcript_yn != 0 {
         super::transcript::xscript_open_server(session);
     }
-    return 0 as libc::c_int;
+    Ok(())
 }

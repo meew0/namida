@@ -56,11 +56,6 @@ pub unsafe fn reset_client(mut parameter: *mut ttp_parameter_t) {
     (*parameter).losswindow_ms = DEFAULT_LOSSWINDOW_MS;
     (*parameter).blockdump = DEFAULT_BLOCKDUMP;
     if ((*parameter).server_name).is_null() {
-        crate::common::error::error_handler(
-            b"config.c\0" as *const u8 as *const libc::c_char,
-            138 as libc::c_int,
-            b"Could not reset default server name\0" as *const u8 as *const libc::c_char,
-            1 as libc::c_int,
-        );
+        panic!("Could not reset default server name");
     }
 }

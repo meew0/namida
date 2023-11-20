@@ -66,12 +66,7 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *const libc::c_char) 
             ))
             .is_null()
             {
-                crate::common::error::error_handler(
-                    b"main.c\0" as *const u8 as *const libc::c_char,
-                    121 as libc::c_int,
-                    b"Could not read command input\0" as *const u8 as *const libc::c_char,
-                    1 as libc::c_int,
-                );
+                panic!("Could not read command input");
             }
         } else {
             while argc_curr < argc {
@@ -210,7 +205,12 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *const libc::c_char) 
             b"connect\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            session = super::command::command_connect(&mut command, &mut parameter);
+            match super::command::command_connect(&mut command, &mut parameter) {
+                Ok(new_session) => {
+                    session = new_session;
+                }
+                Err(err) => println!("Error in command_connect: {:?}", err),
+            }
         } else if extc::strcasecmp(
             command.text[0 as libc::c_int as usize],
             b"get\0" as *const u8 as *const libc::c_char,

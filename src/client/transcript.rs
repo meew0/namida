@@ -105,12 +105,7 @@ pub unsafe fn xscript_open_client(mut session: *mut ttp_session_t) {
         b"w\0" as *const u8 as *const libc::c_char,
     );
     if ((*xfer).transcript).is_null() {
-        crate::common::error::error_handler(
-            b"transcript.c\0" as *const u8 as *const libc::c_char,
-            153 as libc::c_int,
-            b"Could not create transcript file\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        println!("WARNING: Could not create transcript file");
         return;
     }
     extc::fprintf(

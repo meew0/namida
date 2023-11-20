@@ -1,5 +1,6 @@
 use crate::extc;
 use ::libc;
+use anyhow::bail;
 #[no_mangle]
 pub static mut PROTOCOL_REVISION: u32 = 0x20061025 as libc::c_int as u32;
 #[no_mangle]
@@ -89,7 +90,7 @@ pub unsafe fn read_line(
     mut fd: libc::c_int,
     mut buffer: *mut libc::c_char,
     mut buffer_length: usize,
-) -> libc::c_int {
+) -> anyhow::Result<()> {
     let mut buffer_offset: libc::c_int = 0 as libc::c_int;
     loop {
         if extc::read(
@@ -98,12 +99,7 @@ pub unsafe fn read_line(
             1 as libc::c_int as u64,
         ) <= 0 as libc::c_int as i64
         {
-            return crate::common::error::error_handler(
-                b"common.c\0" as *const u8 as *const libc::c_char,
-                242 as libc::c_int,
-                b"Could not read complete line of input\0" as *const u8 as *const libc::c_char,
-                0 as libc::c_int,
-            );
+            bail!("Could not read complete line of input");
         }
         buffer_offset += 1;
         buffer_offset;
@@ -117,13 +113,13 @@ pub unsafe fn read_line(
         }
     }
     *buffer.offset((buffer_offset - 1 as libc::c_int) as isize) = '\0' as i32 as libc::c_char;
-    return 0 as libc::c_int;
+    Ok(())
 }
 pub unsafe fn fread_line(
     mut f: *mut extc::FILE,
     mut buffer: *mut libc::c_char,
     mut buffer_length: u64,
-) -> libc::c_int {
+) -> anyhow::Result<()> {
     let mut buffer_offset: libc::c_int = 0 as libc::c_int;
     loop {
         if extc::fread(
@@ -133,12 +129,7 @@ pub unsafe fn fread_line(
             f,
         ) <= 0 as libc::c_int as libc::c_ulong
         {
-            return crate::common::error::error_handler(
-                b"common.c\0" as *const u8 as *const libc::c_char,
-                266 as libc::c_int,
-                b"Could not read complete line of input\0" as *const u8 as *const libc::c_char,
-                0 as libc::c_int,
-            );
+            bail!("Could not read complete line of input");
         }
         buffer_offset += 1;
         buffer_offset;
@@ -152,7 +143,7 @@ pub unsafe fn fread_line(
         }
     }
     *buffer.offset((buffer_offset - 1 as libc::c_int) as isize) = '\0' as i32 as libc::c_char;
-    return 0 as libc::c_int;
+    Ok(())
 }
 pub unsafe fn usleep_that_works(mut usec: u64) {
     let mut sleep_time: u64 = usec / 10000 as libc::c_int as u64 * 10000 as libc::c_int as u64;
@@ -260,11 +251,7 @@ pub unsafe fn get_udp_in_errors() -> u64 {
     extc::fclose(f);
     return errs;
 }
-pub unsafe fn full_write(
-    mut fd: libc::c_int,
-    mut buf: *const libc::c_void,
-    mut count: u64,
-) -> i64 {
+pub unsafe fn full_write(mut fd: libc::c_int, mut buf: *const libc::c_void, mut count: u64) -> i64 {
     let mut written: i64 = 0 as libc::c_int as i64;
     while (written as u64) < count {
         let mut nwr: i64 = extc::write(
@@ -284,11 +271,7 @@ pub unsafe fn full_write(
     }
     return written;
 }
-pub unsafe fn full_read(
-    mut fd: libc::c_int,
-    mut buf: *mut libc::c_void,
-    mut count: u64,
-) -> i64 {
+pub unsafe fn full_read(mut fd: libc::c_int, mut buf: *mut libc::c_void, mut count: u64) -> i64 {
     let mut nread: i64 = 0 as libc::c_int as i64;
     while (nread as u64) < count {
         let mut nrd: i64 = crate::extc::read(

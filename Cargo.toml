@@ -9,6 +9,7 @@ publish = false
 edition = "2021"
 
 [dependencies]
+anyhow = { version = "1.0.75", features = ["backtrace"] }
 libc= "0.2"
 md5 = "0.7.0"
 rand = "0.8.5"

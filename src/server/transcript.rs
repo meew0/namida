@@ -1,10 +1,7 @@
 use crate::extc;
 use ::libc;
 
-pub unsafe fn xscript_close_server(
-    mut session: *mut super::ttp_session_t,
-    mut delta: u64,
-) {
+pub unsafe fn xscript_close_server(mut session: *mut super::ttp_session_t, mut delta: u64) {
     let mut xfer: *mut super::ttp_transfer_t = &mut (*session).transfer;
     let mut param: *mut super::ttp_parameter_t = (*session).parameter;
     extc::fprintf(
@@ -77,12 +74,7 @@ pub unsafe fn xscript_open_server(mut session: *mut super::ttp_session_t) {
         b"w\0" as *const u8 as *const libc::c_char,
     );
     if ((*xfer).transcript).is_null() {
-        crate::common::error::error_handler(
-            b"transcript.c\0" as *const u8 as *const libc::c_char,
-            141 as libc::c_int,
-            b"Could not create transcript file\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        println!("WARNING: Could not create transcript file");
         return;
     }
     extc::fprintf(

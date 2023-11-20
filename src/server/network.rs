@@ -1,9 +1,10 @@
 use crate::extc;
 use ::libc;
+use anyhow::bail;
 
 pub unsafe fn create_tcp_socket_server(
     mut parameter: *mut super::ttp_parameter_t,
-) -> libc::c_int {
+) -> anyhow::Result<i32> {
     let mut hints: extc::addrinfo = extc::addrinfo {
         ai_flags: 0,
         ai_family: 0,
@@ -44,12 +45,7 @@ pub unsafe fn create_tcp_socket_server(
         &mut info,
     );
     if status != 0 {
-        return crate::common::error::error_handler(
-            b"network.c\0" as *const u8 as *const libc::c_char,
-            101 as libc::c_int,
-            b"Error in getting address information\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Error in getting address information");
     }
     info_save = info;
     loop {
@@ -82,27 +78,17 @@ pub unsafe fn create_tcp_socket_server(
     }
     extc::freeaddrinfo(info_save);
     if info.is_null() {
-        return crate::common::error::error_handler(
-            b"network.c\0" as *const u8 as *const libc::c_char,
-            129 as libc::c_int,
-            b"Error in creating TCP server socket\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Error in creating TCP server socket");
     }
     status = extc::listen(socket_fd, 4096 as libc::c_int);
     if status < 0 as libc::c_int {
-        return crate::common::error::error_handler(
-            b"network.c\0" as *const u8 as *const libc::c_char,
-            134 as libc::c_int,
-            b"Error in listening on TCP server socket\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Error in listening on TCP server socket");
     }
-    return socket_fd;
+    Ok(socket_fd)
 }
 pub unsafe fn create_udp_socket_server(
     mut parameter: *mut super::ttp_parameter_t,
-) -> libc::c_int {
+) -> anyhow::Result<i32> {
     let mut socket_fd: libc::c_int = 0;
     let mut status: libc::c_int = 0;
     let mut yes: libc::c_int = 1 as libc::c_int;
@@ -116,12 +102,7 @@ pub unsafe fn create_udp_socket_server(
         0 as libc::c_int,
     );
     if socket_fd < 0 as libc::c_int {
-        return crate::common::error::error_handler(
-            b"network.c\0" as *const u8 as *const libc::c_char,
-            158 as libc::c_int,
-            b"Error in creating UDP socket\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Error in creating UDP socket");
     }
     status = extc::setsockopt(
         socket_fd,
@@ -132,12 +113,7 @@ pub unsafe fn create_udp_socket_server(
     );
     if status < 0 as libc::c_int {
         extc::close(socket_fd);
-        return crate::common::error::error_handler(
-            b"network.c\0" as *const u8 as *const libc::c_char,
-            164 as libc::c_int,
-            b"Error in configuring UDP socket\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Error in configuring UDP socket");
     }
     status = extc::setsockopt(
         socket_fd,
@@ -147,12 +123,7 @@ pub unsafe fn create_udp_socket_server(
         ::core::mem::size_of::<u32>() as libc::c_ulong as extc::socklen_t,
     );
     if status < 0 as libc::c_int {
-        crate::common::error::error_handler(
-            b"network.c\0" as *const u8 as *const libc::c_char,
-            170 as libc::c_int,
-            b"Error in resizing UDP transmit buffer\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        println!("WARNING: Error in resizing UDP transmit buffer");
     }
-    return socket_fd;
+    Ok(socket_fd)
 }

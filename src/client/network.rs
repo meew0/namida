@@ -1,5 +1,6 @@
 use crate::extc;
 use ::libc;
+use anyhow::bail;
 
 use super::{ttp_parameter_t, ttp_session_t};
 
@@ -7,7 +8,7 @@ pub unsafe fn create_tcp_socket_client(
     mut session: *mut ttp_session_t,
     mut server_name: *const libc::c_char,
     mut server_port: u16,
-) -> libc::c_int {
+) -> anyhow::Result<i32> {
     let mut hints: extc::addrinfo = extc::addrinfo {
         ai_flags: 0,
         ai_family: 0,
@@ -42,24 +43,13 @@ pub unsafe fn create_tcp_socket_client(
     );
     status = extc::getaddrinfo(server_name, buffer.as_mut_ptr(), &mut hints, &mut info);
     if status != 0 {
-        return crate::common::error::error_handler(
-            b"network.c\0" as *const u8 as *const libc::c_char,
-            106 as libc::c_int,
-            b"Error in getting address information for server\0" as *const u8
-                as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Error in getting address information for server");
     }
     info_save = info;
     loop {
         socket_fd = extc::socket((*info).ai_family, (*info).ai_socktype, (*info).ai_protocol);
         if socket_fd < 0 as libc::c_int {
-            crate::common::error::error_handler(
-                b"network.c\0" as *const u8 as *const libc::c_char,
-                115 as libc::c_int,
-                b"Could not create socket\0" as *const u8 as *const libc::c_char,
-                0 as libc::c_int,
-            );
+            println!("WARNING: Could not create socket");
         } else {
             status = extc::setsockopt(
                 socket_fd,
@@ -69,12 +59,7 @@ pub unsafe fn create_tcp_socket_client(
                 ::core::mem::size_of::<libc::c_int>() as libc::c_ulong as extc::socklen_t,
             );
             if status < 0 as libc::c_int {
-                crate::common::error::error_handler(
-                    b"network.c\0" as *const u8 as *const libc::c_char,
-                    122 as libc::c_int,
-                    b"Could not make socket reusable\0" as *const u8 as *const libc::c_char,
-                    0 as libc::c_int,
-                );
+                println!("WARNING: Could not make socket reusable");
                 extc::close(socket_fd);
             } else {
                 status = extc::setsockopt(
@@ -85,13 +70,7 @@ pub unsafe fn create_tcp_socket_client(
                     ::core::mem::size_of::<libc::c_int>() as libc::c_ulong as extc::socklen_t,
                 );
                 if status < 0 as libc::c_int {
-                    crate::common::error::error_handler(
-                        b"network.c\0" as *const u8 as *const libc::c_char,
-                        130 as libc::c_int,
-                        b"Could not disable Nagle's algorithm\0" as *const u8
-                            as *const libc::c_char,
-                        0 as libc::c_int,
-                    );
+                    println!("WARNING: Could not disable Nagle's algorithm");
                     extc::close(socket_fd);
                 } else {
                     status = extc::connect(
@@ -107,13 +86,7 @@ pub unsafe fn create_tcp_socket_client(
                                 as *mut extc::sockaddr;
                         (*session).server_address_length = (*info).ai_addrlen;
                         if ((*session).server_address).is_null() {
-                            crate::common::error::error_handler(
-                                b"network.c\0" as *const u8 as *const libc::c_char,
-                                143 as libc::c_int,
-                                b"Could not allocate space for server address\0" as *const u8
-                                    as *const libc::c_char,
-                                1 as libc::c_int,
-                            );
+                            panic!("Could not allocate space for server address");
                         }
                         extc::memcpy(
                             (*session).server_address as *mut libc::c_void,
@@ -132,18 +105,11 @@ pub unsafe fn create_tcp_socket_client(
     }
     extc::freeaddrinfo(info_save);
     if info.is_null() {
-        return crate::common::error::error_handler(
-            b"network.c\0" as *const u8 as *const libc::c_char,
-            155 as libc::c_int,
-            b"Error in connecting to Tsunami server\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Error in connecting to Tsunami server");
     }
-    return socket_fd;
+    Ok(socket_fd)
 }
-pub unsafe fn create_udp_socket_client(
-    mut parameter: *mut ttp_parameter_t,
-) -> libc::c_int {
+pub unsafe fn create_udp_socket_client(mut parameter: *mut ttp_parameter_t) -> anyhow::Result<i32> {
     let mut hints: extc::addrinfo = extc::addrinfo {
         ai_flags: 0,
         ai_family: 0,
@@ -185,12 +151,7 @@ pub unsafe fn create_udp_socket_client(
             &mut info,
         );
         if status != 0 {
-            return crate::common::error::error_handler(
-                b"network.c\0" as *const u8 as *const libc::c_char,
-                195 as libc::c_int,
-                b"Error in getting address information\0" as *const u8 as *const libc::c_char,
-                0 as libc::c_int,
-            );
+            bail!("Error in getting address information");
         }
         info_save = info;
         loop {
@@ -204,13 +165,7 @@ pub unsafe fn create_udp_socket_client(
                     ::core::mem::size_of::<u32>() as libc::c_ulong as extc::socklen_t,
                 );
                 if status < 0 as libc::c_int {
-                    crate::common::error::error_handler(
-                        b"network.c\0" as *const u8 as *const libc::c_char,
-                        211 as libc::c_int,
-                        b"Error in resizing UDP receive buffer\0" as *const u8
-                            as *const libc::c_char,
-                        0 as libc::c_int,
-                    );
+                    println!("WARNING: Error in resizing UDP receive buffer");
                 }
                 status = extc::bind(
                     socket_fd,
@@ -250,12 +205,7 @@ pub unsafe fn create_udp_socket_client(
         );
     }
     if info.is_null() {
-        return crate::common::error::error_handler(
-            b"network.c\0" as *const u8 as *const libc::c_char,
-            235 as libc::c_int,
-            b"Error in creating UDP socket\0" as *const u8 as *const libc::c_char,
-            0 as libc::c_int,
-        );
+        bail!("Error in creating UDP socket");
     }
-    return socket_fd;
+    Ok(socket_fd)
 }

@@ -74,20 +74,7 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) ->
     );
     super::config::reset_server(&mut parameter);
     process_options(argc, argv, &mut parameter);
-    server_fd = super::network::create_tcp_socket_server(&mut parameter);
-    if server_fd < 0 as libc::c_int {
-        extc::sprintf(
-            g_error.as_mut_ptr(),
-            b"Could not create server socket on port %d\0" as *const u8 as *const libc::c_char,
-            parameter.tcp_port as libc::c_int,
-        );
-        return crate::common::error::error_handler(
-            b"main.c\0" as *const u8 as *const libc::c_char,
-            117 as libc::c_int,
-            g_error.as_mut_ptr(),
-            1 as libc::c_int,
-        );
-    }
+    server_fd = super::network::create_tcp_socket_server(&mut parameter).unwrap();
     extc::signal(
         17 as libc::c_int,
         Some(reap as unsafe extern "C" fn(libc::c_int) -> ()),
@@ -110,12 +97,7 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) ->
             &mut remote_length,
         );
         if client_fd < 0 as libc::c_int {
-            crate::common::error::error_handler(
-                b"main.c\0" as *const u8 as *const libc::c_char,
-                142 as libc::c_int,
-                b"Could not accept client connection\0" as *const u8 as *const libc::c_char,
-                0 as libc::c_int,
-            );
+            println!("WARNING: Could not accept client connection");
         } else {
             extc::fprintf(
                 extc::stderr,
@@ -124,12 +106,7 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) ->
             );
             child_pid = extc::fork();
             if child_pid < 0 as libc::c_int {
-                crate::common::error::error_handler(
-                    b"main.c\0" as *const u8 as *const libc::c_char,
-                    151 as libc::c_int,
-                    b"Could not create child process\0" as *const u8 as *const libc::c_char,
-                    0 as libc::c_int,
-                );
+                println!("WARNING: Could not create child process");
             } else {
                 session.session_id += 1;
                 session.session_id;
@@ -194,24 +171,8 @@ pub unsafe extern "C" fn client_handler(mut session: *mut super::ttp_session_t) 
     let mut param: *mut super::ttp_parameter_t = (*session).parameter;
     let mut delta: u64 = 0;
     let mut block_type: u8 = 0;
-    status = super::protocol::ttp_negotiate_server(session);
-    if status < 0 as libc::c_int {
-        crate::common::error::error_handler(
-            b"main.c\0" as *const u8 as *const libc::c_char,
-            211 as libc::c_int,
-            b"Protocol revision number mismatch\0" as *const u8 as *const libc::c_char,
-            1 as libc::c_int,
-        );
-    }
-    status = super::protocol::ttp_authenticate_server(session, (*(*session).parameter).secret);
-    if status < 0 as libc::c_int {
-        crate::common::error::error_handler(
-            b"main.c\0" as *const u8 as *const libc::c_char,
-            216 as libc::c_int,
-            b"Client authentication failure\0" as *const u8 as *const libc::c_char,
-            1 as libc::c_int,
-        );
-    }
+    super::protocol::ttp_negotiate_server(session).unwrap();
+    super::protocol::ttp_authenticate_server(session, (*(*session).parameter).secret).unwrap();
     if 1 as libc::c_int == (*param).verbose_yn as libc::c_int {
         extc::fprintf(
             extc::stderr,
@@ -237,30 +198,13 @@ pub unsafe extern "C" fn client_handler(mut session: *mut super::ttp_session_t) 
     loop {
         status = extc::fcntl((*session).client_fd, 4 as libc::c_int, 0 as libc::c_int);
         if status < 0 as libc::c_int {
-            crate::common::error::error_handler(
-                b"main.c\0" as *const u8 as *const libc::c_char,
-                231 as libc::c_int,
-                b"Could not make client socket blocking\0" as *const u8 as *const libc::c_char,
-                1 as libc::c_int,
-            );
+            panic!("Could not make client socket blocking");
         }
-        status = super::protocol::ttp_open_transfer_server(session);
-        if status < 0 as libc::c_int {
-            crate::common::error::error_handler(
-                b"main.c\0" as *const u8 as *const libc::c_char,
-                236 as libc::c_int,
-                b"Invalid file request\0" as *const u8 as *const libc::c_char,
-                0 as libc::c_int,
-            );
+        if let Err(err) = super::protocol::ttp_open_transfer_server(session) {
+            println!("WARNING: Invalid file request, error: {:?}", err);
         } else {
-            status = super::protocol::ttp_open_port_server(session);
-            if status < 0 as libc::c_int {
-                crate::common::error::error_handler(
-                    b"main.c\0" as *const u8 as *const libc::c_char,
-                    243 as libc::c_int,
-                    b"UDP socket creation failed\0" as *const u8 as *const libc::c_char,
-                    0 as libc::c_int,
-                );
+            if let Err(err) = super::protocol::ttp_open_port_server(session) {
+                println!("WARNING: UDP socket creation failed: {:?}", err);
             } else {
                 status = extc::fcntl(
                     (*session).client_fd,
@@ -268,13 +212,7 @@ pub unsafe extern "C" fn client_handler(mut session: *mut super::ttp_session_t) 
                     0o4000 as libc::c_int,
                 );
                 if status < 0 as libc::c_int {
-                    crate::common::error::error_handler(
-                        b"main.c\0" as *const u8 as *const libc::c_char,
-                        250 as libc::c_int,
-                        b"Could not make client socket non-blocking\0" as *const u8
-                            as *const libc::c_char,
-                        1 as libc::c_int,
-                    );
+                    panic!("Could not make client socket non-blocking");
                 }
                 extc::gettimeofday(&mut start, 0 as *mut libc::c_void);
                 if (*param).transcript_yn != 0 {
@@ -317,12 +255,7 @@ pub unsafe extern "C" fn client_handler(mut session: *mut super::ttp_session_t) 
                     ) as libc::c_int;
                     if status <= 0 as libc::c_int && *extc::__errno_location() != 11 as libc::c_int
                     {
-                        crate::common::error::error_handler(
-                            b"main.c\0" as *const u8 as *const libc::c_char,
-                            288 as libc::c_int,
-                            b"Retransmission read failed\0" as *const u8 as *const libc::c_char,
-                            1 as libc::c_int,
-                        );
+                        panic!("Retransmission read failed");
                     }
                     if status > 0 as libc::c_int {
                         retransmitlen += status;
@@ -371,18 +304,12 @@ pub unsafe extern "C" fn client_handler(mut session: *mut super::ttp_session_t) 
                             }
                             break;
                         } else {
-                            status = super::protocol::ttp_accept_retransmit(
+                            if let Err(err) = super::protocol::ttp_accept_retransmit(
                                 session,
                                 &mut retransmission,
                                 datagram.as_mut_ptr(),
-                            );
-                            if status < 0 as libc::c_int {
-                                crate::common::error::error_handler(
-                                    b"main.c\0" as *const u8 as *const libc::c_char,
-                                    333 as libc::c_int,
-                                    b"Retransmission error\0" as *const u8 as *const libc::c_char,
-                                    0 as libc::c_int,
-                                );
+                            ) {
+                                println!("WARNING: Retransmission error: {:?}", err);
                             }
                             retransmitlen = 0 as libc::c_int;
                         }
@@ -401,25 +328,13 @@ pub unsafe extern "C" fn client_handler(mut session: *mut super::ttp_session_t) 
                         } else {
                             'O' as i32
                         }) as u8;
-                        status = super::io::build_datagram(
+                        super::io::build_datagram(
                             session,
                             (*xfer).block,
                             block_type as u16,
                             datagram.as_mut_ptr(),
-                        );
-                        if status < 0 as libc::c_int {
-                            extc::sprintf(
-                                g_error.as_mut_ptr(),
-                                b"Could not read block #%u\0" as *const u8 as *const libc::c_char,
-                                (*xfer).block,
-                            );
-                            crate::common::error::error_handler(
-                                b"main.c\0" as *const u8 as *const libc::c_char,
-                                345 as libc::c_int,
-                                g_error.as_mut_ptr(),
-                                1 as libc::c_int,
-                            );
-                        }
+                        )
+                        .unwrap();
                         status = extc::sendto(
                             (*xfer).udp_fd,
                             datagram.as_mut_ptr() as *const libc::c_void,
