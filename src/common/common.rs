@@ -1,16 +1,12 @@
 use crate::extc;
 use ::libc;
 use anyhow::bail;
-#[no_mangle]
-pub static mut PROTOCOL_REVISION: u32 = 0x20061025 as libc::c_int as u32;
-#[no_mangle]
-pub static mut REQUEST_RETRANSMIT: u16 = 0 as libc::c_int as u16;
-#[no_mangle]
-pub static mut REQUEST_RESTART: u16 = 1 as libc::c_int as u16;
-#[no_mangle]
-pub static mut REQUEST_STOP: u16 = 2 as libc::c_int as u16;
-#[no_mangle]
-pub static mut REQUEST_ERROR_RATE: u16 = 3 as libc::c_int as u16;
+
+pub const PROTOCOL_REVISION: u32 = 0x20061025 as libc::c_int as u32;
+pub const REQUEST_RETRANSMIT: u16 = 0 as libc::c_int as u16;
+pub const REQUEST_RESTART: u16 = 1 as libc::c_int as u16;
+pub const REQUEST_STOP: u16 = 2 as libc::c_int as u16;
+pub const REQUEST_ERROR_RATE: u16 = 3 as libc::c_int as u16;
 
 pub unsafe fn get_usec_since(mut old_time: *mut extc::timeval) -> u64 {
     let mut now: extc::timeval = extc::timeval {

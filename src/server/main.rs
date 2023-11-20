@@ -129,8 +129,8 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) ->
         }
     }
 }
-#[no_mangle]
-pub unsafe extern "C" fn client_handler(mut session: *mut super::ttp_session_t) {
+
+pub unsafe fn client_handler(mut session: *mut super::ttp_session_t) {
     let mut retransmission: super::retransmission_t = super::retransmission_t {
         request_type: 0,
         block: 0,
@@ -474,8 +474,8 @@ pub unsafe extern "C" fn client_handler(mut session: *mut super::ttp_session_t) 
         }
     }
 }
-#[no_mangle]
-pub unsafe extern "C" fn process_options(
+
+pub unsafe fn process_options(
     mut argc: libc::c_int,
     mut argv: *mut *mut libc::c_char,
     mut parameter: *mut super::ttp_parameter_t,
@@ -830,7 +830,7 @@ pub unsafe extern "C" fn process_options(
         );
     }
 }
-#[no_mangle]
+
 pub unsafe extern "C" fn reap(mut signum: libc::c_int) {
     let mut status: libc::c_int = 0;
     while extc::waitpid(-(1 as libc::c_int), &mut status, 1 as libc::c_int) > 0 as libc::c_int {

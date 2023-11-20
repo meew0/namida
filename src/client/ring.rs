@@ -4,8 +4,7 @@ use anyhow::bail;
 
 use super::{ring_buffer_t, ttp_session_t};
 
-#[no_mangle]
-pub static mut EMPTY: libc::c_int = -(1 as libc::c_int);
+pub const EMPTY: i32 = -1;
 pub unsafe fn ring_full(mut ring: *mut ring_buffer_t) -> libc::c_int {
     let mut status: libc::c_int = 0;
     let mut full: libc::c_int = 0;
