@@ -2,14 +2,12 @@ use crate::extc;
 
 pub mod config;
 pub mod io;
-pub mod log;
 pub mod main;
 pub mod network;
 pub mod protocol;
 pub mod transcript;
 
 #[derive(Copy, Clone)]
-#[repr(C)]
 pub struct retransmission_t {
     pub request_type: u16,
     pub block: u32,
@@ -17,7 +15,6 @@ pub struct retransmission_t {
 }
 
 #[derive(Copy, Clone)]
-#[repr(C)]
 pub struct ttp_parameter_t {
     pub epoch: extc::time_t,
     pub verbose_yn: u8,
@@ -52,7 +49,6 @@ pub struct ttp_parameter_t {
     pub wait_u_sec: libc::c_long,
 }
 #[derive(Copy, Clone)]
-#[repr(C)]
 pub struct ttp_transfer_t {
     pub parameter: *mut ttp_parameter_t,
     pub filename: *mut libc::c_char,
@@ -66,7 +62,6 @@ pub struct ttp_transfer_t {
     pub block: u32,
 }
 #[derive(Copy, Clone)]
-#[repr(C)]
 pub struct ttp_session_t {
     pub parameter: *mut ttp_parameter_t,
     pub transfer: ttp_transfer_t,

@@ -1,8 +1,7 @@
 use crate::extc;
 use ::libc;
 
-#[no_mangle]
-pub unsafe extern "C" fn xscript_close_server(
+pub unsafe fn xscript_close_server(
     mut session: *mut super::ttp_session_t,
     mut delta: u64,
 ) {
@@ -29,8 +28,7 @@ pub unsafe extern "C" fn xscript_close_server(
     );
     extc::fclose((*xfer).transcript);
 }
-#[no_mangle]
-pub unsafe extern "C" fn xscript_data_log_server(
+pub unsafe fn xscript_data_log_server(
     mut session: *mut super::ttp_session_t,
     mut logline: *const libc::c_char,
 ) {
@@ -41,8 +39,7 @@ pub unsafe extern "C" fn xscript_data_log_server(
     );
     extc::fflush((*session).transfer.transcript);
 }
-#[no_mangle]
-pub unsafe extern "C" fn xscript_data_start_server(
+pub unsafe fn xscript_data_start_server(
     mut session: *mut super::ttp_session_t,
     mut epoch: *const extc::timeval,
 ) {
@@ -54,8 +51,7 @@ pub unsafe extern "C" fn xscript_data_start_server(
     );
     extc::fflush((*session).transfer.transcript);
 }
-#[no_mangle]
-pub unsafe extern "C" fn xscript_data_stop_server(
+pub unsafe fn xscript_data_stop_server(
     mut session: *mut super::ttp_session_t,
     mut epoch: *const extc::timeval,
 ) {
@@ -67,8 +63,7 @@ pub unsafe extern "C" fn xscript_data_stop_server(
     );
     extc::fflush((*session).transfer.transcript);
 }
-#[no_mangle]
-pub unsafe extern "C" fn xscript_open_server(mut session: *mut super::ttp_session_t) {
+pub unsafe fn xscript_open_server(mut session: *mut super::ttp_session_t) {
     let mut xfer: *mut super::ttp_transfer_t = &mut (*session).transfer;
     let mut param: *mut super::ttp_parameter_t = (*session).parameter;
     let mut filename: [libc::c_char; 64] = [0; 64];

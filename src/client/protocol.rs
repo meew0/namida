@@ -5,8 +5,7 @@ use super::{
 };
 use crate::extc;
 
-#[no_mangle]
-pub unsafe extern "C" fn ttp_authenticate_client(
+pub unsafe fn ttp_authenticate_client(
     mut session: *mut ttp_session_t,
     mut secret_c: *mut u8,
 ) -> libc::c_int {
@@ -74,8 +73,7 @@ pub unsafe extern "C" fn ttp_authenticate_client(
     };
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn ttp_negotiate_client(mut session: *mut ttp_session_t) -> libc::c_int {
+pub unsafe fn ttp_negotiate_client(mut session: *mut ttp_session_t) -> libc::c_int {
     let mut server_revision: u32 = 0;
     let mut client_revision: u32 = extc::__bswap_32(crate::common::common::PROTOCOL_REVISION);
     let mut status: libc::c_int = 0;
@@ -113,8 +111,7 @@ pub unsafe extern "C" fn ttp_negotiate_client(mut session: *mut ttp_session_t) -
         -(1 as libc::c_int)
     };
 }
-#[no_mangle]
-pub unsafe extern "C" fn ttp_open_transfer_client(
+pub unsafe fn ttp_open_transfer_client(
     mut session: *mut ttp_session_t,
     mut remote_filename: *const libc::c_char,
     mut local_filename: *const libc::c_char,
@@ -410,8 +407,7 @@ pub unsafe extern "C" fn ttp_open_transfer_client(
     }
     return 0 as libc::c_int;
 }
-#[no_mangle]
-pub unsafe extern "C" fn ttp_open_port_client(mut session: *mut ttp_session_t) -> libc::c_int {
+pub unsafe fn ttp_open_port_client(mut session: *mut ttp_session_t) -> libc::c_int {
     let mut udp_address: extc::sockaddr = extc::sockaddr {
         sa_family: 0,
         sa_data: [0; 14],
@@ -463,8 +459,7 @@ pub unsafe extern "C" fn ttp_open_port_client(mut session: *mut ttp_session_t) -
     }
     return 0 as libc::c_int;
 }
-#[no_mangle]
-pub unsafe extern "C" fn ttp_repeat_retransmit(mut session: *mut ttp_session_t) -> libc::c_int {
+pub unsafe fn ttp_repeat_retransmit(mut session: *mut ttp_session_t) -> libc::c_int {
     let mut retransmission: [retransmission_t; 2048] = [retransmission_t {
         request_type: 0,
         block: 0,
@@ -570,8 +565,7 @@ pub unsafe extern "C" fn ttp_repeat_retransmit(mut session: *mut ttp_session_t) 
     }
     return 0 as libc::c_int;
 }
-#[no_mangle]
-pub unsafe extern "C" fn ttp_request_retransmit(
+pub unsafe fn ttp_request_retransmit(
     mut session: *mut ttp_session_t,
     mut block: u32,
 ) -> libc::c_int {
@@ -612,8 +606,7 @@ pub unsafe extern "C" fn ttp_request_retransmit(
     (*rexmit).index_max;
     return 0 as libc::c_int;
 }
-#[no_mangle]
-pub unsafe extern "C" fn ttp_request_stop(mut session: *mut ttp_session_t) -> libc::c_int {
+pub unsafe fn ttp_request_stop(mut session: *mut ttp_session_t) -> libc::c_int {
     let mut retransmission: retransmission_t = {
         let mut init = retransmission_t {
             request_type: 0 as libc::c_int as u16,
@@ -640,8 +633,7 @@ pub unsafe extern "C" fn ttp_request_stop(mut session: *mut ttp_session_t) -> li
     }
     return 0 as libc::c_int;
 }
-#[no_mangle]
-pub unsafe extern "C" fn ttp_update_stats(mut session: *mut ttp_session_t) -> libc::c_int {
+pub unsafe fn ttp_update_stats(mut session: *mut ttp_session_t) -> libc::c_int {
     let mut now_epoch: extc::time_t = extc::time(0 as *mut extc::time_t);
     let mut delta: u64 = 0;
     let mut d_seconds: libc::c_double = 0.;

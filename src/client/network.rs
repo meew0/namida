@@ -3,8 +3,7 @@ use ::libc;
 
 use super::{ttp_parameter_t, ttp_session_t};
 
-#[no_mangle]
-pub unsafe extern "C" fn create_tcp_socket_client(
+pub unsafe fn create_tcp_socket_client(
     mut session: *mut ttp_session_t,
     mut server_name: *const libc::c_char,
     mut server_port: u16,
@@ -142,8 +141,7 @@ pub unsafe extern "C" fn create_tcp_socket_client(
     }
     return socket_fd;
 }
-#[no_mangle]
-pub unsafe extern "C" fn create_udp_socket_client(
+pub unsafe fn create_udp_socket_client(
     mut parameter: *mut ttp_parameter_t,
 ) -> libc::c_int {
     let mut hints: extc::addrinfo = extc::addrinfo {

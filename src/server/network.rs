@@ -1,8 +1,7 @@
 use crate::extc;
 use ::libc;
 
-#[no_mangle]
-pub unsafe extern "C" fn create_tcp_socket_server(
+pub unsafe fn create_tcp_socket_server(
     mut parameter: *mut super::ttp_parameter_t,
 ) -> libc::c_int {
     let mut hints: extc::addrinfo = extc::addrinfo {
@@ -101,8 +100,7 @@ pub unsafe extern "C" fn create_tcp_socket_server(
     }
     return socket_fd;
 }
-#[no_mangle]
-pub unsafe extern "C" fn create_udp_socket_server(
+pub unsafe fn create_udp_socket_server(
     mut parameter: *mut super::ttp_parameter_t,
 ) -> libc::c_int {
     let mut socket_fd: libc::c_int = 0;

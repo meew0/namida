@@ -10,13 +10,11 @@ pub mod transcript;
 use crate::extc;
 
 #[derive(Copy, Clone)]
-#[repr(C)]
 pub struct command_t {
     pub count: u8,
     pub text: [*const libc::c_char; 10],
 }
 #[derive(Copy, Clone)]
-#[repr(C)]
 pub struct ring_buffer_t {
     pub datagrams: *mut u8,
     pub datagram_size: libc::c_int,
@@ -30,14 +28,12 @@ pub struct ring_buffer_t {
     pub space_ready: libc::c_int,
 }
 #[derive(Copy, Clone)]
-#[repr(C)]
 pub struct retransmission_t {
     pub request_type: u16,
     pub block: u32,
     pub error_rate: u32,
 }
 #[derive(Copy, Clone)]
-#[repr(C)]
 pub struct statistics_t {
     pub start_time: extc::timeval,
     pub stop_time: extc::timeval,
@@ -58,14 +54,12 @@ pub struct statistics_t {
     pub this_udp_errors: u64,
 }
 #[derive(Copy, Clone)]
-#[repr(C)]
 pub struct retransmit_t {
     pub table: *mut u32,
     pub table_size: u32,
     pub index_max: u32,
 }
 #[derive(Copy, Clone)]
-#[repr(C)]
 pub struct ttp_parameter_t {
     pub server_name: *mut libc::c_char,
     pub server_port: u16,
@@ -91,7 +85,6 @@ pub struct ttp_parameter_t {
     pub ringbuf: *mut libc::c_char,
 }
 #[derive(Copy, Clone)]
-#[repr(C)]
 pub struct ttp_transfer_t {
     pub epoch: i64,
     pub remote_filename: *const libc::c_char,
@@ -115,7 +108,6 @@ pub struct ttp_transfer_t {
     pub on_wire_estimate: u32,
 }
 #[derive(Copy, Clone)]
-#[repr(C)]
 pub struct ttp_session_t {
     pub parameter: *mut ttp_parameter_t,
     pub transfer: ttp_transfer_t,

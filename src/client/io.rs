@@ -2,8 +2,7 @@ use super::{ttp_session_t, ttp_transfer_t};
 use crate::extc;
 use ::libc;
 
-#[no_mangle]
-pub unsafe extern "C" fn accept_block(
+pub unsafe fn accept_block(
     mut session: *mut ttp_session_t,
     mut block_index: u32,
     mut block: *mut u8,

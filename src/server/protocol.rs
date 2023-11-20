@@ -1,8 +1,7 @@
 use crate::extc;
 use ::libc;
 
-#[no_mangle]
-pub unsafe extern "C" fn ttp_accept_retransmit(
+pub unsafe fn ttp_accept_retransmit(
     mut session: *mut super::ttp_session_t,
     mut retransmission: *mut super::retransmission_t,
     mut datagram: *mut u8,
@@ -148,8 +147,7 @@ pub unsafe extern "C" fn ttp_accept_retransmit(
     }
     return 0 as libc::c_int;
 }
-#[no_mangle]
-pub unsafe extern "C" fn ttp_authenticate_server(
+pub unsafe fn ttp_authenticate_server(
     mut session: *mut super::ttp_session_t,
     mut secret_c: *const u8,
 ) -> libc::c_int {
@@ -228,8 +226,7 @@ pub unsafe extern "C" fn ttp_authenticate_server(
     }
     return 0 as libc::c_int;
 }
-#[no_mangle]
-pub unsafe extern "C" fn ttp_negotiate_server(
+pub unsafe fn ttp_negotiate_server(
     mut session: *mut super::ttp_session_t,
 ) -> libc::c_int {
     let mut server_revision: u32 = extc::__bswap_32(crate::common::common::PROTOCOL_REVISION);
@@ -267,8 +264,7 @@ pub unsafe extern "C" fn ttp_negotiate_server(
         -(1 as libc::c_int)
     };
 }
-#[no_mangle]
-pub unsafe extern "C" fn ttp_open_port_server(
+pub unsafe fn ttp_open_port_server(
     mut session: *mut super::ttp_session_t,
 ) -> libc::c_int {
     let mut address: *mut extc::sockaddr = 0 as *mut extc::sockaddr;
@@ -388,8 +384,7 @@ pub unsafe extern "C" fn ttp_open_port_server(
     (*session).transfer.udp_address = address;
     return 0 as libc::c_int;
 }
-#[no_mangle]
-pub unsafe extern "C" fn ttp_open_transfer_server(
+pub unsafe fn ttp_open_transfer_server(
     mut session: *mut super::ttp_session_t,
 ) -> libc::c_int {
     let mut filename: [libc::c_char; 1024] = [0; 1024];

@@ -26,8 +26,7 @@ pub static mut DEFAULT_LOSSLESS: u8 = 1 as libc::c_int as u8;
 pub static mut DEFAULT_LOSSWINDOW_MS: u32 = 1000 as libc::c_int as u32;
 pub static mut DEFAULT_BLOCKDUMP: u8 = 0 as libc::c_int as u8;
 pub static mut MAX_COMMAND_LENGTH: libc::c_int = 1024 as libc::c_int;
-#[no_mangle]
-pub unsafe extern "C" fn reset_client(mut parameter: *mut ttp_parameter_t) {
+pub unsafe fn reset_client(mut parameter: *mut ttp_parameter_t) {
     if !((*parameter).server_name).is_null() {
         extc::free((*parameter).server_name as *mut libc::c_void);
     }

@@ -263,8 +263,7 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *const libc::c_char) 
         }
     }
 }
-#[no_mangle]
-pub unsafe extern "C" fn parse_command(mut command: *mut command_t, mut buffer: *mut libc::c_char) {
+pub unsafe fn parse_command(mut command: *mut command_t, mut buffer: *mut libc::c_char) {
     (*command).count = 0 as libc::c_int as u8;
     while *(*extc::__ctype_b_loc()).offset(*buffer as libc::c_int as isize) as libc::c_int
         & extc::_ISspace as libc::c_int as libc::c_ushort as libc::c_int

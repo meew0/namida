@@ -5,8 +5,7 @@ use super::{ring_buffer_t, ttp_session_t};
 
 #[no_mangle]
 pub static mut EMPTY: libc::c_int = -(1 as libc::c_int);
-#[no_mangle]
-pub unsafe extern "C" fn ring_full(mut ring: *mut ring_buffer_t) -> libc::c_int {
+pub unsafe fn ring_full(mut ring: *mut ring_buffer_t) -> libc::c_int {
     let mut status: libc::c_int = 0;
     let mut full: libc::c_int = 0;
     status = extc::pthread_mutex_lock(&mut (*ring).mutex);
@@ -31,8 +30,7 @@ pub unsafe extern "C" fn ring_full(mut ring: *mut ring_buffer_t) -> libc::c_int 
     }
     return full;
 }
-#[no_mangle]
-pub unsafe extern "C" fn ring_cancel(mut ring: *mut ring_buffer_t) -> libc::c_int {
+pub unsafe fn ring_cancel(mut ring: *mut ring_buffer_t) -> libc::c_int {
     let mut status: libc::c_int = 0;
     status = extc::pthread_mutex_lock(&mut (*ring).mutex);
     if status != 0 as libc::c_int {
@@ -75,8 +73,7 @@ pub unsafe extern "C" fn ring_cancel(mut ring: *mut ring_buffer_t) -> libc::c_in
     }
     return 0 as libc::c_int;
 }
-#[no_mangle]
-pub unsafe extern "C" fn ring_confirm(mut ring: *mut ring_buffer_t) -> libc::c_int {
+pub unsafe fn ring_confirm(mut ring: *mut ring_buffer_t) -> libc::c_int {
     let mut status: libc::c_int = 0;
     status = extc::pthread_mutex_lock(&mut (*ring).mutex);
     if status != 0 as libc::c_int {
@@ -121,8 +118,7 @@ pub unsafe extern "C" fn ring_confirm(mut ring: *mut ring_buffer_t) -> libc::c_i
     }
     return 0 as libc::c_int;
 }
-#[no_mangle]
-pub unsafe extern "C" fn ring_create(mut session: *mut ttp_session_t) -> *mut ring_buffer_t {
+pub unsafe fn ring_create(mut session: *mut ttp_session_t) -> *mut ring_buffer_t {
     let mut ring: *mut ring_buffer_t = 0 as *mut ring_buffer_t;
     let mut status: libc::c_int = 0;
     ring = extc::calloc(
@@ -190,8 +186,7 @@ pub unsafe extern "C" fn ring_create(mut session: *mut ttp_session_t) -> *mut ri
     (*ring).base_data = 0 as libc::c_int;
     return ring;
 }
-#[no_mangle]
-pub unsafe extern "C" fn ring_destroy(mut ring: *mut ring_buffer_t) -> libc::c_int {
+pub unsafe fn ring_destroy(mut ring: *mut ring_buffer_t) -> libc::c_int {
     let mut status: libc::c_int = 0;
     status = extc::pthread_mutex_destroy(&mut (*ring).mutex);
     if status != 0 as libc::c_int {
@@ -226,8 +221,7 @@ pub unsafe extern "C" fn ring_destroy(mut ring: *mut ring_buffer_t) -> libc::c_i
     extc::free(ring as *mut libc::c_void);
     return 0 as libc::c_int;
 }
-#[no_mangle]
-pub unsafe extern "C" fn ring_dump(
+pub unsafe fn ring_dump(
     mut ring: *mut ring_buffer_t,
     mut out: *mut extc::FILE,
 ) -> libc::c_int {
@@ -302,8 +296,7 @@ pub unsafe extern "C" fn ring_dump(
     }
     return 0 as libc::c_int;
 }
-#[no_mangle]
-pub unsafe extern "C" fn ring_peek(mut ring: *mut ring_buffer_t) -> *mut u8 {
+pub unsafe fn ring_peek(mut ring: *mut ring_buffer_t) -> *mut u8 {
     let mut status: libc::c_int = 0;
     let mut address: *mut u8 = 0 as *mut u8;
     status = extc::pthread_mutex_lock(&mut (*ring).mutex);
@@ -343,8 +336,7 @@ pub unsafe extern "C" fn ring_peek(mut ring: *mut ring_buffer_t) -> *mut u8 {
     }
     return address;
 }
-#[no_mangle]
-pub unsafe extern "C" fn ring_pop(mut ring: *mut ring_buffer_t) -> libc::c_int {
+pub unsafe fn ring_pop(mut ring: *mut ring_buffer_t) -> libc::c_int {
     let mut status: libc::c_int = 0;
     status = extc::pthread_mutex_lock(&mut (*ring).mutex);
     if status != 0 as libc::c_int {
@@ -394,8 +386,7 @@ pub unsafe extern "C" fn ring_pop(mut ring: *mut ring_buffer_t) -> libc::c_int {
     }
     return 0 as libc::c_int;
 }
-#[no_mangle]
-pub unsafe extern "C" fn ring_reserve(mut ring: *mut ring_buffer_t) -> *mut u8 {
+pub unsafe fn ring_reserve(mut ring: *mut ring_buffer_t) -> *mut u8 {
     let mut status: libc::c_int = 0;
     let mut next: libc::c_int = 0;
     let mut address: *mut u8 = 0 as *mut u8;

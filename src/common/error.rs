@@ -3,8 +3,7 @@ use ::libc;
 
 #[no_mangle]
 pub static mut g_error: [libc::c_char; 512] = [0; 512];
-#[no_mangle]
-pub unsafe extern "C" fn error_handler(
+pub unsafe fn error_handler(
     mut file: *const libc::c_char,
     mut line: libc::c_int,
     mut message: *const libc::c_char,

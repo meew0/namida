@@ -10,8 +10,7 @@ pub static mut DEFAULT_VERBOSE_YN: u8 = 1 as libc::c_int as u8;
 pub static mut DEFAULT_TRANSCRIPT_YN: u8 = 0 as libc::c_int as u8;
 pub static mut DEFAULT_IPV6_YN: u8 = 0 as libc::c_int as u8;
 pub static mut DEFAULT_HEARTBEAT_TIMEOUT: u16 = 15 as libc::c_int as u16;
-#[no_mangle]
-pub unsafe extern "C" fn reset_server(mut parameter: *mut super::ttp_parameter_t) {
+pub unsafe fn reset_server(mut parameter: *mut super::ttp_parameter_t) {
     extc::memset(
         parameter as *mut libc::c_void,
         0 as libc::c_int,

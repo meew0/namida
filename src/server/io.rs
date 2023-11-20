@@ -1,8 +1,7 @@
 use crate::extc;
 use ::libc;
 
-#[no_mangle]
-pub unsafe extern "C" fn build_datagram(
+pub unsafe fn build_datagram(
     mut session: *mut super::ttp_session_t,
     mut block_index: u32,
     mut block_type: u16,

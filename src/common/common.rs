@@ -11,8 +11,7 @@ pub static mut REQUEST_STOP: u16 = 2 as libc::c_int as u16;
 #[no_mangle]
 pub static mut REQUEST_ERROR_RATE: u16 = 3 as libc::c_int as u16;
 
-#[no_mangle]
-pub unsafe extern "C" fn get_usec_since(mut old_time: *mut extc::timeval) -> u64 {
+pub unsafe fn get_usec_since(mut old_time: *mut extc::timeval) -> u64 {
     let mut now: extc::timeval = extc::timeval {
         tv_sec: 0,
         tv_usec: 0,
@@ -26,8 +25,7 @@ pub unsafe extern "C" fn get_usec_since(mut old_time: *mut extc::timeval) -> u64
     }
     return result.wrapping_add((now.tv_usec - (*old_time).tv_usec) as u64);
 }
-#[no_mangle]
-pub unsafe extern "C" fn htonll(mut value: u64) -> u64 {
+pub unsafe fn htonll(mut value: u64) -> u64 {
     static mut necessary: libc::c_int = -(1 as libc::c_int);
     if necessary == -(1 as libc::c_int) {
         necessary = (5 as libc::c_int != extc::__bswap_16(5 as libc::c_int as u16) as libc::c_int)
@@ -44,8 +42,7 @@ pub unsafe extern "C" fn htonll(mut value: u64) -> u64 {
         return value;
     };
 }
-#[no_mangle]
-pub unsafe extern "C" fn make_transcript_filename(
+pub unsafe fn make_transcript_filename(
     mut buffer: *mut libc::c_char,
     mut epoch: extc::time_t,
     mut extension: *const libc::c_char,
@@ -77,8 +74,7 @@ pub unsafe extern "C" fn make_transcript_filename(
     );
     return buffer;
 }
-#[no_mangle]
-pub unsafe extern "C" fn ntohll(mut value: u64) -> u64 {
+pub unsafe fn ntohll(mut value: u64) -> u64 {
     return htonll(value);
 }
 
@@ -89,8 +85,7 @@ pub fn prepare_proof(mut buffer: &mut [u8], mut secret: &[u8]) -> md5::Digest {
     md5::compute(buffer)
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn read_line(
+pub unsafe fn read_line(
     mut fd: libc::c_int,
     mut buffer: *mut libc::c_char,
     mut buffer_length: usize,
@@ -124,8 +119,7 @@ pub unsafe extern "C" fn read_line(
     *buffer.offset((buffer_offset - 1 as libc::c_int) as isize) = '\0' as i32 as libc::c_char;
     return 0 as libc::c_int;
 }
-#[no_mangle]
-pub unsafe extern "C" fn fread_line(
+pub unsafe fn fread_line(
     mut f: *mut extc::FILE,
     mut buffer: *mut libc::c_char,
     mut buffer_length: u64,
@@ -160,8 +154,7 @@ pub unsafe extern "C" fn fread_line(
     *buffer.offset((buffer_offset - 1 as libc::c_int) as isize) = '\0' as i32 as libc::c_char;
     return 0 as libc::c_int;
 }
-#[no_mangle]
-pub unsafe extern "C" fn usleep_that_works(mut usec: u64) {
+pub unsafe fn usleep_that_works(mut usec: u64) {
     let mut sleep_time: u64 = usec / 10000 as libc::c_int as u64 * 10000 as libc::c_int as u64;
     let mut delay: extc::timeval = extc::timeval {
         tv_sec: 0,
@@ -185,8 +178,7 @@ pub unsafe extern "C" fn usleep_that_works(mut usec: u64) {
     }
     while get_usec_since(&mut now) < usec {}
 }
-#[no_mangle]
-pub unsafe extern "C" fn get_udp_in_errors() -> u64 {
+pub unsafe fn get_udp_in_errors() -> u64 {
     let mut f: *mut extc::FILE = 0 as *mut extc::FILE;
     let mut errs: u64 = 0 as libc::c_int as u64;
     let mut buf: [libc::c_char; 512] = [0; 512];
@@ -268,8 +260,7 @@ pub unsafe extern "C" fn get_udp_in_errors() -> u64 {
     extc::fclose(f);
     return errs;
 }
-#[no_mangle]
-pub unsafe extern "C" fn full_write(
+pub unsafe fn full_write(
     mut fd: libc::c_int,
     mut buf: *const libc::c_void,
     mut count: u64,
@@ -293,8 +284,7 @@ pub unsafe extern "C" fn full_write(
     }
     return written;
 }
-#[no_mangle]
-pub unsafe extern "C" fn full_read(
+pub unsafe fn full_read(
     mut fd: libc::c_int,
     mut buf: *mut libc::c_void,
     mut count: u64,

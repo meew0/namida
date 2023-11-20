@@ -6,8 +6,7 @@ use super::{
 };
 use crate::extc;
 
-#[no_mangle]
-pub unsafe extern "C" fn command_close(
+pub unsafe fn command_close(
     mut command: *mut command_t,
     mut session: *mut ttp_session_t,
 ) -> libc::c_int {
@@ -26,8 +25,7 @@ pub unsafe extern "C" fn command_close(
     }
     return 0 as libc::c_int;
 }
-#[no_mangle]
-pub unsafe extern "C" fn command_connect(
+pub unsafe fn command_connect(
     mut command: *mut command_t,
     mut parameter: *mut ttp_parameter_t,
 ) -> *mut ttp_session_t {
@@ -132,8 +130,7 @@ pub unsafe extern "C" fn command_connect(
     extc::free(secret as *mut libc::c_void);
     return session;
 }
-#[no_mangle]
-pub unsafe extern "C" fn command_dir(
+pub unsafe fn command_dir(
     mut command: *mut command_t,
     mut session: *mut ttp_session_t,
 ) -> libc::c_int {
@@ -228,8 +225,7 @@ pub unsafe extern "C" fn command_dir(
     );
     return 0 as libc::c_int;
 }
-#[no_mangle]
-pub unsafe extern "C" fn command_get(
+pub unsafe fn command_get(
     mut command: *mut command_t,
     mut session: *mut ttp_session_t,
 ) -> libc::c_int {
@@ -1010,8 +1006,7 @@ pub unsafe extern "C" fn command_get(
         }
     };
 }
-#[no_mangle]
-pub unsafe extern "C" fn command_help(
+pub unsafe fn command_help(
     mut command: *mut command_t,
     mut session: *mut ttp_session_t,
 ) -> libc::c_int {
@@ -1144,8 +1139,7 @@ pub unsafe extern "C" fn command_help(
     }
     return 0 as libc::c_int;
 }
-#[no_mangle]
-pub unsafe extern "C" fn command_quit(
+pub unsafe fn command_quit(
     mut command: *mut command_t,
     mut session: *mut ttp_session_t,
 ) -> libc::c_int {
@@ -1163,8 +1157,7 @@ pub unsafe extern "C" fn command_quit(
     );
     extc::exit(1 as libc::c_int);
 }
-#[no_mangle]
-pub unsafe extern "C" fn command_set(
+pub unsafe fn command_set(
     mut command: *mut command_t,
     mut parameter: *mut ttp_parameter_t,
 ) -> libc::c_int {
@@ -1654,7 +1647,6 @@ pub unsafe extern "C" fn command_set(
     extc::printf(b"\n\0" as *const u8 as *const libc::c_char);
     return 0 as libc::c_int;
 }
-#[no_mangle]
 pub unsafe extern "C" fn disk_thread(mut arg: *mut libc::c_void) -> *mut libc::c_void {
     let mut session: *mut ttp_session_t = arg as *mut ttp_session_t;
     let mut datagram: *mut u8 = 0 as *mut u8;
@@ -1686,8 +1678,7 @@ pub unsafe extern "C" fn disk_thread(mut arg: *mut libc::c_void) -> *mut libc::c
         super::ring::ring_pop((*session).transfer.ring_buffer);
     }
 }
-#[no_mangle]
-pub unsafe extern "C" fn parse_fraction(
+pub unsafe fn parse_fraction(
     mut fraction: *const libc::c_char,
     mut num: *mut u16,
     mut den: *mut u16,
@@ -1706,8 +1697,7 @@ pub unsafe extern "C" fn parse_fraction(
     *den = extc::atoi(slash.offset(1 as libc::c_int as isize)) as u16;
     return 0 as libc::c_int;
 }
-#[no_mangle]
-pub unsafe extern "C" fn got_block(
+pub unsafe fn got_block(
     mut session: *mut ttp_session_t,
     mut blocknr: u32,
 ) -> libc::c_int {
@@ -1718,8 +1708,7 @@ pub unsafe extern "C" fn got_block(
         as libc::c_int
         & (1 as libc::c_int) << blocknr % 8 as libc::c_int as u32;
 }
-#[no_mangle]
-pub unsafe extern "C" fn dump_blockmap(
+pub unsafe fn dump_blockmap(
     mut postfix: *const libc::c_char,
     mut xfer: *const ttp_transfer_t,
 ) {
