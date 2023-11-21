@@ -12,6 +12,7 @@
 extern crate libc;
 pub mod client;
 pub mod common;
+pub mod datagram;
 pub mod extc;
 pub mod server;
 pub mod util;

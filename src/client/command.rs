@@ -4,10 +4,9 @@ use ::libc;
 use anyhow::bail;
 
 use super::{
-    command_t, retransmit_t, ring_buffer_t, statistics_t, ttp_parameter_t, ttp_session_t,
-    ttp_transfer_t,
+    command_t, retransmit_t, ring, statistics_t, ttp_parameter_t, ttp_session_t, ttp_transfer_t,
 };
-use crate::extc;
+use crate::{datagram, extc};
 
 pub unsafe fn command_close(
     mut command: *mut command_t,
@@ -176,8 +175,6 @@ pub unsafe fn command_get(
     mut session: *mut ttp_session_t,
 ) -> anyhow::Result<()> {
     let mut current_block: u64;
-    let mut datagram: *mut u8 = 0 as *mut u8;
-    let mut local_datagram: *mut u8 = 0 as *mut u8;
     let mut this_block: u32 = 0 as libc::c_int as u32;
     let mut this_type: u16 = 0 as libc::c_int as u16;
     let mut delta: u64 = 0 as libc::c_int as u64;
@@ -367,15 +364,11 @@ pub unsafe fn command_get(
         if ((*xfer).received).is_null() {
             panic!("Could not allocate received-data bitfield");
         }
-        (*xfer).ring_buffer = super::ring::ring_create(session);
-        local_datagram = extc::calloc(
-            (6 as libc::c_int as u32).wrapping_add((*(*session).parameter).block_size)
-                as libc::c_ulong,
-            ::core::mem::size_of::<u8>() as libc::c_ulong,
-        ) as *mut u8;
-        if local_datagram.is_null() {
-            panic!("Could not allocate fast local datagram buffer in command_get()");
-        }
+        (*xfer).ring_buffer = super::ring::RingBuffer::create((*(*session).parameter).block_size);
+
+        let mut local_datagram_buffer =
+            ring::allocate_zeroed_boxed_slice(6 + (*(*session).parameter).block_size as usize);
+
         status = extc::pthread_create(
             &mut disk_thread_id,
             0 as *const extc::pthread_attr_t,
@@ -404,7 +397,7 @@ pub unsafe fn command_get(
         loop {
             status = extc::recvfrom(
                 (*xfer).udp_fd,
-                local_datagram as *mut libc::c_void,
+                local_datagram_buffer.as_mut_ptr() as *mut libc::c_void,
                 (6 as libc::c_int as u32).wrapping_add((*(*session).parameter).block_size) as usize,
                 0 as libc::c_int,
                 extc::__SOCKADDR_ARG {
@@ -427,9 +420,11 @@ pub unsafe fn command_get(
                     break 's_202;
                 }
             }
-            this_block = extc::__bswap_32(*(local_datagram as *mut u32));
-            this_type =
-                extc::__bswap_16(*(local_datagram.offset(4 as libc::c_int as isize) as *mut u16));
+
+            let local_datagram_view = datagram::View::parse(&local_datagram_buffer);
+
+            this_block = local_datagram_view.header.block_index;
+            this_type = local_datagram_view.header.block_type;
             (*xfer).stats.total_blocks = ((*xfer).stats.total_blocks).wrapping_add(1);
             (*xfer).stats.total_blocks;
             if this_type as libc::c_int != 'R' as i32 {
@@ -444,119 +439,84 @@ pub unsafe fn command_get(
                     ((*xfer).stats.total_recvd_retransmits).wrapping_add(1);
                 (*xfer).stats.total_recvd_retransmits;
             }
-            if super::ring::ring_full((*xfer).ring_buffer) == 0 {
-                if got_block(session, this_block) == 0
+            if !(*xfer).ring_buffer.is_full()
+                && (got_block(session, this_block) == 0
                     || this_type as libc::c_int == 'X' as i32
-                    || (*xfer).restart_pending as libc::c_int != 0
-                {
-                    if got_block(session, this_block) == 0 {
-                        datagram = super::ring::ring_reserve((*xfer).ring_buffer);
-                        extc::memcpy(
-                            datagram as *mut libc::c_void,
-                            local_datagram as *const libc::c_void,
-                            (6 as libc::c_int as u32)
-                                .wrapping_add((*(*session).parameter).block_size)
-                                as libc::c_ulong,
-                        );
-                        if super::ring::ring_confirm((*xfer).ring_buffer) < 0 as libc::c_int {
-                            println!("WARNING: Error in accepting block");
-                            current_block = 78252603380123710;
-                            break 's_202;
-                        } else {
-                            let ref mut fresh1 = *((*xfer).received)
-                                .offset((this_block / 8 as libc::c_int as u32) as isize);
-                            *fresh1 = (*fresh1 as libc::c_int
-                                | (1 as libc::c_int) << this_block % 8 as libc::c_int as u32)
-                                as u8;
-                            if (*xfer).blocks_left > 0 as libc::c_int as u32 {
-                                (*xfer).blocks_left = ((*xfer).blocks_left).wrapping_sub(1);
-                                (*xfer).blocks_left;
-                            } else {
-                                extc::printf(
-                                    b"Oops! Negative-going blocks_left count at block: type=%c this=%u final=%u left=%u\n\0"
-                                        as *const u8 as *const libc::c_char,
-                                    this_type as libc::c_int,
-                                    this_block,
-                                    (*xfer).block_count,
-                                    (*xfer).blocks_left,
-                                );
-                            }
-                        }
+                    || (*xfer).restart_pending as libc::c_int != 0)
+            {
+                if got_block(session, this_block) == 0 {
+                    (*xfer).ring_buffer.reserve(local_datagram_view);
+                    (*xfer).ring_buffer.confirm();
+
+                    let ref mut fresh1 =
+                        *((*xfer).received).offset((this_block / 8 as libc::c_int as u32) as isize);
+                    *fresh1 = (*fresh1 as libc::c_int
+                        | (1 as libc::c_int) << this_block % 8 as libc::c_int as u32)
+                        as u8;
+                    if (*xfer).blocks_left > 0 as libc::c_int as u32 {
+                        (*xfer).blocks_left = ((*xfer).blocks_left).wrapping_sub(1);
+                        (*xfer).blocks_left;
+                    } else {
+                        extc::printf(
+                                b"Oops! Negative-going blocks_left count at block: type=%c this=%u final=%u left=%u\n\0"
+                                    as *const u8 as *const libc::c_char,
+                                this_type as libc::c_int,
+                                this_block,
+                                (*xfer).block_count,
+                                (*xfer).blocks_left,
+                            );
                     }
-                    if (*xfer).restart_pending as libc::c_int != 0
-                        && this_type as libc::c_int != 'X' as i32
+                }
+                if (*xfer).restart_pending as libc::c_int != 0
+                    && this_type as libc::c_int != 'X' as i32
+                {
+                    if this_block > (*xfer).restart_lastidx
+                        && this_block <= (*xfer).restart_wireclearidx
                     {
-                        if this_block > (*xfer).restart_lastidx
-                            && this_block <= (*xfer).restart_wireclearidx
-                        {
-                            current_block = 13361531435213260772;
-                        } else {
-                            current_block = 8937240710477387595;
-                        }
+                        current_block = 13361531435213260772;
                     } else {
                         current_block = 8937240710477387595;
                     }
-                    match current_block {
-                        13361531435213260772 => {}
-                        _ => {
-                            if this_block > (*xfer).next_block {
-                                if (*(*session).parameter).lossless == 0 {
-                                    if (*(*session).parameter).losswindow_ms
-                                        == 0 as libc::c_int as u32
-                                    {
-                                        (*xfer).gapless_to_block = this_block;
-                                    } else {
-                                        let mut path_capability: libc::c_double = 0.;
-                                        path_capability = 0.8f64
-                                            * ((*xfer).stats.this_transmit_rate
-                                                + (*xfer).stats.this_retransmit_rate);
-                                        path_capability *= 0.001f64
-                                            * (*(*session).parameter).losswindow_ms
-                                                as libc::c_double;
-                                        let mut earliest_block: u32 = (this_block as libc::c_double
-                                            - (if ((1024 as libc::c_int * 1024 as libc::c_int)
+                } else {
+                    current_block = 8937240710477387595;
+                }
+                match current_block {
+                    13361531435213260772 => {}
+                    _ => {
+                        if this_block > (*xfer).next_block {
+                            if (*(*session).parameter).lossless == 0 {
+                                if (*(*session).parameter).losswindow_ms == 0 as libc::c_int as u32
+                                {
+                                    (*xfer).gapless_to_block = this_block;
+                                } else {
+                                    let mut path_capability: libc::c_double = 0.;
+                                    path_capability = 0.8f64
+                                        * ((*xfer).stats.this_transmit_rate
+                                            + (*xfer).stats.this_retransmit_rate);
+                                    path_capability *= 0.001f64
+                                        * (*(*session).parameter).losswindow_ms as libc::c_double;
+                                    let mut earliest_block: u32 = (this_block as libc::c_double
+                                        - (if ((1024 as libc::c_int * 1024 as libc::c_int)
+                                            as libc::c_double
+                                            * path_capability
+                                            / (8 as libc::c_int as u32
+                                                * (*(*session).parameter).block_size)
+                                                as libc::c_double)
+                                            < this_block.wrapping_sub((*xfer).gapless_to_block)
+                                                as libc::c_double
+                                        {
+                                            (1024 as libc::c_int * 1024 as libc::c_int)
                                                 as libc::c_double
                                                 * path_capability
                                                 / (8 as libc::c_int as u32
                                                     * (*(*session).parameter).block_size)
-                                                    as libc::c_double)
-                                                < this_block.wrapping_sub((*xfer).gapless_to_block)
                                                     as libc::c_double
-                                            {
-                                                (1024 as libc::c_int * 1024 as libc::c_int)
-                                                    as libc::c_double
-                                                    * path_capability
-                                                    / (8 as libc::c_int as u32
-                                                        * (*(*session).parameter).block_size)
-                                                        as libc::c_double
-                                            } else {
-                                                this_block.wrapping_sub((*xfer).gapless_to_block)
-                                                    as libc::c_double
-                                            }))
-                                            as u32;
-                                        block = earliest_block;
-                                        while block < this_block {
-                                            if let Err(err) =
-                                                super::protocol::ttp_request_retransmit(
-                                                    session, block,
-                                                )
-                                            {
-                                                println!(
-                                                    "WARNING: Retransmission request failed: {:?}",
-                                                    err
-                                                );
-                                                current_block = 78252603380123710;
-                                                break 's_202;
-                                            } else {
-                                                block = block.wrapping_add(1);
-                                                block;
-                                            }
-                                        }
-                                        (*xfer).next_block = earliest_block;
-                                        (*xfer).gapless_to_block = earliest_block;
-                                    }
-                                } else {
-                                    block = (*xfer).next_block;
+                                        } else {
+                                            this_block.wrapping_sub((*xfer).gapless_to_block)
+                                                as libc::c_double
+                                        }))
+                                        as u32;
+                                    block = earliest_block;
                                     while block < this_block {
                                         if let Err(err) =
                                             super::protocol::ttp_request_retransmit(session, block)
@@ -572,41 +532,12 @@ pub unsafe fn command_get(
                                             block;
                                         }
                                     }
+                                    (*xfer).next_block = earliest_block;
+                                    (*xfer).gapless_to_block = earliest_block;
                                 }
-                            }
-                            while got_block(
-                                session,
-                                ((*xfer).gapless_to_block).wrapping_add(1 as libc::c_int as u32),
-                            ) != 0
-                                && (*xfer).gapless_to_block < (*xfer).block_count
-                            {
-                                (*xfer).gapless_to_block =
-                                    ((*xfer).gapless_to_block).wrapping_add(1);
-                                (*xfer).gapless_to_block;
-                            }
-                            if this_type as libc::c_int == 'O' as i32 {
-                                (*xfer).next_block =
-                                    this_block.wrapping_add(1 as libc::c_int as u32);
-                            }
-                            if (*xfer).restart_pending as libc::c_int != 0
-                                && (*xfer).next_block >= (*xfer).restart_lastidx
-                            {
-                                (*xfer).restart_pending = 0 as libc::c_int as u8;
-                            }
-                            if this_type as libc::c_int == 'X' as i32 {
-                                if (*xfer).blocks_left == 0 as libc::c_int as u32 {
-                                    break;
-                                }
-                                if (*(*session).parameter).lossless == 0 {
-                                    if (*rexmit).index_max == 0 as libc::c_int as u32
-                                        && (*xfer).restart_pending == 0
-                                    {
-                                        break;
-                                    }
-                                }
-                                block = ((*xfer).gapless_to_block)
-                                    .wrapping_add(1 as libc::c_int as u32);
-                                while block < (*xfer).block_count {
+                            } else {
+                                block = (*xfer).next_block;
+                                while block < this_block {
                                     if let Err(err) =
                                         super::protocol::ttp_request_retransmit(session, block)
                                     {
@@ -621,8 +552,51 @@ pub unsafe fn command_get(
                                         block;
                                     }
                                 }
-                                super::protocol::ttp_repeat_retransmit(session);
                             }
+                        }
+                        while got_block(
+                            session,
+                            ((*xfer).gapless_to_block).wrapping_add(1 as libc::c_int as u32),
+                        ) != 0
+                            && (*xfer).gapless_to_block < (*xfer).block_count
+                        {
+                            (*xfer).gapless_to_block = ((*xfer).gapless_to_block).wrapping_add(1);
+                            (*xfer).gapless_to_block;
+                        }
+                        if this_type as libc::c_int == 'O' as i32 {
+                            (*xfer).next_block = this_block.wrapping_add(1 as libc::c_int as u32);
+                        }
+                        if (*xfer).restart_pending as libc::c_int != 0
+                            && (*xfer).next_block >= (*xfer).restart_lastidx
+                        {
+                            (*xfer).restart_pending = 0 as libc::c_int as u8;
+                        }
+                        if this_type as libc::c_int == 'X' as i32 {
+                            if (*xfer).blocks_left == 0 as libc::c_int as u32 {
+                                break;
+                            }
+                            if (*(*session).parameter).lossless == 0 {
+                                if (*rexmit).index_max == 0 as libc::c_int as u32
+                                    && (*xfer).restart_pending == 0
+                                {
+                                    break;
+                                }
+                            }
+                            block =
+                                ((*xfer).gapless_to_block).wrapping_add(1 as libc::c_int as u32);
+                            while block < (*xfer).block_count {
+                                if let Err(err) =
+                                    super::protocol::ttp_request_retransmit(session, block)
+                                {
+                                    println!("WARNING: Retransmission request failed: {:?}", err);
+                                    current_block = 78252603380123710;
+                                    break 's_202;
+                                } else {
+                                    block = block.wrapping_add(1);
+                                    block;
+                                }
+                            }
+                            super::protocol::ttp_repeat_retransmit(session);
                         }
                     }
                 }
@@ -669,11 +643,9 @@ pub unsafe fn command_get(
             current_block = 78252603380123710;
             break;
         } else {
-            datagram = super::ring::ring_reserve((*xfer).ring_buffer);
-            *(datagram as *mut u32) = 0 as libc::c_int as u32;
-            if super::ring::ring_confirm((*xfer).ring_buffer) < 0 as libc::c_int {
-                println!("WARNING: Error in terminating disk thread");
-            }
+            (*xfer).ring_buffer.reserve_zero();
+            (*xfer).ring_buffer.confirm();
+
             if extc::pthread_join(disk_thread_id, 0 as *mut *mut libc::c_void) < 0 as libc::c_int {
                 println!("WARNING: Disk thread terminated with error");
             }
@@ -775,7 +747,6 @@ pub unsafe fn command_get(
                 extc::fclose((*xfer).file);
                 (*xfer).file = 0 as *mut extc::FILE;
             }
-            super::ring::ring_destroy((*xfer).ring_buffer);
             if !((*rexmit).table).is_null() {
                 extc::free((*rexmit).table as *mut libc::c_void);
                 (*rexmit).table = 0 as *mut u32;
@@ -783,10 +754,6 @@ pub unsafe fn command_get(
             if !((*xfer).received).is_null() {
                 extc::free((*xfer).received as *mut libc::c_void);
                 (*xfer).received = 0 as *mut u8;
-            }
-            if !local_datagram.is_null() {
-                extc::free(local_datagram as *mut libc::c_void);
-                local_datagram = 0 as *mut u8;
             }
             if (*(*session).parameter).rate_adjust != 0 {
                 (*(*session).parameter).target_rate =
@@ -812,7 +779,6 @@ pub unsafe fn command_get(
                     as *const u8 as *const libc::c_char,
             );
             extc::close((*xfer).udp_fd);
-            super::ring::ring_destroy((*xfer).ring_buffer);
             if !((*xfer).file).is_null() {
                 extc::fclose((*xfer).file);
                 (*xfer).file = 0 as *mut extc::FILE;
@@ -824,10 +790,6 @@ pub unsafe fn command_get(
             if !((*xfer).received).is_null() {
                 extc::free((*xfer).received as *mut libc::c_void);
                 (*xfer).received = 0 as *mut u8;
-            }
-            if !local_datagram.is_null() {
-                extc::free(local_datagram as *mut libc::c_void);
-                local_datagram = 0 as *mut u8;
             }
             bail!("Transfer unsuccessful");
         }
@@ -1485,23 +1447,15 @@ pub unsafe extern "C" fn disk_thread(mut arg: *mut libc::c_void) -> *mut libc::c
 
 pub unsafe fn disk_thread_internal(mut arg: *mut libc::c_void) -> anyhow::Result<()> {
     let mut session: *mut ttp_session_t = arg as *mut ttp_session_t;
-    let mut datagram: *mut u8 = 0 as *mut u8;
-    let mut status: libc::c_int = 0;
-    let mut block_index: u32 = 0;
-    let mut block_type: u16 = 0;
     loop {
-        datagram = super::ring::ring_peek((*session).transfer.ring_buffer)?;
-        block_index = extc::__bswap_32((datagram as *mut u32).read_unaligned());
-        block_type = extc::__bswap_16(*(datagram.offset(4 as libc::c_int as isize) as *mut u16));
-        if block_index == 0 as libc::c_int as u32 {
-            bail!("!!!!");
-        }
-        super::io::accept_block(
-            session,
-            block_index,
-            datagram.offset(6 as libc::c_int as isize),
-        )?;
-        super::ring::ring_pop((*session).transfer.ring_buffer);
+        (*session).transfer.ring_buffer.peek(|datagram_view| {
+            if datagram_view.header.block_index == 0 {
+                bail!("!!!!");
+            }
+            super::io::accept_block(session, datagram_view)?;
+            Ok(())
+        })?;
+        (*session).transfer.ring_buffer.pop();
     }
 }
 

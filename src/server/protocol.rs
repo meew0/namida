@@ -307,7 +307,8 @@ pub unsafe fn ttp_open_transfer_server(
         (*session).client_fd,
         filename.as_mut_ptr(),
         1024 as libc::c_int as usize,
-    ).unwrap();
+    )
+    .unwrap();
     filename[(1024 as libc::c_int - 1 as libc::c_int) as usize] = '\0' as i32 as libc::c_char;
     if extc::strcmp(
         filename.as_mut_ptr(),

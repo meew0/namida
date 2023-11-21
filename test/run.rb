@@ -18,8 +18,8 @@ sleep 0.2
 cin.puts "get source/fish.jpg"
 sleep 0.5
 
-Process.kill("KILL", cwait.pid)
-Process.kill("KILL", swait.pid)
+Process.kill("KILL", cwait.pid) rescue nil
+Process.kill("KILL", swait.pid) rescue nil
 
 puts "client output:"
 puts cout.read

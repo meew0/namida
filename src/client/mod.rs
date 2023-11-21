@@ -15,19 +15,6 @@ pub struct command_t {
     pub text: [*const libc::c_char; 10],
 }
 #[derive(Copy, Clone)]
-pub struct ring_buffer_t {
-    pub datagrams: *mut u8,
-    pub datagram_size: libc::c_int,
-    pub base_data: libc::c_int,
-    pub count_data: libc::c_int,
-    pub count_reserved: libc::c_int,
-    pub mutex: extc::pthread_mutex_t,
-    pub data_ready_cond: extc::pthread_cond_t,
-    pub data_ready: libc::c_int,
-    pub space_ready_cond: extc::pthread_cond_t,
-    pub space_ready: libc::c_int,
-}
-#[derive(Copy, Clone)]
 pub struct retransmission_t {
     pub request_type: u16,
     pub block: u32,
@@ -84,7 +71,7 @@ pub struct ttp_parameter_t {
     pub passphrase: *mut libc::c_char,
     pub ringbuf: *mut libc::c_char,
 }
-#[derive(Copy, Clone)]
+
 pub struct ttp_transfer_t {
     pub epoch: i64,
     pub remote_filename: *const libc::c_char,
@@ -99,7 +86,7 @@ pub struct ttp_transfer_t {
     pub gapless_to_block: u32,
     pub retransmit: retransmit_t,
     pub stats: statistics_t,
-    pub ring_buffer: *mut ring_buffer_t,
+    pub ring_buffer: ring::RingBuffer,
     pub received: *mut u8,
     pub blocks_left: u32,
     pub restart_pending: u8,
@@ -107,7 +94,7 @@ pub struct ttp_transfer_t {
     pub restart_wireclearidx: u32,
     pub on_wire_estimate: u32,
 }
-#[derive(Copy, Clone)]
+
 pub struct ttp_session_t {
     pub parameter: *mut ttp_parameter_t,
     pub transfer: ttp_transfer_t,

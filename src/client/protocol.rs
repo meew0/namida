@@ -540,8 +540,7 @@ pub unsafe fn ttp_update_stats(mut session: *mut ttp_session_t) -> anyhow::Resul
             + (*stats).this_retransmits as libc::c_double
             + (*stats).total_blocks as libc::c_double
             - (*stats).this_blocks as libc::c_double);
-    ringfill_fraction =
-        ((*(*session).transfer.ring_buffer).count_data / 4096 as libc::c_int) as libc::c_double;
+    ringfill_fraction = (*session).transfer.ring_buffer.count() as f64 / 4096_f64;
     total_retransmits_fraction = ((*stats).total_retransmits
         / ((*stats).total_retransmits).wrapping_add((*stats).total_blocks))
         as libc::c_double;
@@ -580,7 +579,7 @@ pub unsafe fn ttp_update_stats(mut session: *mut ttp_session_t) -> anyhow::Resul
         } else {
             '-' as i32
         },
-        if (*(*session).transfer.ring_buffer).space_ready == 0 {
+        if (*session).transfer.ring_buffer.is_full() {
             'F' as i32
         } else {
             '-' as i32
@@ -603,7 +602,7 @@ pub unsafe fn ttp_update_stats(mut session: *mut ttp_session_t) -> anyhow::Resul
         data_total_rate,
         100.0f64 * total_retransmits_fraction,
         (*session).transfer.retransmit.index_max,
-        (*(*session).transfer.ring_buffer).count_data,
+        (*session).transfer.ring_buffer.count(),
         (*session).transfer.blocks_left,
         (*stats).this_retransmits,
         ((*stats).this_udp_errors).wrapping_sub((*stats).start_udp_errors) as u64,
