@@ -1,9 +1,9 @@
 use std::{ffi::CStr, sync::Arc};
 
 use ::libc;
-use anyhow::{anyhow, bail};
+use anyhow::bail;
 
-use super::{ring, Command, Parameter, Retransmit, Session, Statistics, Transfer};
+use super::{ring, Command, Parameter, Session, Statistics, Transfer};
 use crate::{datagram, extc};
 
 pub unsafe fn command_close(_command: &mut Command, session: &mut Session) -> anyhow::Result<()> {
@@ -24,17 +24,17 @@ pub unsafe fn command_connect(
 ) -> anyhow::Result<Session> {
     let mut server_fd: libc::c_int = 0;
     let mut secret: *mut libc::c_char = std::ptr::null_mut::<libc::c_char>();
-    if (*command).count as libc::c_int > 1 as libc::c_int {
+    if command.count as libc::c_int > 1 as libc::c_int {
         if !(parameter.server_name).is_null() {
             extc::free(parameter.server_name as *mut libc::c_void);
         }
-        parameter.server_name = extc::strdup((*command).text[1 as libc::c_int as usize]);
+        parameter.server_name = extc::strdup(command.text[1 as libc::c_int as usize]);
         if (parameter.server_name).is_null() {
             bail!("Could not update server name");
         }
     }
-    if (*command).count as libc::c_int > 2 as libc::c_int {
-        parameter.server_port = extc::atoi((*command).text[2 as libc::c_int as usize]) as u16;
+    if command.count as libc::c_int > 2 as libc::c_int {
+        parameter.server_port = extc::atoi(command.text[2 as libc::c_int as usize]) as u16;
     }
 
     let mut session = Session {
@@ -160,7 +160,6 @@ pub unsafe fn command_dir(_command: &mut Command, session: &mut Session) -> anyh
     Ok(())
 }
 pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyhow::Result<()> {
-    dbg!();
     let mut current_block: u64;
     let mut this_block: u32 = 0 as libc::c_int as u32;
     let mut this_type: u16 = 0 as libc::c_int as u16;
@@ -186,20 +185,18 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
         tv_usec: 0,
     };
     let mut wait_u_sec: libc::c_long = 1 as libc::c_int as libc::c_long;
-    if ((*command).count as libc::c_int) < 2 as libc::c_int {
+    if (command.count as libc::c_int) < 2 as libc::c_int {
         bail!("Invalid command syntax (use 'help get' for details)");
     }
     if (session.server).is_null() {
         bail!("Not connected to a Tsunami server");
     }
 
-    dbg!();
-
     session.transfer = Transfer::default();
 
     if extc::strcmp(
         b"*\0" as *const u8 as *const libc::c_char,
-        (*command).text[1 as libc::c_int as usize],
+        command.text[1 as libc::c_int as usize],
     ) == 0
     {
         let mut filearray_size: [libc::c_char; 10] = [0; 10];
@@ -210,7 +207,7 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
         status = extc::fprintf(
             session.server,
             b"%s\n\0" as *const u8 as *const libc::c_char,
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
         );
         status = extc::fread(
             filearray_size.as_mut_ptr() as *mut libc::c_void,
@@ -301,23 +298,23 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
         f_total = 1 as libc::c_int as u32;
     }
     f_counter = 0 as libc::c_int as u32;
+
     's_202: loop {
         if multimode == 0 {
-            session.transfer.remote_filename = (*command).text[1 as libc::c_int as usize];
+            session.transfer.remote_filename = command.text[1 as libc::c_int as usize];
         } else {
             session.transfer.remote_filename = *file_names.offset(f_counter as isize);
         }
         if multimode == 0 {
-            if (*command).count as libc::c_int >= 3 as libc::c_int {
-                session.transfer.local_filename = (*command).text[2 as libc::c_int as usize];
+            if command.count as libc::c_int >= 3 as libc::c_int {
+                session.transfer.local_filename = command.text[2 as libc::c_int as usize];
             } else {
                 session.transfer.local_filename =
-                    extc::strrchr((*command).text[1 as libc::c_int as usize], '/' as i32);
+                    extc::strrchr(command.text[1 as libc::c_int as usize], '/' as i32);
                 if (session.transfer.local_filename).is_null() {
-                    session.transfer.local_filename = (*command).text[1 as libc::c_int as usize];
+                    session.transfer.local_filename = command.text[1 as libc::c_int as usize];
                 } else {
                     session.transfer.local_filename = (session.transfer.local_filename).offset(1);
-                    session.transfer.local_filename;
                 }
             }
         } else {
@@ -332,6 +329,7 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
             session.transfer.remote_filename,
             session.transfer.local_filename,
         )?;
+
         super::protocol::ttp_open_port_client(session)?;
         session.transfer.retransmit.table = extc::calloc(
             super::config::DEFAULT_TABLE_SIZE as libc::c_ulong,
@@ -425,19 +423,16 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
             this_type = local_datagram_view.header.block_type;
             session.transfer.stats.total_blocks =
                 (session.transfer.stats.total_blocks).wrapping_add(1);
-            session.transfer.stats.total_blocks;
             if this_type as libc::c_int != 'R' as i32 {
                 session.transfer.stats.this_flow_originals =
                     (session.transfer.stats.this_flow_originals).wrapping_add(1);
-                session.transfer.stats.this_flow_originals;
             } else {
                 session.transfer.stats.this_flow_retransmitteds =
                     (session.transfer.stats.this_flow_retransmitteds).wrapping_add(1);
-                session.transfer.stats.this_flow_retransmitteds;
                 session.transfer.stats.total_recvd_retransmits =
                     (session.transfer.stats.total_recvd_retransmits).wrapping_add(1);
-                session.transfer.stats.total_recvd_retransmits;
             }
+
             if !session.transfer.ring_buffer.as_mut().unwrap().is_full()
                 && (got_block(session, this_block) == 0
                     || this_type as libc::c_int == 'X' as i32
@@ -460,7 +455,6 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
                     if session.transfer.blocks_left > 0 as libc::c_int as u32 {
                         session.transfer.blocks_left =
                             (session.transfer.blocks_left).wrapping_sub(1);
-                        session.transfer.blocks_left;
                     } else {
                         extc::printf(
                                 b"Oops! Negative-going blocks_left count at block: type=%c this=%u final=%u left=%u\n\0"
@@ -824,7 +818,7 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
     }
 }
 pub unsafe fn command_help(command: &mut Command, _session: &mut Session) -> anyhow::Result<()> {
-    if ((*command).count as libc::c_int) < 2 as libc::c_int {
+    if (command.count as libc::c_int) < 2 as libc::c_int {
         extc::printf(
             b"Help is available for the following commands:\n\n\0" as *const u8
                 as *const libc::c_char,
@@ -838,7 +832,7 @@ pub unsafe fn command_help(command: &mut Command, _session: &mut Session) -> any
                 as *const libc::c_char,
         );
     } else if extc::strcasecmp(
-        (*command).text[1 as libc::c_int as usize],
+        command.text[1 as libc::c_int as usize],
         b"close\0" as *const u8 as *const libc::c_char,
     ) == 0
     {
@@ -848,7 +842,7 @@ pub unsafe fn command_help(command: &mut Command, _session: &mut Session) -> any
                 as *const libc::c_char,
         );
     } else if extc::strcasecmp(
-        (*command).text[1 as libc::c_int as usize],
+        command.text[1 as libc::c_int as usize],
         b"connect\0" as *const u8 as *const libc::c_char,
     ) == 0
     {
@@ -872,7 +866,7 @@ pub unsafe fn command_help(command: &mut Command, _session: &mut Session) -> any
         );
         extc::printf(b"authentication.\n\n\0" as *const u8 as *const libc::c_char);
     } else if extc::strcasecmp(
-        (*command).text[1 as libc::c_int as usize],
+        command.text[1 as libc::c_int as usize],
         b"get\0" as *const u8 as *const libc::c_char,
     ) == 0
     {
@@ -894,7 +888,7 @@ pub unsafe fn command_help(command: &mut Command, _session: &mut Session) -> any
         );
         extc::printf(b"separator) will be used.\n\n\0" as *const u8 as *const libc::c_char);
     } else if extc::strcasecmp(
-        (*command).text[1 as libc::c_int as usize],
+        command.text[1 as libc::c_int as usize],
         b"dir\0" as *const u8 as *const libc::c_char,
     ) == 0
     {
@@ -904,7 +898,7 @@ pub unsafe fn command_help(command: &mut Command, _session: &mut Session) -> any
                 as *const libc::c_char,
         );
     } else if extc::strcasecmp(
-        (*command).text[1 as libc::c_int as usize],
+        command.text[1 as libc::c_int as usize],
         b"help\0" as *const u8 as *const libc::c_char,
     ) == 0
     {
@@ -912,7 +906,7 @@ pub unsafe fn command_help(command: &mut Command, _session: &mut Session) -> any
             b"Come on.  You know what that command does.\n\n\0" as *const u8 as *const libc::c_char,
         );
     } else if extc::strcasecmp(
-        (*command).text[1 as libc::c_int as usize],
+        command.text[1 as libc::c_int as usize],
         b"quit\0" as *const u8 as *const libc::c_char,
     ) == 0
     {
@@ -923,7 +917,7 @@ pub unsafe fn command_help(command: &mut Command, _session: &mut Session) -> any
         );
         extc::printf(b"Tsunami client.\n\n\0" as *const u8 as *const libc::c_char);
     } else if extc::strcasecmp(
-        (*command).text[1 as libc::c_int as usize],
+        command.text[1 as libc::c_int as usize],
         b"set\0" as *const u8 as *const libc::c_char,
     ) == 0
     {
@@ -945,7 +939,7 @@ pub unsafe fn command_help(command: &mut Command, _session: &mut Session) -> any
     } else {
         extc::printf(
             b"'%s' is not a recognized command.\n\0" as *const u8 as *const libc::c_char,
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
         );
         extc::printf(
             b"Use 'help' for a list of commands.\n\n\0" as *const u8 as *const libc::c_char,
@@ -969,79 +963,78 @@ pub unsafe fn command_quit(_command: &mut Command, session: &mut Session) -> lib
     extc::exit(1 as libc::c_int);
 }
 pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> anyhow::Result<()> {
-    let mut do_all: libc::c_int =
-        ((*command).count as libc::c_int == 1 as libc::c_int) as libc::c_int;
-    if (*command).count as libc::c_int == 3 as libc::c_int {
+    let mut do_all: libc::c_int = (command.count as libc::c_int == 1 as libc::c_int) as libc::c_int;
+    if command.count as libc::c_int == 3 as libc::c_int {
         if extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"server\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
             if !(parameter.server_name).is_null() {
                 extc::free(parameter.server_name as *mut libc::c_void);
             }
-            parameter.server_name = extc::strdup((*command).text[2 as libc::c_int as usize]);
+            parameter.server_name = extc::strdup(command.text[2 as libc::c_int as usize]);
             if (parameter.server_name).is_null() {
                 panic!("Could not update server name");
             }
         } else if extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"port\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            parameter.server_port = extc::atoi((*command).text[2 as libc::c_int as usize]) as u16;
+            parameter.server_port = extc::atoi(command.text[2 as libc::c_int as usize]) as u16;
         } else if extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"udpport\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            parameter.client_port = extc::atoi((*command).text[2 as libc::c_int as usize]) as u16;
+            parameter.client_port = extc::atoi(command.text[2 as libc::c_int as usize]) as u16;
         } else if extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"buffer\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            parameter.udp_buffer = extc::atol((*command).text[2 as libc::c_int as usize]) as u32;
+            parameter.udp_buffer = extc::atol(command.text[2 as libc::c_int as usize]) as u32;
         } else if extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"blocksize\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            parameter.block_size = extc::atol((*command).text[2 as libc::c_int as usize]) as u32;
+            parameter.block_size = extc::atol(command.text[2 as libc::c_int as usize]) as u32;
         } else if extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"verbose\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
             parameter.verbose_yn = (extc::strcmp(
-                (*command).text[2 as libc::c_int as usize],
+                command.text[2 as libc::c_int as usize],
                 b"yes\0" as *const u8 as *const libc::c_char,
             ) == 0 as libc::c_int) as libc::c_int as u8;
         } else if extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"transcript\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
             parameter.transcript_yn = (extc::strcmp(
-                (*command).text[2 as libc::c_int as usize],
+                command.text[2 as libc::c_int as usize],
                 b"yes\0" as *const u8 as *const libc::c_char,
             ) == 0 as libc::c_int) as libc::c_int as u8;
         } else if extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"ip\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
             parameter.ipv6_yn = (extc::strcmp(
-                (*command).text[2 as libc::c_int as usize],
+                command.text[2 as libc::c_int as usize],
                 b"v6\0" as *const u8 as *const libc::c_char,
             ) == 0 as libc::c_int) as libc::c_int as u8;
         } else if extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"output\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
             parameter.output_mode = (if extc::strcmp(
-                (*command).text[2 as libc::c_int as usize],
+                command.text[2 as libc::c_int as usize],
                 b"screen\0" as *const u8 as *const libc::c_char,
             ) != 0
             {
@@ -1050,22 +1043,22 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
                 0 as libc::c_int
             }) as u8;
         } else if extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"rateadjust\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
             parameter.rate_adjust = (extc::strcmp(
-                (*command).text[2 as libc::c_int as usize],
+                command.text[2 as libc::c_int as usize],
                 b"yes\0" as *const u8 as *const libc::c_char,
             ) == 0 as libc::c_int) as libc::c_int as u8;
         } else if extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"rate\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
             let mut multiplier: libc::c_long = 1 as libc::c_int as libc::c_long;
             let mut cmd: *mut libc::c_char =
-                (*command).text[2 as libc::c_int as usize] as *mut libc::c_char;
+                command.text[2 as libc::c_int as usize] as *mut libc::c_char;
             let mut cpy: [libc::c_char; 256] = [0; 256];
             let mut l: libc::c_int = extc::strlen(cmd) as libc::c_int;
             extc::strcpy(cpy.as_mut_ptr(), cmd);
@@ -1104,71 +1097,71 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
             }
             parameter.target_rate = (multiplier * extc::atol(cpy.as_mut_ptr())) as u32;
         } else if extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"error\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
             parameter.error_rate =
-                (extc::atof((*command).text[2 as libc::c_int as usize]) * 1000.0f64) as u32;
+                (extc::atof(command.text[2 as libc::c_int as usize]) * 1000.0f64) as u32;
         } else if extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"slowdown\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
             parse_fraction(
-                (*command).text[2 as libc::c_int as usize],
+                command.text[2 as libc::c_int as usize],
                 &mut parameter.slower_num,
                 &mut parameter.slower_den,
             );
         } else if extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"speedup\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
             parse_fraction(
-                (*command).text[2 as libc::c_int as usize],
+                command.text[2 as libc::c_int as usize],
                 &mut parameter.faster_num,
                 &mut parameter.faster_den,
             );
         } else if extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"history\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            parameter.history = extc::atoi((*command).text[2 as libc::c_int as usize]) as u16;
+            parameter.history = extc::atoi(command.text[2 as libc::c_int as usize]) as u16;
         } else if extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"lossless\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
             parameter.lossless = (extc::strcmp(
-                (*command).text[2 as libc::c_int as usize],
+                command.text[2 as libc::c_int as usize],
                 b"yes\0" as *const u8 as *const libc::c_char,
             ) == 0 as libc::c_int) as libc::c_int as u8;
         } else if extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"losswindow\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            parameter.losswindow_ms = extc::atol((*command).text[2 as libc::c_int as usize]) as u32;
+            parameter.losswindow_ms = extc::atol(command.text[2 as libc::c_int as usize]) as u32;
         } else if extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"blockdump\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
             parameter.blockdump = (extc::strcmp(
-                (*command).text[2 as libc::c_int as usize],
+                command.text[2 as libc::c_int as usize],
                 b"yes\0" as *const u8 as *const libc::c_char,
             ) == 0 as libc::c_int) as libc::c_int as u8;
         } else if extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"passphrase\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
             if !(parameter.passphrase).is_null() {
                 extc::free(parameter.passphrase as *mut libc::c_void);
             }
-            parameter.passphrase = extc::strdup((*command).text[2 as libc::c_int as usize]);
+            parameter.passphrase = extc::strdup(command.text[2 as libc::c_int as usize]);
             if (parameter.passphrase).is_null() {
                 panic!("Could not update passphrase");
             }
@@ -1176,7 +1169,7 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
     }
     if do_all != 0
         || extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"server\0" as *const u8 as *const libc::c_char,
         ) == 0
     {
@@ -1187,7 +1180,7 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
     }
     if do_all != 0
         || extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"port\0" as *const u8 as *const libc::c_char,
         ) == 0
     {
@@ -1198,7 +1191,7 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
     }
     if do_all != 0
         || extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"udpport\0" as *const u8 as *const libc::c_char,
         ) == 0
     {
@@ -1209,7 +1202,7 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
     }
     if do_all != 0
         || extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"buffer\0" as *const u8 as *const libc::c_char,
         ) == 0
     {
@@ -1220,7 +1213,7 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
     }
     if do_all != 0
         || extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"blocksize\0" as *const u8 as *const libc::c_char,
         ) == 0
     {
@@ -1231,7 +1224,7 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
     }
     if do_all != 0
         || extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"verbose\0" as *const u8 as *const libc::c_char,
         ) == 0
     {
@@ -1246,7 +1239,7 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
     }
     if do_all != 0
         || extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"transcript\0" as *const u8 as *const libc::c_char,
         ) == 0
     {
@@ -1261,7 +1254,7 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
     }
     if do_all != 0
         || extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"ip\0" as *const u8 as *const libc::c_char,
         ) == 0
     {
@@ -1276,7 +1269,7 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
     }
     if do_all != 0
         || extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"output\0" as *const u8 as *const libc::c_char,
         ) == 0
     {
@@ -1291,7 +1284,7 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
     }
     if do_all != 0
         || extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"rate\0" as *const u8 as *const libc::c_char,
         ) == 0
     {
@@ -1302,7 +1295,7 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
     }
     if do_all != 0
         || extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"rateadjust\0" as *const u8 as *const libc::c_char,
         ) == 0
     {
@@ -1317,7 +1310,7 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
     }
     if do_all != 0
         || extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"error\0" as *const u8 as *const libc::c_char,
         ) == 0
     {
@@ -1328,7 +1321,7 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
     }
     if do_all != 0
         || extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"slowdown\0" as *const u8 as *const libc::c_char,
         ) == 0
     {
@@ -1340,7 +1333,7 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
     }
     if do_all != 0
         || extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"speedup\0" as *const u8 as *const libc::c_char,
         ) == 0
     {
@@ -1352,7 +1345,7 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
     }
     if do_all != 0
         || extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"history\0" as *const u8 as *const libc::c_char,
         ) == 0
     {
@@ -1363,7 +1356,7 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
     }
     if do_all != 0
         || extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"lossless\0" as *const u8 as *const libc::c_char,
         ) == 0
     {
@@ -1378,7 +1371,7 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
     }
     if do_all != 0
         || extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"losswindow\0" as *const u8 as *const libc::c_char,
         ) == 0
     {
@@ -1389,7 +1382,7 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
     }
     if do_all != 0
         || extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"blockdump\0" as *const u8 as *const libc::c_char,
         ) == 0
     {
@@ -1404,7 +1397,7 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
     }
     if do_all != 0
         || extc::strcasecmp(
-            (*command).text[1 as libc::c_int as usize],
+            command.text[1 as libc::c_int as usize],
             b"passphrase\0" as *const u8 as *const libc::c_char,
         ) == 0
     {
