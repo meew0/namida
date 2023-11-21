@@ -10,7 +10,7 @@ unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) -> lib
         tv_sec: 0,
         tv_usec: 0,
     };
-    let mut file: *mut extc::FILE = 0 as *mut extc::FILE;
+    let mut file: *mut extc::FILE = std::ptr::null_mut::<extc::FILE>();
     let mut block_size: u32 = 0;
     static mut block: *mut u8 = 0 as *const u8 as *mut u8;
     let mut file_size: u64 = 5000000000 as libc::c_longlong as u64;
@@ -27,7 +27,7 @@ unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) -> lib
         32678 as libc::c_int
     }) as u32;
     block = extc::malloc(block_size as libc::c_ulong) as *mut u8;
-    extc::gettimeofday(&mut start, 0 as *mut libc::c_void);
+    extc::gettimeofday(&mut start, std::ptr::null_mut::<libc::c_void>());
     file = extc::fopen(
         *argv.offset(1 as libc::c_int as isize),
         b"w\0" as *const u8 as *const libc::c_char,
@@ -42,10 +42,10 @@ unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) -> lib
         sofar = sofar.wrapping_add(block_size as u64);
     }
     extc::fclose(file);
-    extc::gettimeofday(&mut stop, 0 as *mut libc::c_void);
-    let mut usec: i64 = (1000000 as libc::c_longlong
+    extc::gettimeofday(&mut stop, std::ptr::null_mut::<libc::c_void>());
+    let mut usec: i64 = 1000000 as libc::c_longlong
         * (stop.tv_sec - start.tv_sec) as libc::c_longlong
-        + (stop.tv_usec - start.tv_usec) as libc::c_longlong) as i64;
+        + (stop.tv_usec - start.tv_usec) as libc::c_longlong;
     let mut bits: i64 = (file_size * 8 as libc::c_int as u64) as i64;
     extc::printf(
         b"Start time  = %lu.%06lu\n\0" as *const u8 as *const libc::c_char,
@@ -65,7 +65,7 @@ unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) -> lib
         b"Write speed = %0.3lf Mbps\n\0" as *const u8 as *const libc::c_char,
         bits as libc::c_double * 1.0f64 / usec as libc::c_double,
     );
-    return 0 as libc::c_int;
+    0 as libc::c_int
 }
 pub fn main() {
     let mut args: Vec<*mut libc::c_char> = Vec::new();

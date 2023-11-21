@@ -20,7 +20,7 @@ unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) -> lib
     static mut block: *mut u8 = 0 as *const u8 as *mut u8;
     let mut i: libc::c_int = 0;
     let mut j: libc::c_int = 0;
-    let mut file: *mut extc::FILE = 0 as *mut extc::FILE;
+    let mut file: *mut extc::FILE = std::ptr::null_mut::<extc::FILE>();
     let mut readbytes: u32 = 0;
     let mut totalread: u64 = 0;
     if argc <= 1 as libc::c_int {
@@ -44,7 +44,7 @@ unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) -> lib
             as u32;
     }
     block = extc::malloc(readbytes as libc::c_ulong) as *mut u8;
-    extc::gettimeofday(&mut t_start, 0 as *mut libc::c_void);
+    extc::gettimeofday(&mut t_start, std::ptr::null_mut::<libc::c_void>());
     extc::srand(*(&mut t_start as *mut extc::timeval as *mut libc::c_uint));
     file = extc::fopen(
         *argv.offset(1 as libc::c_int as isize),
@@ -52,7 +52,7 @@ unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) -> lib
     );
     totalread = 0 as libc::c_int as u64;
     tsleeps = 0.0f64;
-    extc::gettimeofday(&mut t_isopen, 0 as *mut libc::c_void);
+    extc::gettimeofday(&mut t_isopen, std::ptr::null_mut::<libc::c_void>());
     loop {
         j = extc::rand() / (2147483647 as libc::c_int / 4 as libc::c_int);
         i = 0 as libc::c_int;
@@ -76,7 +76,7 @@ unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) -> lib
         extc::usleep(randsleep as extc::__useconds_t);
     }
     extc::fclose(file);
-    extc::gettimeofday(&mut t_closed, 0 as *mut libc::c_void);
+    extc::gettimeofday(&mut t_closed, std::ptr::null_mut::<libc::c_void>());
     tdelta = (t_closed.tv_sec - t_start.tv_sec) as libc::c_double
         + 1e-6f64 * (t_closed.tv_usec - t_start.tv_usec) as libc::c_double;
     extc::printf(
@@ -109,7 +109,7 @@ unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) -> lib
                 * 1024 as libc::c_int as libc::c_double
                 * 1024 as libc::c_int as libc::c_double),
     );
-    return 0 as libc::c_int;
+    0 as libc::c_int
 }
 pub fn main() {
     let mut args: Vec<*mut libc::c_char> = Vec::new();

@@ -299,7 +299,7 @@ pub unsafe fn ttp_open_port_client(mut session: *mut ttp_session_t) -> anyhow::R
     let mut udp_length: libc::c_uint =
         ::core::mem::size_of::<extc::sockaddr>() as libc::c_ulong as libc::c_uint;
     let mut status: libc::c_int = 0;
-    let mut port: *mut u16 = 0 as *mut u16;
+    let mut port: *mut u16 = std::ptr::null_mut::<u16>();
     (*session).transfer.udp_fd = super::network::create_udp_socket_client((*session).parameter)?;
     extc::memset(
         &mut udp_address as *mut extc::sockaddr as *mut libc::c_void,
@@ -425,7 +425,7 @@ pub unsafe fn ttp_request_retransmit(
     mut session: *mut ttp_session_t,
     mut block: u32,
 ) -> anyhow::Result<()> {
-    let mut ptr: *mut u32 = 0 as *mut u32;
+    let mut ptr: *mut u32 = std::ptr::null_mut::<u32>();
     let mut rexmit: *mut retransmit_t = &mut (*session).transfer.retransmit;
     if super::command::got_block(session, block) != 0 {
         return Ok(());
@@ -450,7 +450,7 @@ pub unsafe fn ttp_request_retransmit(
             (::core::mem::size_of::<u32>() as libc::c_ulong)
                 .wrapping_mul((*rexmit).table_size as libc::c_ulong),
         );
-        (*rexmit).table_size = (*rexmit).table_size * 2 as libc::c_int as u32;
+        (*rexmit).table_size *= 2 as libc::c_int as u32;
     }
     *((*rexmit).table).offset((*rexmit).index_max as isize) = block;
     (*rexmit).index_max = ((*rexmit).index_max).wrapping_add(1);
@@ -459,12 +459,12 @@ pub unsafe fn ttp_request_retransmit(
 }
 pub unsafe fn ttp_request_stop(mut session: *mut ttp_session_t) -> anyhow::Result<()> {
     let mut retransmission: retransmission_t = {
-        let mut init = retransmission_t {
+        
+        retransmission_t {
             request_type: 0 as libc::c_int as u16,
             block: 0 as libc::c_int as u32,
             error_rate: 0 as libc::c_int as u32,
-        };
-        init
+        }
     };
     let mut status: libc::c_int = 0;
     retransmission.request_type = extc::__bswap_16(crate::common::common::REQUEST_STOP);
@@ -480,7 +480,7 @@ pub unsafe fn ttp_request_stop(mut session: *mut ttp_session_t) -> anyhow::Resul
     Ok(())
 }
 pub unsafe fn ttp_update_stats(mut session: *mut ttp_session_t) -> anyhow::Result<()> {
-    let mut now_epoch: extc::time_t = extc::time(0 as *mut extc::time_t);
+    let mut now_epoch: extc::time_t = extc::time(std::ptr::null_mut::<extc::time_t>());
     let mut delta: u64 = 0;
     let mut d_seconds: libc::c_double = 0.;
     let mut delta_total: u64 = 0;
@@ -518,11 +518,11 @@ pub unsafe fn ttp_update_stats(mut session: *mut ttp_session_t) -> anyhow::Resul
     delta_total = temp;
     milliseconds =
         (temp % 1000000 as libc::c_int as u64 / 1000 as libc::c_int as u64) as libc::c_int;
-    temp = temp / 1000000 as libc::c_int as u64;
+    temp /= 1000000 as libc::c_int as u64;
     seconds = (temp % 60 as libc::c_int as u64) as libc::c_int;
-    temp = temp / 60 as libc::c_int as u64;
+    temp /= 60 as libc::c_int as u64;
     minutes = (temp % 60 as libc::c_int as u64) as libc::c_int;
-    temp = temp / 60 as libc::c_int as u64;
+    temp /= 60 as libc::c_int as u64;
     hours = temp as libc::c_int;
     d_seconds = delta as libc::c_double / 1e6f64;
     d_seconds_total = delta_total as libc::c_double / 1e6f64;
@@ -605,7 +605,7 @@ pub unsafe fn ttp_update_stats(mut session: *mut ttp_session_t) -> anyhow::Resul
         (*session).transfer.ring_buffer.count(),
         (*session).transfer.blocks_left,
         (*stats).this_retransmits,
-        ((*stats).this_udp_errors).wrapping_sub((*stats).start_udp_errors) as u64,
+        ((*stats).this_udp_errors).wrapping_sub((*stats).start_udp_errors),
         stats_flags.as_mut_ptr(),
     );
     if (*(*session).parameter).verbose_yn != 0 {
@@ -670,7 +670,7 @@ pub unsafe fn ttp_update_stats(mut session: *mut ttp_session_t) -> anyhow::Resul
             );
             extc::printf(
                 b"OS UDP rx errors: %llu\n\0" as *const u8 as *const libc::c_char,
-                ((*stats).this_udp_errors).wrapping_sub((*stats).start_udp_errors) as u64,
+                ((*stats).this_udp_errors).wrapping_sub((*stats).start_udp_errors),
             );
         } else {
             let fresh1 = iteration;
@@ -699,6 +699,6 @@ pub unsafe fn ttp_update_stats(mut session: *mut ttp_session_t) -> anyhow::Resul
     (*stats).this_retransmits = 0 as libc::c_int as u32;
     (*stats).this_flow_originals = 0 as libc::c_int as u32;
     (*stats).this_flow_retransmitteds = 0 as libc::c_int as u32;
-    extc::gettimeofday(&mut (*stats).this_time, 0 as *mut libc::c_void);
+    extc::gettimeofday(&mut (*stats).this_time, std::ptr::null_mut::<libc::c_void>());
     Ok(())
 }

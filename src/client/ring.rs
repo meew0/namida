@@ -23,11 +23,11 @@ struct Internal {
 
 impl RingBuffer {
     pub fn count(&self) -> u32 {
-        (*self.mutex.lock().unwrap()).count_data
+        self.mutex.lock().unwrap().count_data
     }
 
     pub fn is_full(&self) -> bool {
-        !(*self.mutex.lock().unwrap()).space_ready
+        !self.mutex.lock().unwrap().space_ready
     }
 
     pub fn cancel(&mut self) {

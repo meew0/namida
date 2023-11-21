@@ -15,12 +15,12 @@ pub unsafe fn create_tcp_socket_client(
         ai_socktype: 0,
         ai_protocol: 0,
         ai_addrlen: 0,
-        ai_addr: 0 as *mut extc::sockaddr,
-        ai_canonname: 0 as *mut libc::c_char,
-        ai_next: 0 as *mut extc::addrinfo,
+        ai_addr: std::ptr::null_mut::<extc::sockaddr>(),
+        ai_canonname: std::ptr::null_mut::<libc::c_char>(),
+        ai_next: std::ptr::null_mut::<extc::addrinfo>(),
     };
-    let mut info: *mut extc::addrinfo = 0 as *mut extc::addrinfo;
-    let mut info_save: *mut extc::addrinfo = 0 as *mut extc::addrinfo;
+    let mut info: *mut extc::addrinfo = std::ptr::null_mut::<extc::addrinfo>();
+    let mut info_save: *mut extc::addrinfo = std::ptr::null_mut::<extc::addrinfo>();
     let mut buffer: [libc::c_char; 10] = [0; 10];
     let mut socket_fd: libc::c_int = 0;
     let mut yes: libc::c_int = 1 as libc::c_int;
@@ -116,12 +116,12 @@ pub unsafe fn create_udp_socket_client(mut parameter: *mut ttp_parameter_t) -> a
         ai_socktype: 0,
         ai_protocol: 0,
         ai_addrlen: 0,
-        ai_addr: 0 as *mut extc::sockaddr,
-        ai_canonname: 0 as *mut libc::c_char,
-        ai_next: 0 as *mut extc::addrinfo,
+        ai_addr: std::ptr::null_mut::<extc::sockaddr>(),
+        ai_canonname: std::ptr::null_mut::<libc::c_char>(),
+        ai_next: std::ptr::null_mut::<extc::addrinfo>(),
     };
-    let mut info: *mut extc::addrinfo = 0 as *mut extc::addrinfo;
-    let mut info_save: *mut extc::addrinfo = 0 as *mut extc::addrinfo;
+    let mut info: *mut extc::addrinfo = std::ptr::null_mut::<extc::addrinfo>();
+    let mut info_save: *mut extc::addrinfo = std::ptr::null_mut::<extc::addrinfo>();
     let mut buffer: [libc::c_char; 10] = [0; 10];
     let mut socket_fd: libc::c_int = 0;
     let mut status: libc::c_int = 0;
@@ -145,7 +145,7 @@ pub unsafe fn create_udp_socket_client(mut parameter: *mut ttp_parameter_t) -> a
             (*parameter).client_port as libc::c_int + higher_port_attempt,
         );
         status = extc::getaddrinfo(
-            0 as *const libc::c_char,
+            std::ptr::null::<libc::c_char>(),
             buffer.as_mut_ptr(),
             &mut hints,
             &mut info,
@@ -156,7 +156,7 @@ pub unsafe fn create_udp_socket_client(mut parameter: *mut ttp_parameter_t) -> a
         info_save = info;
         loop {
             socket_fd = extc::socket((*info).ai_family, (*info).ai_socktype, (*info).ai_protocol);
-            if !(socket_fd < 0 as libc::c_int) {
+            if socket_fd >= 0 as libc::c_int {
                 status = extc::setsockopt(
                     socket_fd,
                     1 as libc::c_int,

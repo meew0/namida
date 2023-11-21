@@ -85,7 +85,7 @@ pub unsafe fn xscript_open_server(mut session: *mut super::ttp_session_t) {
     extc::fprintf(
         (*xfer).transcript,
         b"file_size = %llu\n\0" as *const u8 as *const libc::c_char,
-        (*param).file_size as u64,
+        (*param).file_size,
     );
     extc::fprintf(
         (*xfer).transcript,

@@ -19,7 +19,7 @@ pub mod util;
 
 pub fn main() {
     unsafe {
-        match std::env::args().skip(1).next().as_deref() {
+        match std::env::args().nth(1).as_deref() {
             Some("client") => {
                 client::main::main_0(0, std::ptr::null_mut());
             }

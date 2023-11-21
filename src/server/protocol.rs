@@ -56,7 +56,7 @@ pub unsafe fn ttp_accept_retransmit(
             (*session).session_id,
         );
         let fresh0 = iteration;
-        iteration = iteration + 1;
+        iteration += 1;
         if fresh0 % 23 as libc::c_int == 0 {
             extc::printf(
                 b" erate     ipd  target   block   %%done srvNr\n\0" as *const u8
@@ -191,7 +191,7 @@ pub unsafe fn ttp_negotiate_server(mut session: *mut super::ttp_session_t) -> an
     Ok(())
 }
 pub unsafe fn ttp_open_port_server(mut session: *mut super::ttp_session_t) -> anyhow::Result<()> {
-    let mut address: *mut extc::sockaddr = 0 as *mut extc::sockaddr;
+    let mut address: *mut extc::sockaddr = std::ptr::null_mut::<extc::sockaddr>();
     let mut status: libc::c_int = 0;
     let mut port: u16 = 0;
     let mut ipv6_yn: u8 = (*(*session).parameter).ipv6_yn;
@@ -214,12 +214,12 @@ pub unsafe fn ttp_open_port_server(mut session: *mut super::ttp_session_t) -> an
             &mut (*session).transfer.udp_length,
         );
     } else {
-        let mut result: *mut extc::addrinfo = 0 as *mut extc::addrinfo;
+        let mut result: *mut extc::addrinfo = std::ptr::null_mut::<extc::addrinfo>();
         let mut _errmsg: [libc::c_char; 256] = [0; 256];
         let mut status_0: libc::c_int = extc::getaddrinfo(
             (*(*session).parameter).client,
-            0 as *const libc::c_char,
-            0 as *const extc::addrinfo,
+            std::ptr::null::<libc::c_char>(),
+            std::ptr::null::<extc::addrinfo>(),
             &mut result,
         );
         if status_0 != 0 {
@@ -338,7 +338,7 @@ pub unsafe fn ttp_open_transfer_server(
                 message.as_mut_ptr(),
                 ::core::mem::size_of::<[libc::c_char; 20]>() as libc::c_ulong,
                 b"%Lu\0" as *const u8 as *const libc::c_char,
-                *((*param).file_sizes).offset(i as isize) as u64,
+                *((*param).file_sizes).offset(i as isize),
             );
             crate::common::common::full_write(
                 (*session).client_fd,
@@ -364,11 +364,11 @@ pub unsafe fn ttp_open_transfer_server(
             let MaxFileListLength: libc::c_int = 32768 as libc::c_int;
             let vla = MaxFileListLength as usize;
             let mut fileList: Vec<libc::c_char> = ::std::vec::from_elem(0, vla);
-            let mut fl: *const libc::c_char = 0 as *const libc::c_char;
+            let mut fl: *const libc::c_char = std::ptr::null::<libc::c_char>();
             let mut nFile: libc::c_int = 0 as libc::c_int;
             let mut length: libc::c_int = 0 as libc::c_int;
             let mut l: libc::c_int = 0;
-            let mut p: *mut extc::FILE = 0 as *mut extc::FILE;
+            let mut p: *mut extc::FILE = std::ptr::null_mut::<extc::FILE>();
             extc::fprintf(
                 extc::stderr,
                 b"Using allhook program: %s\n\0" as *const u8 as *const libc::c_char,
@@ -613,7 +613,7 @@ pub unsafe fn ttp_open_transfer_server(
                 .unwrap(),
         );
     }
-    extc::gettimeofday(&mut ping_s, 0 as *mut libc::c_void);
+    extc::gettimeofday(&mut ping_s, std::ptr::null_mut::<libc::c_void>());
     status = crate::common::common::full_write(
         (*session).client_fd,
         b"\0\0" as *const u8 as *const libc::c_char as *const libc::c_void,
@@ -649,7 +649,7 @@ pub unsafe fn ttp_open_transfer_server(
         bail!("Could not read error rate");
     }
     (*param).error_rate = extc::__bswap_32((*param).error_rate);
-    extc::gettimeofday(&mut ping_e, 0 as *mut libc::c_void);
+    extc::gettimeofday(&mut ping_e, std::ptr::null_mut::<libc::c_void>());
     if crate::common::common::full_read(
         (*session).client_fd,
         &mut (*param).slower_num as *mut u16 as *mut libc::c_void,
@@ -701,7 +701,7 @@ pub unsafe fn ttp_open_transfer_server(
         ((*param).file_size % (*param).block_size as u64 != 0 as libc::c_int as u64) as libc::c_int
             as u64,
     ) as u32;
-    (*param).epoch = extc::time(0 as *mut extc::time_t);
+    (*param).epoch = extc::time(std::ptr::null_mut::<extc::time_t>());
     file_size = crate::common::common::htonll((*param).file_size);
     if crate::common::common::full_write(
         (*session).client_fd,

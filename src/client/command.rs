@@ -16,7 +16,7 @@ pub unsafe fn command_close(
         bail!("Tsunami session was not active");
     }
     extc::fclose((*session).server);
-    (*session).server = 0 as *mut extc::FILE;
+    (*session).server = std::ptr::null_mut::<extc::FILE>();
     if (*(*session).parameter).verbose_yn != 0 {
         extc::printf(b"Connection closed.\n\n\0" as *const u8 as *const libc::c_char);
     }
@@ -27,8 +27,8 @@ pub unsafe fn command_connect(
     mut parameter: *mut ttp_parameter_t,
 ) -> anyhow::Result<*mut ttp_session_t> {
     let mut server_fd: libc::c_int = 0;
-    let mut session: *mut ttp_session_t = 0 as *mut ttp_session_t;
-    let mut secret: *mut libc::c_char = 0 as *mut libc::c_char;
+    let mut session: *mut ttp_session_t = std::ptr::null_mut::<ttp_session_t>();
+    let mut secret: *mut libc::c_char = std::ptr::null_mut::<libc::c_char>();
     if (*command).count as libc::c_int > 1 as libc::c_int {
         if !((*parameter).server_name).is_null() {
             extc::free((*parameter).server_name as *mut libc::c_void);
@@ -188,7 +188,7 @@ pub unsafe fn command_get(
     let mut rexmit: *mut retransmit_t = &mut (*session).transfer.retransmit;
     let mut status: libc::c_int = 0 as libc::c_int;
     let mut multimode: libc::c_int = 0 as libc::c_int;
-    let mut file_names: *mut *mut libc::c_char = 0 as *mut *mut libc::c_char;
+    let mut file_names: *mut *mut libc::c_char = std::ptr::null_mut::<*mut libc::c_char>();
     let mut f_counter: u32 = 0 as libc::c_int as u32;
     let mut f_total: u32 = 0 as libc::c_int as u32;
     let mut f_arrsize: u32 = 0 as libc::c_int as u32;
@@ -221,7 +221,7 @@ pub unsafe fn command_get(
         let mut file_count: [libc::c_char; 10] = [0; 10];
         multimode = 1 as libc::c_int;
         extc::printf(b"Requesting all available files\n\0" as *const u8 as *const libc::c_char);
-        extc::gettimeofday(&mut ping_s, 0 as *mut libc::c_void);
+        extc::gettimeofday(&mut ping_s, std::ptr::null_mut::<libc::c_void>());
         status = extc::fprintf(
             (*session).server,
             b"%s\n\0" as *const u8 as *const libc::c_char,
@@ -233,7 +233,7 @@ pub unsafe fn command_get(
             10 as libc::c_int as libc::c_ulong,
             (*session).server,
         ) as libc::c_int;
-        extc::gettimeofday(&mut ping_e, 0 as *mut libc::c_void);
+        extc::gettimeofday(&mut ping_e, std::ptr::null_mut::<libc::c_void>());
         status = extc::fread(
             file_count.as_mut_ptr() as *mut libc::c_void,
             ::core::mem::size_of::<libc::c_char>() as libc::c_ulong,
@@ -297,7 +297,7 @@ pub unsafe fn command_get(
                     tmpname.as_mut_ptr(),
                     1024 as libc::c_int as u64,
                 );
-                let ref mut fresh0 = *file_names.offset(f_counter as isize);
+                let fresh0 = &mut (*file_names.offset(f_counter as isize));
                 *fresh0 = extc::strdup(tmpname.as_mut_ptr());
                 extc::printf(
                     b"%s \0" as *const u8 as *const libc::c_char,
@@ -387,8 +387,8 @@ pub unsafe fn command_get(
         );
         (*xfer).stats.start_udp_errors = crate::common::common::get_udp_in_errors();
         (*xfer).stats.this_udp_errors = (*xfer).stats.start_udp_errors;
-        extc::gettimeofday(&mut (*xfer).stats.start_time, 0 as *mut libc::c_void);
-        extc::gettimeofday(&mut (*xfer).stats.this_time, 0 as *mut libc::c_void);
+        extc::gettimeofday(&mut (*xfer).stats.start_time, std::ptr::null_mut::<libc::c_void>());
+        extc::gettimeofday(&mut (*xfer).stats.this_time, std::ptr::null_mut::<libc::c_void>());
         if (*(*session).parameter).transcript_yn != 0 {
             super::transcript::xscript_data_start_client(session, &mut (*xfer).stats.start_time);
         }
@@ -399,9 +399,9 @@ pub unsafe fn command_get(
                 (6 as libc::c_int as u32).wrapping_add((*(*session).parameter).block_size) as usize,
                 0 as libc::c_int,
                 extc::__SOCKADDR_ARG {
-                    __sockaddr__: 0 as *mut libc::c_void as *mut extc::sockaddr,
+                    __sockaddr__: std::ptr::null_mut::<libc::c_void>() as *mut extc::sockaddr,
                 },
-                0 as *mut extc::socklen_t,
+                std::ptr::null_mut::<extc::socklen_t>(),
             ) as libc::c_int;
             if status < 0 as libc::c_int {
                 println!("WARNING: UDP data transmission error");
@@ -446,10 +446,9 @@ pub unsafe fn command_get(
                     (*xfer).ring_buffer.reserve(local_datagram_view);
                     (*xfer).ring_buffer.confirm();
 
-                    let ref mut fresh1 =
-                        *((*xfer).received).offset((this_block / 8 as libc::c_int as u32) as isize);
+                    let fresh1 = &mut (*((*xfer).received).offset((this_block / 8 as libc::c_int as u32) as isize));
                     *fresh1 = (*fresh1 as libc::c_int
-                        | (1 as libc::c_int) << this_block % 8 as libc::c_int as u32)
+                        | (1 as libc::c_int) << (this_block % 8 as libc::c_int as u32))
                         as u8;
                     if (*xfer).blocks_left > 0 as libc::c_int as u32 {
                         (*xfer).blocks_left = ((*xfer).blocks_left).wrapping_sub(1);
@@ -573,12 +572,8 @@ pub unsafe fn command_get(
                             if (*xfer).blocks_left == 0 as libc::c_int as u32 {
                                 break;
                             }
-                            if (*(*session).parameter).lossless == 0 {
-                                if (*rexmit).index_max == 0 as libc::c_int as u32
-                                    && (*xfer).restart_pending == 0
-                                {
-                                    break;
-                                }
+                            if (*(*session).parameter).lossless == 0 && (*rexmit).index_max == 0 as libc::c_int as u32 && (*xfer).restart_pending == 0 {
+                                break;
                             }
                             block =
                                 ((*xfer).gapless_to_block).wrapping_add(1 as libc::c_int as u32);
@@ -599,12 +594,11 @@ pub unsafe fn command_get(
                     }
                 }
             }
-            if !((*xfer).stats.total_blocks % 50 as libc::c_int as u32 == 0) {
+            if (*xfer).stats.total_blocks % 50 as libc::c_int as u32 != 0 {
                 continue;
             }
-            if !(crate::common::common::get_usec_since(&mut (*xfer).stats.this_time)
-                as libc::c_ulonglong
-                > 350000 as libc::c_longlong as libc::c_ulonglong)
+            if crate::common::common::get_usec_since(&mut (*xfer).stats.this_time)
+                as libc::c_ulonglong <= 350000 as libc::c_longlong as libc::c_ulonglong
             {
                 continue;
             }
@@ -645,7 +639,7 @@ pub unsafe fn command_get(
             (*xfer).ring_buffer.confirm();
 
             disk_thread_handle.join();
-            extc::gettimeofday(&mut (*xfer).stats.stop_time, 0 as *mut libc::c_void);
+            extc::gettimeofday(&mut (*xfer).stats.stop_time, std::ptr::null_mut::<libc::c_void>());
             delta = crate::common::common::get_usec_since(&mut (*xfer).stats.start_time);
             (*xfer).stats.total_lost = 0 as libc::c_int as u32;
             block = 1 as libc::c_int as u32;
@@ -673,7 +667,7 @@ pub unsafe fn command_get(
                 b"PC performance figure : %llu packets dropped (if high this indicates receiving PC overload)\n\0"
                     as *const u8 as *const libc::c_char,
                 ((*xfer).stats.this_udp_errors)
-                    .wrapping_sub((*xfer).stats.start_udp_errors) as u64,
+                    .wrapping_sub((*xfer).stats.start_udp_errors),
             );
             extc::printf(
                 b"Transfer duration     : %0.2f seconds\n\0" as *const u8 as *const libc::c_char,
@@ -741,15 +735,15 @@ pub unsafe fn command_get(
             }
             if !((*xfer).file).is_null() {
                 extc::fclose((*xfer).file);
-                (*xfer).file = 0 as *mut extc::FILE;
+                (*xfer).file = std::ptr::null_mut::<extc::FILE>();
             }
             if !((*rexmit).table).is_null() {
                 extc::free((*rexmit).table as *mut libc::c_void);
-                (*rexmit).table = 0 as *mut u32;
+                (*rexmit).table = std::ptr::null_mut::<u32>();
             }
             if !((*xfer).received).is_null() {
                 extc::free((*xfer).received as *mut libc::c_void);
-                (*xfer).received = 0 as *mut u8;
+                (*xfer).received = std::ptr::null_mut::<u8>();
             }
             if (*(*session).parameter).rate_adjust != 0 {
                 (*(*session).parameter).target_rate =
@@ -761,7 +755,7 @@ pub unsafe fn command_get(
                 );
             }
             f_counter = f_counter.wrapping_add(1);
-            if !(f_counter < f_total) {
+            if f_counter >= f_total {
                 current_block = 6000599718051633247;
                 break;
             }
@@ -777,15 +771,15 @@ pub unsafe fn command_get(
             extc::close((*xfer).udp_fd);
             if !((*xfer).file).is_null() {
                 extc::fclose((*xfer).file);
-                (*xfer).file = 0 as *mut extc::FILE;
+                (*xfer).file = std::ptr::null_mut::<extc::FILE>();
             }
             if !((*rexmit).table).is_null() {
                 extc::free((*rexmit).table as *mut libc::c_void);
-                (*rexmit).table = 0 as *mut u32;
+                (*rexmit).table = std::ptr::null_mut::<u32>();
             }
             if !((*xfer).received).is_null() {
                 extc::free((*xfer).received as *mut libc::c_void);
-                (*xfer).received = 0 as *mut u8;
+                (*xfer).received = std::ptr::null_mut::<u8>();
             }
             bail!("Transfer unsuccessful");
         }
@@ -799,9 +793,9 @@ pub unsafe fn command_get(
                 }
                 extc::free(file_names as *mut libc::c_void);
             }
-            return Ok(());
+            Ok(())
         }
-    };
+    }
 }
 pub unsafe fn command_help(
     mut command: *mut command_t,
@@ -1436,7 +1430,7 @@ pub unsafe fn parse_fraction(
     mut num: *mut u16,
     mut den: *mut u16,
 ) -> anyhow::Result<()> {
-    let mut slash: *const libc::c_char = 0 as *const libc::c_char;
+    let mut slash: *const libc::c_char = std::ptr::null::<libc::c_char>();
     slash = extc::strchr(fraction, '/' as i32);
     if slash.is_null() {
         bail!("Value is not a fraction");
@@ -1449,13 +1443,13 @@ pub unsafe fn got_block(mut session: *mut ttp_session_t, mut blocknr: u32) -> li
     if blocknr > (*session).transfer.block_count {
         return 1 as libc::c_int;
     }
-    return *((*session).transfer.received).offset((blocknr / 8 as libc::c_int as u32) as isize)
+    *((*session).transfer.received).offset((blocknr / 8 as libc::c_int as u32) as isize)
         as libc::c_int
-        & (1 as libc::c_int) << blocknr % 8 as libc::c_int as u32;
+        & (1 as libc::c_int) << (blocknr % 8 as libc::c_int as u32)
 }
 pub unsafe fn dump_blockmap(mut postfix: *const libc::c_char, mut xfer: *const ttp_transfer_t) {
-    let mut fbits: *mut extc::FILE = 0 as *mut extc::FILE;
-    let mut fname: *mut libc::c_char = 0 as *mut libc::c_char;
+    let mut fbits: *mut extc::FILE = std::ptr::null_mut::<extc::FILE>();
+    let mut fname: *mut libc::c_char = std::ptr::null_mut::<libc::c_char>();
     fname = extc::calloc(
         (extc::strlen((*xfer).local_filename))
             .wrapping_add(extc::strlen(postfix))

@@ -14,13 +14,13 @@ pub unsafe fn get_usec_since(mut old_time: *mut extc::timeval) -> u64 {
         tv_usec: 0,
     };
     let mut result: u64 = 0 as libc::c_int as u64;
-    extc::gettimeofday(&mut now, 0 as *mut libc::c_void);
+    extc::gettimeofday(&mut now, std::ptr::null_mut::<libc::c_void>());
     while now.tv_sec > (*old_time).tv_sec {
         result = result.wrapping_add(1000000 as libc::c_int as u64);
         now.tv_sec -= 1;
         now.tv_sec;
     }
-    return result.wrapping_add((now.tv_usec - (*old_time).tv_usec) as u64);
+    result.wrapping_add((now.tv_usec - (*old_time).tv_usec) as u64)
 }
 pub unsafe fn htonll(mut value: u64) -> u64 {
     static mut necessary: libc::c_int = -(1 as libc::c_int);
@@ -29,15 +29,15 @@ pub unsafe fn htonll(mut value: u64) -> u64 {
             as libc::c_int;
     }
     if necessary != 0 {
-        return (extc::__bswap_32(
+        (extc::__bswap_32(
             (value as libc::c_ulonglong & 0xffffffff as libc::c_longlong as libc::c_ulonglong)
                 as u32,
         ) as u64)
             << 32 as libc::c_int
-            | extc::__bswap_32((value >> 32 as libc::c_int) as u32) as u64;
+            | extc::__bswap_32((value >> 32 as libc::c_int) as u32) as u64
     } else {
-        return value;
-    };
+        value
+    }
 }
 pub unsafe fn make_transcript_filename(
     mut buffer: *mut libc::c_char,
@@ -55,7 +55,7 @@ pub unsafe fn make_transcript_filename(
         tm_yday: 0,
         tm_isdst: 0,
         tm_gmtoff: 0,
-        tm_zone: 0 as *const libc::c_char,
+        tm_zone: std::ptr::null::<libc::c_char>(),
     };
     extc::gmtime_r(&mut epoch, &mut gmt);
     extc::sprintf(
@@ -69,10 +69,10 @@ pub unsafe fn make_transcript_filename(
         gmt.tm_sec,
         extension,
     );
-    return buffer;
+    buffer
 }
 pub unsafe fn ntohll(mut value: u64) -> u64 {
-    return htonll(value);
+    htonll(value)
 }
 
 pub fn prepare_proof(mut buffer: &mut [u8], mut secret: &[u8]) -> md5::Digest {
@@ -151,25 +151,25 @@ pub unsafe fn usleep_that_works(mut usec: u64) {
         tv_sec: 0,
         tv_usec: 0,
     };
-    extc::gettimeofday(&mut now, 0 as *mut libc::c_void);
+    extc::gettimeofday(&mut now, std::ptr::null_mut::<libc::c_void>());
     if sleep_time >= 10000 as libc::c_int as u64 {
         delay.tv_sec = (sleep_time / 1000000 as libc::c_int as u64) as extc::__time_t;
         delay.tv_usec = (sleep_time % 1000000 as libc::c_int as u64) as extc::__suseconds_t;
         extc::select(
             0 as libc::c_int,
-            0 as *mut extc::fd_set,
-            0 as *mut extc::fd_set,
-            0 as *mut extc::fd_set,
+            std::ptr::null_mut::<extc::fd_set>(),
+            std::ptr::null_mut::<extc::fd_set>(),
+            std::ptr::null_mut::<extc::fd_set>(),
             &mut delay,
         );
     }
     while get_usec_since(&mut now) < usec {}
 }
 pub unsafe fn get_udp_in_errors() -> u64 {
-    let mut f: *mut extc::FILE = 0 as *mut extc::FILE;
+    let mut f: *mut extc::FILE = std::ptr::null_mut::<extc::FILE>();
     let mut errs: u64 = 0 as libc::c_int as u64;
     let mut buf: [libc::c_char; 512] = [0; 512];
-    let mut p: *mut libc::c_char = 0 as *mut libc::c_char;
+    let mut p: *mut libc::c_char = std::ptr::null_mut::<libc::c_char>();
     let mut len: libc::c_int = 0;
     let mut i: libc::c_int = 0;
     f = extc::fopen(
@@ -245,7 +245,7 @@ pub unsafe fn get_udp_in_errors() -> u64 {
         break;
     }
     extc::fclose(f);
-    return errs;
+    errs
 }
 pub unsafe fn full_write(mut fd: libc::c_int, mut buf: *const libc::c_void, mut count: u64) -> i64 {
     let mut written: i64 = 0 as libc::c_int as i64;
@@ -265,7 +265,7 @@ pub unsafe fn full_write(mut fd: libc::c_int, mut buf: *const libc::c_void, mut 
         }
         written += nwr;
     }
-    return written;
+    written
 }
 pub unsafe fn full_read(mut fd: libc::c_int, mut buf: *mut libc::c_void, mut count: u64) -> i64 {
     let mut nread: i64 = 0 as libc::c_int as i64;
@@ -285,5 +285,5 @@ pub unsafe fn full_read(mut fd: libc::c_int, mut buf: *mut libc::c_void, mut cou
         }
         nread += nrd;
     }
-    return nread;
+    nread
 }

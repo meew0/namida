@@ -18,7 +18,7 @@ pub unsafe fn reset_server(mut parameter: *mut super::ttp_parameter_t) {
     );
     (*parameter).block_size = DEFAULT_BLOCK_SIZE;
     (*parameter).secret = DEFAULT_SECRET;
-    (*parameter).client = 0 as *const libc::c_char;
+    (*parameter).client = std::ptr::null::<libc::c_char>();
     (*parameter).tcp_port = DEFAULT_TCP_PORT;
     (*parameter).udp_buffer = DEFAULT_UDP_BUFFER;
     (*parameter).hb_timeout = DEFAULT_HEARTBEAT_TIMEOUT;

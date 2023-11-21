@@ -20,10 +20,10 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) ->
         tcp_port: 0,
         udp_buffer: 0,
         hb_timeout: 0,
-        secret: 0 as *const u8,
-        client: 0 as *const libc::c_char,
-        finishhook: 0 as *const u8,
-        allhook: 0 as *const u8,
+        secret: std::ptr::null::<u8>(),
+        client: std::ptr::null::<libc::c_char>(),
+        finishhook: std::ptr::null::<u8>(),
+        allhook: std::ptr::null::<u8>(),
         block_size: 0,
         file_size: 0,
         block_count: 0,
@@ -34,27 +34,27 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) ->
         slower_den: 0,
         faster_num: 0,
         faster_den: 0,
-        ringbuf: 0 as *mut libc::c_char,
+        ringbuf: std::ptr::null_mut::<libc::c_char>(),
         fileout: 0,
         slotnumber: 0,
         totalslots: 0,
         samplerate: 0,
-        file_names: 0 as *mut *mut libc::c_char,
-        file_sizes: 0 as *mut u64,
+        file_names: std::ptr::null_mut::<*mut libc::c_char>(),
+        file_sizes: std::ptr::null_mut::<u64>(),
         file_name_size: 0,
         total_files: 0,
         wait_u_sec: 0,
     };
     let mut session: super::ttp_session_t = super::ttp_session_t {
-        parameter: 0 as *mut super::ttp_parameter_t,
+        parameter: std::ptr::null_mut::<super::ttp_parameter_t>(),
         transfer: super::ttp_transfer_t {
-            parameter: 0 as *mut super::ttp_parameter_t,
-            filename: 0 as *mut libc::c_char,
-            file: 0 as *mut extc::FILE,
-            vsib: 0 as *mut extc::FILE,
-            transcript: 0 as *mut extc::FILE,
+            parameter: std::ptr::null_mut::<super::ttp_parameter_t>(),
+            filename: std::ptr::null_mut::<libc::c_char>(),
+            file: std::ptr::null_mut::<extc::FILE>(),
+            vsib: std::ptr::null_mut::<extc::FILE>(),
+            transcript: std::ptr::null_mut::<extc::FILE>(),
             udp_fd: 0,
-            udp_address: 0 as *mut extc::sockaddr,
+            udp_address: std::ptr::null_mut::<extc::sockaddr>(),
             udp_length: 0,
             ipd_current: 0.,
             block: 0,
@@ -198,264 +198,262 @@ pub unsafe fn client_handler(mut session: *mut super::ttp_session_t) {
         }
         if let Err(err) = super::protocol::ttp_open_transfer_server(session) {
             println!("WARNING: Invalid file request, error: {:?}", err);
+        } else if let Err(err) = super::protocol::ttp_open_port_server(session) {
+            println!("WARNING: UDP socket creation failed: {:?}", err);
         } else {
-            if let Err(err) = super::protocol::ttp_open_port_server(session) {
-                println!("WARNING: UDP socket creation failed: {:?}", err);
-            } else {
-                status = extc::fcntl(
+            status = extc::fcntl(
+                (*session).client_fd,
+                4 as libc::c_int,
+                0o4000 as libc::c_int,
+            );
+            if status < 0 as libc::c_int {
+                panic!("Could not make client socket non-blocking");
+            }
+            extc::gettimeofday(&mut start, std::ptr::null_mut::<libc::c_void>());
+            if (*param).transcript_yn != 0 {
+                super::transcript::xscript_data_start_server(session, &mut start);
+            }
+            lasthblostreport = start;
+            lastfeedback = start;
+            prevpacketT = start;
+            deadconnection_counter = 0 as libc::c_int as u32;
+            ipd_time = 0 as libc::c_int as i64;
+            ipd_time_max = 0 as libc::c_int as i64;
+            ipd_usleep_diff = 0 as libc::c_int as i64;
+            retransmitlen = 0 as libc::c_int;
+            (*xfer).block = 0 as libc::c_int as u32;
+            while (*xfer).block <= (*param).block_count {
+                block_type = 'R' as i32 as u8;
+                extc::gettimeofday(&mut currpacketT, std::ptr::null_mut::<libc::c_void>());
+                ipd_usleep_diff = ((*xfer).ipd_current
+                    + ((prevpacketT.tv_sec - currpacketT.tv_sec) as libc::c_double * 1e6f64
+                        + (prevpacketT.tv_usec - currpacketT.tv_usec) as libc::c_double))
+                    as i64;
+                prevpacketT = currpacketT;
+                if ipd_usleep_diff > 0 as libc::c_int as i64
+                    || ipd_time > 0 as libc::c_int as i64
+                {
+                    ipd_time += ipd_usleep_diff;
+                }
+                ipd_time_max = if ipd_time > ipd_time_max {
+                    ipd_time
+                } else {
+                    ipd_time_max
+                };
+                status = extc::read(
                     (*session).client_fd,
-                    4 as libc::c_int,
-                    0o4000 as libc::c_int,
-                );
-                if status < 0 as libc::c_int {
-                    panic!("Could not make client socket non-blocking");
+                    (&mut retransmission as *mut super::retransmission_t as *mut libc::c_char)
+                        .offset(retransmitlen as isize)
+                        as *mut libc::c_void,
+                    ::core::mem::size_of::<super::retransmission_t>()
+                        .wrapping_sub(retransmitlen as usize) as u64,
+                ) as libc::c_int;
+                if status <= 0 as libc::c_int && *extc::__errno_location() != 11 as libc::c_int
+                {
+                    panic!("Retransmission read failed");
                 }
-                extc::gettimeofday(&mut start, 0 as *mut libc::c_void);
-                if (*param).transcript_yn != 0 {
-                    super::transcript::xscript_data_start_server(session, &mut start);
+                if status > 0 as libc::c_int {
+                    retransmitlen += status;
                 }
-                lasthblostreport = start;
-                lastfeedback = start;
-                prevpacketT = start;
-                deadconnection_counter = 0 as libc::c_int as u32;
-                ipd_time = 0 as libc::c_int as i64;
-                ipd_time_max = 0 as libc::c_int as i64;
-                ipd_usleep_diff = 0 as libc::c_int as i64;
-                retransmitlen = 0 as libc::c_int;
-                (*xfer).block = 0 as libc::c_int as u32;
-                while (*xfer).block <= (*param).block_count {
-                    block_type = 'R' as i32 as u8;
-                    extc::gettimeofday(&mut currpacketT, 0 as *mut libc::c_void);
-                    ipd_usleep_diff = ((*xfer).ipd_current
-                        + ((prevpacketT.tv_sec - currpacketT.tv_sec) as libc::c_double * 1e6f64
-                            + (prevpacketT.tv_usec - currpacketT.tv_usec) as libc::c_double))
-                        as i64;
-                    prevpacketT = currpacketT;
-                    if ipd_usleep_diff > 0 as libc::c_int as i64
-                        || ipd_time > 0 as libc::c_int as i64
-                    {
-                        ipd_time += ipd_usleep_diff;
-                    }
-                    ipd_time_max = if ipd_time > ipd_time_max {
-                        ipd_time
-                    } else {
-                        ipd_time_max
-                    };
-                    status = extc::read(
-                        (*session).client_fd,
-                        (&mut retransmission as *mut super::retransmission_t as *mut libc::c_char)
-                            .offset(retransmitlen as isize)
-                            as *mut libc::c_void,
-                        ::core::mem::size_of::<super::retransmission_t>()
-                            .wrapping_sub(retransmitlen as usize) as u64,
-                    ) as libc::c_int;
-                    if status <= 0 as libc::c_int && *extc::__errno_location() != 11 as libc::c_int
-                    {
-                        panic!("Retransmission read failed");
-                    }
-                    if status > 0 as libc::c_int {
-                        retransmitlen += status;
-                    }
-                    if retransmitlen as libc::c_ulong
-                        == ::core::mem::size_of::<super::retransmission_t>() as libc::c_ulong
-                    {
-                        lastfeedback = currpacketT;
-                        lasthblostreport = currpacketT;
-                        deadconnection_counter = 0 as libc::c_int as u32;
-                        if extc::__bswap_16(retransmission.request_type) as libc::c_int
-                            == crate::common::common::REQUEST_STOP as libc::c_int
-                        {
-                            extc::fprintf(
-                                extc::stderr,
-                                b"Transmission of %s complete.\n\0" as *const u8
-                                    as *const libc::c_char,
-                                (*xfer).filename,
-                            );
-                            if !((*param).finishhook).is_null() {
-                                let MaxCommandLength: libc::c_int = 1024 as libc::c_int;
-                                let vla = MaxCommandLength as usize;
-                                let mut cmd: Vec<libc::c_char> = ::std::vec::from_elem(0, vla);
-                                let mut v: libc::c_int = 0;
-                                v = extc::snprintf(
-                                    cmd.as_mut_ptr(),
-                                    MaxCommandLength as libc::c_ulong,
-                                    b"%s %s\0" as *const u8 as *const libc::c_char,
-                                    (*param).finishhook,
-                                    (*xfer).filename,
-                                );
-                                if v >= MaxCommandLength {
-                                    extc::fprintf(
-                                        extc::stderr,
-                                        b"Error: command buffer too short\n\0" as *const u8
-                                            as *const libc::c_char,
-                                    );
-                                } else {
-                                    extc::fprintf(
-                                        extc::stderr,
-                                        b"Executing: %s\n\0" as *const u8 as *const libc::c_char,
-                                        cmd.as_mut_ptr(),
-                                    );
-                                    extc::system(cmd.as_mut_ptr());
-                                }
-                            }
-                            break;
-                        } else {
-                            if let Err(err) = super::protocol::ttp_accept_retransmit(
-                                session,
-                                &mut retransmission,
-                                datagram.as_mut_ptr(),
-                            ) {
-                                println!("WARNING: Retransmission error: {:?}", err);
-                            }
-                            retransmitlen = 0 as libc::c_int;
-                        }
-                    } else if (retransmitlen as libc::c_ulong)
-                        < ::core::mem::size_of::<super::retransmission_t>() as libc::c_ulong
-                    {
-                        (*xfer).block = if ((*xfer).block).wrapping_add(1 as libc::c_int as u32)
-                            < (*param).block_count
-                        {
-                            ((*xfer).block).wrapping_add(1 as libc::c_int as u32)
-                        } else {
-                            (*param).block_count
-                        };
-                        block_type = (if (*xfer).block == (*param).block_count {
-                            'X' as i32
-                        } else {
-                            'O' as i32
-                        }) as u8;
-                        super::io::build_datagram(
-                            session,
-                            (*xfer).block,
-                            block_type as u16,
-                            datagram.as_mut_ptr(),
-                        )
-                        .unwrap();
-                        status = extc::sendto(
-                            (*xfer).udp_fd,
-                            datagram.as_mut_ptr() as *const libc::c_void,
-                            (6 as libc::c_int as u32).wrapping_add((*param).block_size) as u64,
-                            0 as libc::c_int,
-                            extc::__CONST_SOCKADDR_ARG {
-                                __sockaddr__: (*xfer).udp_address,
-                            },
-                            (*xfer).udp_length,
-                        ) as libc::c_int;
-                        if status < 0 as libc::c_int {
-                            println!("WARNING: Could not transmit block #{}", (*xfer).block);
-                            continue;
-                        }
-                    } else if retransmitlen as libc::c_ulong
-                        > ::core::mem::size_of::<super::retransmission_t>() as libc::c_ulong
+                if retransmitlen as libc::c_ulong
+                    == ::core::mem::size_of::<super::retransmission_t>() as libc::c_ulong
+                {
+                    lastfeedback = currpacketT;
+                    lasthblostreport = currpacketT;
+                    deadconnection_counter = 0 as libc::c_int as u32;
+                    if extc::__bswap_16(retransmission.request_type) as libc::c_int
+                        == crate::common::common::REQUEST_STOP as libc::c_int
                     {
                         extc::fprintf(
                             extc::stderr,
-                            b"warn: retransmitlen > %d\n\0" as *const u8 as *const libc::c_char,
-                            ::core::mem::size_of::<super::retransmission_t>() as libc::c_ulong
-                                as libc::c_int,
+                            b"Transmission of %s complete.\n\0" as *const u8
+                                as *const libc::c_char,
+                            (*xfer).filename,
                         );
-                        retransmitlen = 0 as libc::c_int;
-                    }
-                    let fresh0 = deadconnection_counter;
-                    deadconnection_counter = deadconnection_counter.wrapping_add(1);
-                    if fresh0 > 2048 as libc::c_int as u32 {
-                        let mut stats_line: [libc::c_char; 160] = [0; 160];
-                        deadconnection_counter = 0 as libc::c_int as u32;
-                        if (crate::common::common::get_usec_since(&mut lasthblostreport)
-                            as libc::c_double)
-                            < 500000.0f64
-                        {
-                            continue;
+                        if !((*param).finishhook).is_null() {
+                            let MaxCommandLength: libc::c_int = 1024 as libc::c_int;
+                            let vla = MaxCommandLength as usize;
+                            let mut cmd: Vec<libc::c_char> = ::std::vec::from_elem(0, vla);
+                            let mut v: libc::c_int = 0;
+                            v = extc::snprintf(
+                                cmd.as_mut_ptr(),
+                                MaxCommandLength as libc::c_ulong,
+                                b"%s %s\0" as *const u8 as *const libc::c_char,
+                                (*param).finishhook,
+                                (*xfer).filename,
+                            );
+                            if v >= MaxCommandLength {
+                                extc::fprintf(
+                                    extc::stderr,
+                                    b"Error: command buffer too short\n\0" as *const u8
+                                        as *const libc::c_char,
+                                );
+                            } else {
+                                extc::fprintf(
+                                    extc::stderr,
+                                    b"Executing: %s\n\0" as *const u8 as *const libc::c_char,
+                                    cmd.as_mut_ptr(),
+                                );
+                                extc::system(cmd.as_mut_ptr());
+                            }
                         }
-                        extc::gettimeofday(&mut lasthblostreport, 0 as *mut libc::c_void);
-                        retransmission.request_type =
-                            extc::__bswap_16(crate::common::common::REQUEST_ERROR_RATE);
-                        retransmission.error_rate = extc::__bswap_32(100000 as libc::c_int as u32);
-                        retransmission.block = 0 as libc::c_int as u32;
-                        super::protocol::ttp_accept_retransmit(
+                        break;
+                    } else {
+                        if let Err(err) = super::protocol::ttp_accept_retransmit(
                             session,
                             &mut retransmission,
                             datagram.as_mut_ptr(),
-                        );
-                        delta = crate::common::common::get_usec_since(&mut lastfeedback);
-                        extc::snprintf(
-                            stats_line.as_mut_ptr(),
-                            (::core::mem::size_of::<[libc::c_char; 160]>() as libc::c_ulong)
-                                .wrapping_sub(1 as libc::c_int as libc::c_ulong),
-                            b"   n/a     n/a     n/a %7u %6.2f %3u -- no heartbeat since %3.2fs\n\0"
-                                as *const u8 as *const libc::c_char,
-                            (*xfer).block,
-                            100.0f64 * (*xfer).block as libc::c_double
-                                / (*param).block_count as libc::c_double,
-                            (*session).session_id,
-                            1e-6f64 * delta as libc::c_double,
-                        );
-                        if (*param).transcript_yn != 0 {
-                            super::transcript::xscript_data_log_server(
-                                session,
-                                stats_line.as_mut_ptr(),
-                            );
+                        ) {
+                            println!("WARNING: Retransmission error: {:?}", err);
                         }
-                        extc::fprintf(
-                            extc::stderr,
-                            b"%s\0" as *const u8 as *const libc::c_char,
-                            stats_line.as_mut_ptr(),
-                        );
-                        if 1e-6f64 * delta as libc::c_double
-                            > (*param).hb_timeout as libc::c_int as libc::c_double
-                        {
-                            extc::fprintf(
-                                extc::stderr,
-                                b"Heartbeat timeout of %d seconds reached, terminating transfer.\n\0"
-                                    as *const u8 as *const libc::c_char,
-                                (*param).hb_timeout as libc::c_int,
-                            );
-                            break;
-                        }
+                        retransmitlen = 0 as libc::c_int;
                     }
-                    if block_type as libc::c_int == 'X' as i32 {
-                        crate::common::common::usleep_that_works(
-                            (10 as libc::c_int as i64 * ipd_time_max) as u64,
-                        );
+                } else if (retransmitlen as libc::c_ulong)
+                    < ::core::mem::size_of::<super::retransmission_t>() as libc::c_ulong
+                {
+                    (*xfer).block = if ((*xfer).block).wrapping_add(1 as libc::c_int as u32)
+                        < (*param).block_count
+                    {
+                        ((*xfer).block).wrapping_add(1 as libc::c_int as u32)
+                    } else {
+                        (*param).block_count
+                    };
+                    block_type = (if (*xfer).block == (*param).block_count {
+                        'X' as i32
+                    } else {
+                        'O' as i32
+                    }) as u8;
+                    super::io::build_datagram(
+                        session,
+                        (*xfer).block,
+                        block_type as u16,
+                        datagram.as_mut_ptr(),
+                    )
+                    .unwrap();
+                    status = extc::sendto(
+                        (*xfer).udp_fd,
+                        datagram.as_mut_ptr() as *const libc::c_void,
+                        (6 as libc::c_int as u32).wrapping_add((*param).block_size) as u64,
+                        0 as libc::c_int,
+                        extc::__CONST_SOCKADDR_ARG {
+                            __sockaddr__: (*xfer).udp_address,
+                        },
+                        (*xfer).udp_length,
+                    ) as libc::c_int;
+                    if status < 0 as libc::c_int {
+                        println!("WARNING: Could not transmit block #{}", (*xfer).block);
+                        continue;
                     }
-                    if ipd_time > 0 as libc::c_int as i64 {
-                        crate::common::common::usleep_that_works(ipd_time as u64);
-                    }
-                }
-                extc::gettimeofday(&mut stop, 0 as *mut libc::c_void);
-                if (*param).transcript_yn != 0 {
-                    super::transcript::xscript_data_stop_server(session, &mut stop);
-                }
-                delta = (1000000 as libc::c_longlong
-                    * (stop.tv_sec - start.tv_sec) as libc::c_longlong
-                    + stop.tv_usec as libc::c_longlong
-                    - start.tv_usec as libc::c_longlong) as u64;
-                if (*param).verbose_yn != 0 {
+                } else if retransmitlen as libc::c_ulong
+                    > ::core::mem::size_of::<super::retransmission_t>() as libc::c_ulong
+                {
                     extc::fprintf(
                         extc::stderr,
-                        b"Server %d transferred %llu bytes in %0.2f seconds (%0.1f Mbps)\n\0"
+                        b"warn: retransmitlen > %d\n\0" as *const u8 as *const libc::c_char,
+                        ::core::mem::size_of::<super::retransmission_t>() as libc::c_ulong
+                            as libc::c_int,
+                    );
+                    retransmitlen = 0 as libc::c_int;
+                }
+                let fresh0 = deadconnection_counter;
+                deadconnection_counter = deadconnection_counter.wrapping_add(1);
+                if fresh0 > 2048 as libc::c_int as u32 {
+                    let mut stats_line: [libc::c_char; 160] = [0; 160];
+                    deadconnection_counter = 0 as libc::c_int as u32;
+                    if (crate::common::common::get_usec_since(&mut lasthblostreport)
+                        as libc::c_double)
+                        < 500000.0f64
+                    {
+                        continue;
+                    }
+                    extc::gettimeofday(&mut lasthblostreport, std::ptr::null_mut::<libc::c_void>());
+                    retransmission.request_type =
+                        extc::__bswap_16(crate::common::common::REQUEST_ERROR_RATE);
+                    retransmission.error_rate = extc::__bswap_32(100000 as libc::c_int as u32);
+                    retransmission.block = 0 as libc::c_int as u32;
+                    super::protocol::ttp_accept_retransmit(
+                        session,
+                        &mut retransmission,
+                        datagram.as_mut_ptr(),
+                    );
+                    delta = crate::common::common::get_usec_since(&mut lastfeedback);
+                    extc::snprintf(
+                        stats_line.as_mut_ptr(),
+                        (::core::mem::size_of::<[libc::c_char; 160]>() as libc::c_ulong)
+                            .wrapping_sub(1 as libc::c_int as libc::c_ulong),
+                        b"   n/a     n/a     n/a %7u %6.2f %3u -- no heartbeat since %3.2fs\n\0"
                             as *const u8 as *const libc::c_char,
+                        (*xfer).block,
+                        100.0f64 * (*xfer).block as libc::c_double
+                            / (*param).block_count as libc::c_double,
                         (*session).session_id,
-                        (*param).file_size as u64,
-                        delta as libc::c_double / 1000000.0f64,
-                        8.0f64 * (*param).file_size as libc::c_double
-                            / (delta as libc::c_double
-                                * 1e-6f64
-                                * 1024 as libc::c_int as libc::c_double
-                                * 1024 as libc::c_int as libc::c_double),
+                        1e-6f64 * delta as libc::c_double,
+                    );
+                    if (*param).transcript_yn != 0 {
+                        super::transcript::xscript_data_log_server(
+                            session,
+                            stats_line.as_mut_ptr(),
+                        );
+                    }
+                    extc::fprintf(
+                        extc::stderr,
+                        b"%s\0" as *const u8 as *const libc::c_char,
+                        stats_line.as_mut_ptr(),
+                    );
+                    if 1e-6f64 * delta as libc::c_double
+                        > (*param).hb_timeout as libc::c_int as libc::c_double
+                    {
+                        extc::fprintf(
+                            extc::stderr,
+                            b"Heartbeat timeout of %d seconds reached, terminating transfer.\n\0"
+                                as *const u8 as *const libc::c_char,
+                            (*param).hb_timeout as libc::c_int,
+                        );
+                        break;
+                    }
+                }
+                if block_type as libc::c_int == 'X' as i32 {
+                    crate::common::common::usleep_that_works(
+                        (10 as libc::c_int as i64 * ipd_time_max) as u64,
                     );
                 }
-                if (*param).transcript_yn != 0 {
-                    super::transcript::xscript_close_server(session, delta);
+                if ipd_time > 0 as libc::c_int as i64 {
+                    crate::common::common::usleep_that_works(ipd_time as u64);
                 }
-                extc::fclose((*xfer).file);
-                extc::close((*xfer).udp_fd);
-                extc::memset(
-                    xfer as *mut libc::c_void,
-                    0 as libc::c_int,
-                    ::core::mem::size_of::<super::ttp_transfer_t>() as libc::c_ulong,
+            }
+            extc::gettimeofday(&mut stop, std::ptr::null_mut::<libc::c_void>());
+            if (*param).transcript_yn != 0 {
+                super::transcript::xscript_data_stop_server(session, &mut stop);
+            }
+            delta = (1000000 as libc::c_longlong
+                * (stop.tv_sec - start.tv_sec) as libc::c_longlong
+                + stop.tv_usec as libc::c_longlong
+                - start.tv_usec as libc::c_longlong) as u64;
+            if (*param).verbose_yn != 0 {
+                extc::fprintf(
+                    extc::stderr,
+                    b"Server %d transferred %llu bytes in %0.2f seconds (%0.1f Mbps)\n\0"
+                        as *const u8 as *const libc::c_char,
+                    (*session).session_id,
+                    (*param).file_size,
+                    delta as libc::c_double / 1000000.0f64,
+                    8.0f64 * (*param).file_size as libc::c_double
+                        / (delta as libc::c_double
+                            * 1e-6f64
+                            * 1024 as libc::c_int as libc::c_double
+                            * 1024 as libc::c_int as libc::c_double),
                 );
             }
+            if (*param).transcript_yn != 0 {
+                super::transcript::xscript_close_server(session, delta);
+            }
+            extc::fclose((*xfer).file);
+            extc::close((*xfer).udp_fd);
+            extc::memset(
+                xfer as *mut libc::c_void,
+                0 as libc::c_int,
+                ::core::mem::size_of::<super::ttp_transfer_t>() as libc::c_ulong,
+            );
         }
     }
 }
@@ -467,112 +465,112 @@ pub unsafe fn process_options(
 ) {
     let mut long_options: [extc::option; 12] = [
         {
-            let mut init = extc::option {
+            
+            extc::option {
                 name: b"verbose\0" as *const u8 as *const libc::c_char,
                 has_arg: 0 as libc::c_int,
-                flag: 0 as *mut libc::c_int,
+                flag: std::ptr::null_mut::<libc::c_int>(),
                 val: 'v' as i32,
-            };
-            init
+            }
         },
         {
-            let mut init = extc::option {
+            
+            extc::option {
                 name: b"transcript\0" as *const u8 as *const libc::c_char,
                 has_arg: 0 as libc::c_int,
-                flag: 0 as *mut libc::c_int,
+                flag: std::ptr::null_mut::<libc::c_int>(),
                 val: 't' as i32,
-            };
-            init
+            }
         },
         {
-            let mut init = extc::option {
+            
+            extc::option {
                 name: b"v6\0" as *const u8 as *const libc::c_char,
                 has_arg: 0 as libc::c_int,
-                flag: 0 as *mut libc::c_int,
+                flag: std::ptr::null_mut::<libc::c_int>(),
                 val: '6' as i32,
-            };
-            init
+            }
         },
         {
-            let mut init = extc::option {
+            
+            extc::option {
                 name: b"port\0" as *const u8 as *const libc::c_char,
                 has_arg: 1 as libc::c_int,
-                flag: 0 as *mut libc::c_int,
+                flag: std::ptr::null_mut::<libc::c_int>(),
                 val: 'p' as i32,
-            };
-            init
+            }
         },
         {
-            let mut init = extc::option {
+            
+            extc::option {
                 name: b"secret\0" as *const u8 as *const libc::c_char,
                 has_arg: 1 as libc::c_int,
-                flag: 0 as *mut libc::c_int,
+                flag: std::ptr::null_mut::<libc::c_int>(),
                 val: 's' as i32,
-            };
-            init
+            }
         },
         {
-            let mut init = extc::option {
+            
+            extc::option {
                 name: b"buffer\0" as *const u8 as *const libc::c_char,
                 has_arg: 1 as libc::c_int,
-                flag: 0 as *mut libc::c_int,
+                flag: std::ptr::null_mut::<libc::c_int>(),
                 val: 'b' as i32,
-            };
-            init
+            }
         },
         {
-            let mut init = extc::option {
+            
+            extc::option {
                 name: b"hbtimeout\0" as *const u8 as *const libc::c_char,
                 has_arg: 1 as libc::c_int,
-                flag: 0 as *mut libc::c_int,
+                flag: std::ptr::null_mut::<libc::c_int>(),
                 val: 'h' as i32,
-            };
-            init
+            }
         },
         {
-            let mut init = extc::option {
+            
+            extc::option {
                 name: b"v\0" as *const u8 as *const libc::c_char,
                 has_arg: 0 as libc::c_int,
-                flag: 0 as *mut libc::c_int,
+                flag: std::ptr::null_mut::<libc::c_int>(),
                 val: 'v' as i32,
-            };
-            init
+            }
         },
         {
-            let mut init = extc::option {
+            
+            extc::option {
                 name: b"client\0" as *const u8 as *const libc::c_char,
                 has_arg: 1 as libc::c_int,
-                flag: 0 as *mut libc::c_int,
+                flag: std::ptr::null_mut::<libc::c_int>(),
                 val: 'c' as i32,
-            };
-            init
+            }
         },
         {
-            let mut init = extc::option {
+            
+            extc::option {
                 name: b"finishhook\0" as *const u8 as *const libc::c_char,
                 has_arg: 1 as libc::c_int,
-                flag: 0 as *mut libc::c_int,
+                flag: std::ptr::null_mut::<libc::c_int>(),
                 val: 'f' as i32,
-            };
-            init
+            }
         },
         {
-            let mut init = extc::option {
+            
+            extc::option {
                 name: b"allhook\0" as *const u8 as *const libc::c_char,
                 has_arg: 1 as libc::c_int,
-                flag: 0 as *mut libc::c_int,
+                flag: std::ptr::null_mut::<libc::c_int>(),
                 val: 'a' as i32,
-            };
-            init
+            }
         },
         {
-            let mut init = extc::option {
-                name: 0 as *const libc::c_char,
+            
+            extc::option {
+                name: std::ptr::null::<libc::c_char>(),
                 has_arg: 0 as libc::c_int,
-                flag: 0 as *mut libc::c_int,
+                flag: std::ptr::null_mut::<libc::c_int>(),
                 val: 0 as libc::c_int,
-            };
-            init
+            }
         },
     ];
     let mut filestat: extc::stat = extc::stat {
@@ -608,9 +606,9 @@ pub unsafe fn process_options(
             argv as *const *mut libc::c_char,
             b"+\0" as *const u8 as *const libc::c_char,
             long_options.as_mut_ptr(),
-            0 as *mut libc::c_int,
+            std::ptr::null_mut::<libc::c_int>(),
         );
-        if !(which > 0 as libc::c_int) {
+        if which <= 0 as libc::c_int {
             break;
         }
         match which {

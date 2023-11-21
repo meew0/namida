@@ -5,13 +5,13 @@ use ::libc;
 pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *const libc::c_char) -> libc::c_int {
     let mut command: command_t = command_t {
         count: 0,
-        text: [0 as *const libc::c_char; 10],
+        text: [std::ptr::null::<libc::c_char>(); 10],
     };
     let vla = super::config::MAX_COMMAND_LENGTH as usize;
     let mut command_text: Vec<libc::c_char> = ::std::vec::from_elem(0, vla);
-    let mut session: *mut ttp_session_t = 0 as *mut ttp_session_t;
+    let mut session: *mut ttp_session_t = std::ptr::null_mut::<ttp_session_t>();
     let mut parameter: ttp_parameter_t = ttp_parameter_t {
-        server_name: 0 as *mut libc::c_char,
+        server_name: std::ptr::null_mut::<libc::c_char>(),
         server_port: 0,
         client_port: 0,
         udp_buffer: 0,
@@ -31,8 +31,8 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *const libc::c_char) 
         lossless: 0,
         losswindow_ms: 0,
         blockdump: 0,
-        passphrase: 0 as *mut libc::c_char,
-        ringbuf: 0 as *mut libc::c_char,
+        passphrase: std::ptr::null_mut::<libc::c_char>(),
+        ringbuf: std::ptr::null_mut::<libc::c_char>(),
     };
     let mut argc_curr: libc::c_int = 1 as libc::c_int;
     let mut ptr_command_text: *mut libc::c_char =

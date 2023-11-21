@@ -501,46 +501,46 @@ extern "C" {
 
 #[inline]
 pub unsafe extern "C" fn __bswap_16(mut __bsx: u16) -> u16 {
-    return (__bsx as libc::c_int >> 8 as libc::c_int & 0xff as libc::c_int
-        | (__bsx as libc::c_int & 0xff as libc::c_int) << 8 as libc::c_int) as u16;
+    (__bsx as libc::c_int >> 8 as libc::c_int & 0xff as libc::c_int
+        | (__bsx as libc::c_int & 0xff as libc::c_int) << 8 as libc::c_int) as u16
 }
 #[inline]
 pub unsafe extern "C" fn __bswap_32(mut __bsx: u32) -> u32 {
-    return (__bsx & 0xff000000 as libc::c_uint) >> 24 as libc::c_int
+    (__bsx & 0xff000000 as libc::c_uint) >> 24 as libc::c_int
         | (__bsx & 0xff0000 as libc::c_uint) >> 8 as libc::c_int
         | (__bsx & 0xff00 as libc::c_uint) << 8 as libc::c_int
-        | (__bsx & 0xff as libc::c_uint) << 24 as libc::c_int;
+        | (__bsx & 0xff as libc::c_uint) << 24 as libc::c_int
 }
 
 #[inline]
 pub unsafe extern "C" fn atol(mut __nptr: *const libc::c_char) -> libc::c_long {
-    return strtol(
+    strtol(
         __nptr,
-        0 as *mut libc::c_void as *mut *mut libc::c_char,
+        std::ptr::null_mut::<libc::c_void>() as *mut *mut libc::c_char,
         10 as libc::c_int,
-    );
+    )
 }
 
 #[inline]
 pub unsafe extern "C" fn atoi(mut __nptr: *const libc::c_char) -> libc::c_int {
-    return strtol(
+    strtol(
         __nptr,
-        0 as *mut libc::c_void as *mut *mut libc::c_char,
+        std::ptr::null_mut::<libc::c_void>() as *mut *mut libc::c_char,
         10 as libc::c_int,
-    ) as libc::c_int;
+    ) as libc::c_int
 }
 
 #[inline]
 pub unsafe extern "C" fn atof(mut __nptr: *const libc::c_char) -> libc::c_double {
-    return strtod(__nptr, 0 as *mut libc::c_void as *mut *mut libc::c_char);
+    strtod(__nptr, std::ptr::null_mut::<libc::c_void>() as *mut *mut libc::c_char)
 }
 #[inline]
 pub unsafe extern "C" fn toupper(mut __c: libc::c_int) -> libc::c_int {
-    return if __c >= -(128 as libc::c_int) && __c < 256 as libc::c_int {
+    if __c >= -(128 as libc::c_int) && __c < 256 as libc::c_int {
         *(*__ctype_toupper_loc()).offset(__c as isize)
     } else {
         __c
-    };
+    }
 }
 
 pub unsafe fn gai_strerror_wrap<'a>(ecode: i32) -> &'a str {

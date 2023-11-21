@@ -11,12 +11,12 @@ pub unsafe fn create_tcp_socket_server(
         ai_socktype: 0,
         ai_protocol: 0,
         ai_addrlen: 0,
-        ai_addr: 0 as *mut extc::sockaddr,
-        ai_canonname: 0 as *mut libc::c_char,
-        ai_next: 0 as *mut extc::addrinfo,
+        ai_addr: std::ptr::null_mut::<extc::sockaddr>(),
+        ai_canonname: std::ptr::null_mut::<libc::c_char>(),
+        ai_next: std::ptr::null_mut::<extc::addrinfo>(),
     };
-    let mut info: *mut extc::addrinfo = 0 as *mut extc::addrinfo;
-    let mut info_save: *mut extc::addrinfo = 0 as *mut extc::addrinfo;
+    let mut info: *mut extc::addrinfo = std::ptr::null_mut::<extc::addrinfo>();
+    let mut info_save: *mut extc::addrinfo = std::ptr::null_mut::<extc::addrinfo>();
     let mut buffer: [libc::c_char; 10] = [0; 10];
     let mut socket_fd: libc::c_int = 0;
     let mut yes: libc::c_int = 1 as libc::c_int;
@@ -39,7 +39,7 @@ pub unsafe fn create_tcp_socket_server(
         (*parameter).tcp_port as libc::c_int,
     );
     status = extc::getaddrinfo(
-        0 as *const libc::c_char,
+        std::ptr::null::<libc::c_char>(),
         buffer.as_mut_ptr(),
         &mut hints,
         &mut info,
@@ -50,7 +50,7 @@ pub unsafe fn create_tcp_socket_server(
     info_save = info;
     loop {
         socket_fd = extc::socket((*info).ai_family, (*info).ai_socktype, (*info).ai_protocol);
-        if !(socket_fd < 0 as libc::c_int) {
+        if socket_fd >= 0 as libc::c_int {
             status = extc::setsockopt(
                 socket_fd,
                 1 as libc::c_int,
@@ -58,7 +58,7 @@ pub unsafe fn create_tcp_socket_server(
                 &mut yes as *mut libc::c_int as *const libc::c_void,
                 ::core::mem::size_of::<libc::c_int>() as libc::c_ulong as extc::socklen_t,
             );
-            if !(status < 0 as libc::c_int) {
+            if status >= 0 as libc::c_int {
                 status = extc::bind(
                     socket_fd,
                     extc::__CONST_SOCKADDR_ARG {
