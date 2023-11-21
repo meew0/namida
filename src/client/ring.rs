@@ -119,7 +119,7 @@ impl RingBuffer {
     }
 
     pub fn reserve_zero(&mut self) {
-        self.reserve_internal(|header, block| {
+        self.reserve_internal(|header, _block| {
             header.block_index = 0;
         });
     }

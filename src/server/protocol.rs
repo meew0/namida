@@ -118,7 +118,7 @@ pub unsafe fn ttp_authenticate_server(
     let mut secret = std::ffi::CStr::from_ptr(secret_c as *const i8).to_bytes();
 
     let mut random: [u8; 64] = [0; 64];
-    let mut server_digest: [u8; 16] = [0; 16];
+    let mut _server_digest: [u8; 16] = [0; 16];
     let mut client_digest: [u8; 16] = [0; 16];
     let mut i: libc::c_int = 0;
     let mut status: libc::c_int = 0;
@@ -215,7 +215,7 @@ pub unsafe fn ttp_open_port_server(mut session: *mut super::ttp_session_t) -> an
         );
     } else {
         let mut result: *mut extc::addrinfo = 0 as *mut extc::addrinfo;
-        let mut errmsg: [libc::c_char; 256] = [0; 256];
+        let mut _errmsg: [libc::c_char; 256] = [0; 256];
         let mut status_0: libc::c_int = extc::getaddrinfo(
             (*(*session).parameter).client,
             0 as *const libc::c_char,

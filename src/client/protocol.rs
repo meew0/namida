@@ -15,7 +15,7 @@ pub unsafe fn ttp_authenticate_client(
         .to_owned();
 
     let mut random: [u8; 64] = [0; 64];
-    let mut digest: [u8; 16] = [0; 16];
+    let mut _digest: [u8; 16] = [0; 16];
     let mut result: u8 = 0;
     let mut status: libc::c_int = 0;
     status = extc::fread(

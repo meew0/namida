@@ -9,7 +9,7 @@ use super::{
 use crate::{datagram, extc};
 
 pub unsafe fn command_close(
-    mut command: *mut command_t,
+    mut _command: *mut command_t,
     mut session: *mut ttp_session_t,
 ) -> anyhow::Result<()> {
     if session.is_null() || ((*session).server).is_null() {
@@ -91,7 +91,7 @@ pub unsafe fn command_connect(
     Ok(session)
 }
 pub unsafe fn command_dir(
-    mut command: *mut command_t,
+    mut _command: *mut command_t,
     mut session: *mut ttp_session_t,
 ) -> anyhow::Result<()> {
     let mut result: u8 = 0;
@@ -805,7 +805,7 @@ pub unsafe fn command_get(
 }
 pub unsafe fn command_help(
     mut command: *mut command_t,
-    mut session: *mut ttp_session_t,
+    mut _session: *mut ttp_session_t,
 ) -> anyhow::Result<()> {
     if ((*command).count as libc::c_int) < 2 as libc::c_int {
         extc::printf(
@@ -937,7 +937,7 @@ pub unsafe fn command_help(
     Ok(())
 }
 pub unsafe fn command_quit(
-    mut command: *mut command_t,
+    mut _command: *mut command_t,
     mut session: *mut ttp_session_t,
 ) -> libc::c_int {
     if !session.is_null() && !((*session).server).is_null() {
@@ -1069,11 +1069,11 @@ pub unsafe fn command_set(
                         if 0 != 0 {
                             let mut __c: libc::c_int =
                                 cpy[(l - 1 as libc::c_int) as usize] as libc::c_int;
-                            __res = (if __c < -(128 as libc::c_int) || __c > 255 as libc::c_int {
+                            __res = if __c < -(128 as libc::c_int) || __c > 255 as libc::c_int {
                                 __c
                             } else {
                                 *(*extc::__ctype_toupper_loc()).offset(__c as isize)
-                            });
+                            };
                         } else {
                             __res =
                                 extc::toupper(cpy[(l - 1 as libc::c_int) as usize] as libc::c_int);
@@ -1096,11 +1096,11 @@ pub unsafe fn command_set(
                         if 0 != 0 {
                             let mut __c: libc::c_int =
                                 cpy[(l - 1 as libc::c_int) as usize] as libc::c_int;
-                            __res = (if __c < -(128 as libc::c_int) || __c > 255 as libc::c_int {
+                            __res = if __c < -(128 as libc::c_int) || __c > 255 as libc::c_int {
                                 __c
                             } else {
                                 *(*extc::__ctype_toupper_loc()).offset(__c as isize)
-                            });
+                            };
                         } else {
                             __res =
                                 extc::toupper(cpy[(l - 1 as libc::c_int) as usize] as libc::c_int);

@@ -816,7 +816,7 @@ pub unsafe fn process_options(
     }
 }
 
-pub unsafe extern "C" fn reap(mut signum: libc::c_int) {
+pub unsafe extern "C" fn reap(mut _signum: libc::c_int) {
     let mut status: libc::c_int = 0;
     while extc::waitpid(-(1 as libc::c_int), &mut status, 1 as libc::c_int) > 0 as libc::c_int {
         extc::fprintf(
