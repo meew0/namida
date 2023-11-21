@@ -30,7 +30,7 @@ pub struct __va_list_tag {
 }
 pub type va_list = __builtin_va_list;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 #[repr(C)]
 pub struct timeval {
     pub tv_sec: __time_t,
@@ -532,7 +532,10 @@ pub unsafe extern "C" fn atoi(mut __nptr: *const libc::c_char) -> libc::c_int {
 
 #[inline]
 pub unsafe extern "C" fn atof(mut __nptr: *const libc::c_char) -> libc::c_double {
-    strtod(__nptr, std::ptr::null_mut::<libc::c_void>() as *mut *mut libc::c_char)
+    strtod(
+        __nptr,
+        std::ptr::null_mut::<libc::c_void>() as *mut *mut libc::c_char,
+    )
 }
 #[inline]
 pub unsafe extern "C" fn toupper(mut __c: libc::c_int) -> libc::c_int {

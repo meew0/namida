@@ -30,7 +30,7 @@ impl RingBuffer {
         !self.mutex.lock().unwrap().space_ready
     }
 
-    pub fn cancel(&mut self) {
+    pub fn cancel(&self) {
         let mut guard = self.mutex.lock().unwrap();
         guard.count_reserved = guard
             .count_reserved
@@ -111,20 +111,20 @@ impl RingBuffer {
         self.space_ready_cond.notify_all();
     }
 
-    pub fn reserve(&mut self, datagram: datagram::View) {
+    pub fn reserve(&self, datagram: datagram::View) {
         self.reserve_internal(|header, block| {
             *header = datagram.header;
             block.copy_from_slice(datagram.block);
         });
     }
 
-    pub fn reserve_zero(&mut self) {
+    pub fn reserve_zero(&self) {
         self.reserve_internal(|header, _block| {
             header.block_index = 0;
         });
     }
 
-    fn reserve_internal(&mut self, mut callback: impl FnOnce(&mut datagram::Header, &mut [u8])) {
+    fn reserve_internal(&self, mut callback: impl FnOnce(&mut datagram::Header, &mut [u8])) {
         let mut guard = self.mutex.lock().unwrap();
 
         let next = (guard.base_data + guard.count_data + guard.count_reserved) % 4096;

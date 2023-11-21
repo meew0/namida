@@ -1,4 +1,4 @@
-use super::ttp_parameter_t;
+use super::Parameter;
 use crate::extc;
 use ::libc;
 
@@ -26,14 +26,14 @@ pub static mut DEFAULT_LOSSLESS: u8 = 1 as libc::c_int as u8;
 pub static mut DEFAULT_LOSSWINDOW_MS: u32 = 1000 as libc::c_int as u32;
 pub static mut DEFAULT_BLOCKDUMP: u8 = 0 as libc::c_int as u8;
 pub static mut MAX_COMMAND_LENGTH: libc::c_int = 1024 as libc::c_int;
-pub unsafe fn reset_client(mut parameter: *mut ttp_parameter_t) {
+pub unsafe fn reset_client(mut parameter: *mut Parameter) {
     if !((*parameter).server_name).is_null() {
         extc::free((*parameter).server_name as *mut libc::c_void);
     }
     extc::memset(
         parameter as *mut libc::c_void,
         0 as libc::c_int,
-        ::core::mem::size_of::<ttp_parameter_t>() as libc::c_ulong,
+        ::core::mem::size_of::<Parameter>() as libc::c_ulong,
     );
     (*parameter).block_size = DEFAULT_BLOCK_SIZE;
     (*parameter).server_name = extc::strdup(DEFAULT_SERVER_NAME);

@@ -1,13 +1,13 @@
+use std::{ffi::CStr, path::Path};
+
 use ::libc;
 use anyhow::bail;
 
-use super::{
-    retransmission_t, retransmit_t, statistics_t, ttp_parameter_t, ttp_session_t, ttp_transfer_t,
-};
+use super::{Parameter, Retransmission, Retransmit, Session, Statistics, Transfer};
 use crate::extc;
 
 pub unsafe fn ttp_authenticate_client(
-    mut session: *mut ttp_session_t,
+    session: &mut Session,
     mut secret_c: *mut u8,
 ) -> anyhow::Result<()> {
     let mut secret = std::ffi::CStr::from_ptr(secret_c as *const i8)
@@ -57,7 +57,7 @@ pub unsafe fn ttp_authenticate_client(
     Ok(())
 }
 
-pub unsafe fn ttp_negotiate_client(mut session: *mut ttp_session_t) -> anyhow::Result<()> {
+pub unsafe fn ttp_negotiate_client(session: &mut Session) -> anyhow::Result<()> {
     let mut server_revision: u32 = 0;
     let mut client_revision: u32 = extc::__bswap_32(crate::common::common::PROTOCOL_REVISION);
     let mut status: libc::c_int = 0;
@@ -86,7 +86,7 @@ pub unsafe fn ttp_negotiate_client(mut session: *mut ttp_session_t) -> anyhow::R
     Ok(())
 }
 pub unsafe fn ttp_open_transfer_client(
-    mut session: *mut ttp_session_t,
+    session: &mut Session,
     mut remote_filename: *const libc::c_char,
     mut local_filename: *const libc::c_char,
 ) -> anyhow::Result<()> {
@@ -94,8 +94,8 @@ pub unsafe fn ttp_open_transfer_client(
     let mut temp: u32 = 0;
     let mut temp16: u16 = 0;
     let mut status: libc::c_int = 0;
-    let mut xfer: *mut ttp_transfer_t = &mut (*session).transfer;
-    let mut param: *mut ttp_parameter_t = (*session).parameter;
+    let mut xfer: *mut Transfer = &mut (*session).transfer;
+    let mut param: *mut Parameter = (*session).parameter;
     status = extc::fprintf(
         (*session).server,
         b"%s\n\0" as *const u8 as *const libc::c_char,
@@ -195,7 +195,7 @@ pub unsafe fn ttp_open_transfer_client(
     extc::memset(
         xfer as *mut libc::c_void,
         0 as libc::c_int,
-        ::core::mem::size_of::<ttp_transfer_t>() as libc::c_ulong,
+        ::core::mem::size_of::<Transfer>() as libc::c_ulong,
     );
     (*xfer).remote_filename = remote_filename;
     (*xfer).local_filename = local_filename;
@@ -248,35 +248,10 @@ pub unsafe fn ttp_open_transfer_client(
             local_filename,
         );
     }
-    (*xfer).file = extc::fopen(
-        (*xfer).local_filename,
-        b"wb\0" as *const u8 as *const libc::c_char,
-    );
-    if ((*xfer).file).is_null() {
-        let mut trimmed: *mut libc::c_char = extc::rindex((*xfer).local_filename, '/' as i32);
-        if !trimmed.is_null() && extc::strlen(trimmed) > 1 as libc::c_int as libc::c_ulong {
-            extc::printf(
-                b"Warning: could not open file %s for writing, trying local directory instead.\n\0"
-                    as *const u8 as *const libc::c_char,
-                (*xfer).local_filename,
-            );
-            (*xfer).local_filename = trimmed.offset(1 as libc::c_int as isize);
-            if extc::access((*xfer).local_filename, 0 as libc::c_int) == 0 {
-                extc::printf(
-                    b"Warning: overwriting existing file '%s'\n\0" as *const u8
-                        as *const libc::c_char,
-                    (*xfer).local_filename,
-                );
-            }
-            (*xfer).file = extc::fopen(
-                (*xfer).local_filename,
-                b"wb\0" as *const u8 as *const libc::c_char,
-            );
-        }
-        if ((*xfer).file).is_null() {
-            bail!("Could not open local file for writing");
-        }
-    }
+
+    let local_path = Path::new(CStr::from_ptr((*xfer).local_filename).to_str()?);
+    (*xfer).file = Some(std::fs::File::options().write(true).open(local_path)?);
+
     (*xfer).on_wire_estimate = (0.5f64 * (*param).target_rate as libc::c_double
         / (8 as libc::c_int as u32 * (*param).block_size) as libc::c_double)
         as u32;
@@ -291,7 +266,7 @@ pub unsafe fn ttp_open_transfer_client(
 
     Ok(())
 }
-pub unsafe fn ttp_open_port_client(mut session: *mut ttp_session_t) -> anyhow::Result<()> {
+pub unsafe fn ttp_open_port_client(session: &mut Session) -> anyhow::Result<()> {
     let mut udp_address: extc::sockaddr = extc::sockaddr {
         sa_family: 0,
         sa_data: [0; 14],
@@ -330,8 +305,8 @@ pub unsafe fn ttp_open_port_client(mut session: *mut ttp_session_t) -> anyhow::R
     }
     Ok(())
 }
-pub unsafe fn ttp_repeat_retransmit(mut session: *mut ttp_session_t) -> anyhow::Result<()> {
-    let mut retransmission: [retransmission_t; 2048] = [retransmission_t {
+pub unsafe fn ttp_repeat_retransmit(session: &mut Session) -> anyhow::Result<()> {
+    let mut retransmission: [Retransmission; 2048] = [Retransmission {
         request_type: 0,
         block: 0,
         error_rate: 0,
@@ -340,12 +315,12 @@ pub unsafe fn ttp_repeat_retransmit(mut session: *mut ttp_session_t) -> anyhow::
     let mut status: libc::c_int = 0;
     let mut block: libc::c_int = 0;
     let mut count: libc::c_int = 0 as libc::c_int;
-    let mut rexmit: *mut retransmit_t = &mut (*session).transfer.retransmit;
-    let mut xfer: *mut ttp_transfer_t = &mut (*session).transfer;
+    let mut rexmit: *mut Retransmit = &mut (*session).transfer.retransmit;
+    let mut xfer: *mut Transfer = &mut (*session).transfer;
     extc::memset(
         retransmission.as_mut_ptr() as *mut libc::c_void,
         0 as libc::c_int,
-        ::core::mem::size_of::<[retransmission_t; 2048]>() as libc::c_ulong,
+        ::core::mem::size_of::<[Retransmission; 2048]>() as libc::c_ulong,
     );
     (*xfer).stats.this_retransmits = 0 as libc::c_int as u32;
     count = 0 as libc::c_int;
@@ -377,9 +352,9 @@ pub unsafe fn ttp_repeat_retransmit(mut session: *mut ttp_session_t) -> anyhow::
         status = extc::fwrite(
             &mut *retransmission
                 .as_mut_ptr()
-                .offset(0 as libc::c_int as isize) as *mut retransmission_t
+                .offset(0 as libc::c_int as isize) as *mut Retransmission
                 as *const libc::c_void,
-            ::core::mem::size_of::<retransmission_t>() as libc::c_ulong,
+            ::core::mem::size_of::<Retransmission>() as libc::c_ulong,
             1 as libc::c_int as libc::c_ulong,
             (*session).server,
         ) as libc::c_int;
@@ -407,7 +382,7 @@ pub unsafe fn ttp_repeat_retransmit(mut session: *mut ttp_session_t) -> anyhow::
         if count > 0 as libc::c_int {
             status = extc::fwrite(
                 retransmission.as_mut_ptr() as *const libc::c_void,
-                ::core::mem::size_of::<retransmission_t>() as libc::c_ulong,
+                ::core::mem::size_of::<Retransmission>() as libc::c_ulong,
                 count as libc::c_ulong,
                 (*session).server,
             ) as libc::c_int;
@@ -421,12 +396,9 @@ pub unsafe fn ttp_repeat_retransmit(mut session: *mut ttp_session_t) -> anyhow::
     }
     Ok(())
 }
-pub unsafe fn ttp_request_retransmit(
-    mut session: *mut ttp_session_t,
-    mut block: u32,
-) -> anyhow::Result<()> {
+pub unsafe fn ttp_request_retransmit(session: &mut Session, mut block: u32) -> anyhow::Result<()> {
     let mut ptr: *mut u32 = std::ptr::null_mut::<u32>();
-    let mut rexmit: *mut retransmit_t = &mut (*session).transfer.retransmit;
+    let mut rexmit: *mut Retransmit = &mut (*session).transfer.retransmit;
     if super::command::got_block(session, block) != 0 {
         return Ok(());
     }
@@ -457,10 +429,9 @@ pub unsafe fn ttp_request_retransmit(
     (*rexmit).index_max;
     Ok(())
 }
-pub unsafe fn ttp_request_stop(mut session: *mut ttp_session_t) -> anyhow::Result<()> {
-    let mut retransmission: retransmission_t = {
-        
-        retransmission_t {
+pub unsafe fn ttp_request_stop(session: &mut Session) -> anyhow::Result<()> {
+    let mut retransmission: Retransmission = {
+        Retransmission {
             request_type: 0 as libc::c_int as u16,
             block: 0 as libc::c_int as u32,
             error_rate: 0 as libc::c_int as u32,
@@ -469,8 +440,8 @@ pub unsafe fn ttp_request_stop(mut session: *mut ttp_session_t) -> anyhow::Resul
     let mut status: libc::c_int = 0;
     retransmission.request_type = extc::__bswap_16(crate::common::common::REQUEST_STOP);
     status = extc::fwrite(
-        &mut retransmission as *mut retransmission_t as *const libc::c_void,
-        ::core::mem::size_of::<retransmission_t>() as libc::c_ulong,
+        &mut retransmission as *mut Retransmission as *const libc::c_void,
+        ::core::mem::size_of::<Retransmission>() as libc::c_ulong,
         1 as libc::c_int as libc::c_ulong,
         (*session).server,
     ) as libc::c_int;
@@ -479,7 +450,7 @@ pub unsafe fn ttp_request_stop(mut session: *mut ttp_session_t) -> anyhow::Resul
     }
     Ok(())
 }
-pub unsafe fn ttp_update_stats(mut session: *mut ttp_session_t) -> anyhow::Result<()> {
+pub unsafe fn ttp_update_stats(session: &mut Session) -> anyhow::Result<()> {
     let mut now_epoch: extc::time_t = extc::time(std::ptr::null_mut::<extc::time_t>());
     let mut delta: u64 = 0;
     let mut d_seconds: libc::c_double = 0.;
@@ -498,8 +469,8 @@ pub unsafe fn ttp_update_stats(mut session: *mut ttp_session_t) -> anyhow::Resul
     let mut retransmits_fraction: libc::c_double = 0.;
     let mut total_retransmits_fraction: libc::c_double = 0.;
     let mut ringfill_fraction: libc::c_double = 0.;
-    let mut stats: *mut statistics_t = &mut (*session).transfer.stats;
-    let mut retransmission: retransmission_t = retransmission_t {
+    let mut stats: *mut Statistics = &mut (*session).transfer.stats;
+    let mut retransmission: Retransmission = Retransmission {
         request_type: 0,
         block: 0,
         error_rate: 0,
@@ -540,7 +511,12 @@ pub unsafe fn ttp_update_stats(mut session: *mut ttp_session_t) -> anyhow::Resul
             + (*stats).this_retransmits as libc::c_double
             + (*stats).total_blocks as libc::c_double
             - (*stats).this_blocks as libc::c_double);
-    ringfill_fraction = (*session).transfer.ring_buffer.count() as f64 / 4096_f64;
+    ringfill_fraction = (*session)
+        .transfer
+        .ring_buffer
+        .as_ref()
+        .map_or(0, |ring| ring.count()) as f64
+        / 4096_f64;
     total_retransmits_fraction = ((*stats).total_retransmits
         / ((*stats).total_retransmits).wrapping_add((*stats).total_blocks))
         as libc::c_double;
@@ -555,16 +531,16 @@ pub unsafe fn ttp_update_stats(mut session: *mut ttp_session_t) -> anyhow::Resul
             * 100 as libc::c_int as libc::c_double
             * (retransmits_fraction + ringfill_fraction);
     extc::memset(
-        &mut retransmission as *mut retransmission_t as *mut libc::c_void,
+        &mut retransmission as *mut Retransmission as *mut libc::c_void,
         0 as libc::c_int,
-        ::core::mem::size_of::<retransmission_t>() as libc::c_ulong,
+        ::core::mem::size_of::<Retransmission>() as libc::c_ulong,
     );
     retransmission.request_type = extc::__bswap_16(crate::common::common::REQUEST_ERROR_RATE);
     retransmission.error_rate =
         extc::__bswap_32((*session).transfer.stats.error_rate as u64 as u32);
     status = extc::fwrite(
-        &mut retransmission as *mut retransmission_t as *const libc::c_void,
-        ::core::mem::size_of::<retransmission_t>() as libc::c_ulong,
+        &mut retransmission as *mut Retransmission as *const libc::c_void,
+        ::core::mem::size_of::<Retransmission>() as libc::c_ulong,
         1 as libc::c_int as libc::c_ulong,
         (*session).server,
     ) as libc::c_int;
@@ -579,7 +555,12 @@ pub unsafe fn ttp_update_stats(mut session: *mut ttp_session_t) -> anyhow::Resul
         } else {
             '-' as i32
         },
-        if (*session).transfer.ring_buffer.is_full() {
+        if (*session)
+            .transfer
+            .ring_buffer
+            .as_ref()
+            .map_or(false, |ring| ring.is_full())
+        {
             'F' as i32
         } else {
             '-' as i32
@@ -602,7 +583,8 @@ pub unsafe fn ttp_update_stats(mut session: *mut ttp_session_t) -> anyhow::Resul
         data_total_rate,
         100.0f64 * total_retransmits_fraction,
         (*session).transfer.retransmit.index_max,
-        (*session).transfer.ring_buffer.count(),
+        (*session).transfer.ring_buffer
+        .as_ref().map_or(0, |ring| ring.count()),
         (*session).transfer.blocks_left,
         (*stats).this_retransmits,
         ((*stats).this_udp_errors).wrapping_sub((*stats).start_udp_errors),
@@ -699,6 +681,9 @@ pub unsafe fn ttp_update_stats(mut session: *mut ttp_session_t) -> anyhow::Resul
     (*stats).this_retransmits = 0 as libc::c_int as u32;
     (*stats).this_flow_originals = 0 as libc::c_int as u32;
     (*stats).this_flow_retransmitteds = 0 as libc::c_int as u32;
-    extc::gettimeofday(&mut (*stats).this_time, std::ptr::null_mut::<libc::c_void>());
+    extc::gettimeofday(
+        &mut (*stats).this_time,
+        std::ptr::null_mut::<libc::c_void>(),
+    );
     Ok(())
 }

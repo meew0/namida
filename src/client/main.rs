@@ -1,16 +1,16 @@
-use super::{command_t, ttp_parameter_t, ttp_session_t};
+use super::{Command, Parameter, Session};
 use crate::extc;
 use ::libc;
 
 pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *const libc::c_char) -> libc::c_int {
-    let mut command: command_t = command_t {
+    let mut command: Command = Command {
         count: 0,
         text: [std::ptr::null::<libc::c_char>(); 10],
     };
     let vla = super::config::MAX_COMMAND_LENGTH as usize;
     let mut command_text: Vec<libc::c_char> = ::std::vec::from_elem(0, vla);
-    let mut session: *mut ttp_session_t = std::ptr::null_mut::<ttp_session_t>();
-    let mut parameter: ttp_parameter_t = ttp_parameter_t {
+    let mut session: Option<Session> = None;
+    let mut parameter: Parameter = Parameter {
         server_name: std::ptr::null_mut::<libc::c_char>(),
         server_port: 0,
         client_port: 0,
@@ -38,9 +38,9 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *const libc::c_char) 
     let mut ptr_command_text: *mut libc::c_char =
         &mut *command_text.as_mut_ptr().offset(0 as libc::c_int as isize) as *mut libc::c_char;
     extc::memset(
-        &mut parameter as *mut ttp_parameter_t as *mut libc::c_void,
+        &mut parameter as *mut Parameter as *mut libc::c_void,
         0 as libc::c_int,
-        ::core::mem::size_of::<ttp_parameter_t>() as libc::c_ulong,
+        ::core::mem::size_of::<Parameter>() as libc::c_ulong,
     );
     super::config::reset_client(&mut parameter);
     extc::fprintf(
@@ -194,62 +194,73 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *const libc::c_char) 
         if command.count as libc::c_int == 0 as libc::c_int {
             continue;
         }
+
+        let mut found = true;
+
         if extc::strcasecmp(
-            command.text[0 as libc::c_int as usize],
-            b"close\0" as *const u8 as *const libc::c_char,
-        ) == 0
-        {
-            super::command::command_close(&mut command, session);
-        } else if extc::strcasecmp(
             command.text[0 as libc::c_int as usize],
             b"connect\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
             match super::command::command_connect(&mut command, &mut parameter) {
                 Ok(new_session) => {
-                    session = new_session;
+                    session = Some(new_session);
                 }
                 Err(err) => println!("Error in command_connect: {:?}", err),
             }
-        } else if extc::strcasecmp(
-            command.text[0 as libc::c_int as usize],
-            b"get\0" as *const u8 as *const libc::c_char,
-        ) == 0
-        {
-            super::command::command_get(&mut command, session);
-        } else if extc::strcasecmp(
-            command.text[0 as libc::c_int as usize],
-            b"dir\0" as *const u8 as *const libc::c_char,
-        ) == 0
-        {
-            super::command::command_dir(&mut command, session);
-        } else if extc::strcasecmp(
-            command.text[0 as libc::c_int as usize],
-            b"help\0" as *const u8 as *const libc::c_char,
-        ) == 0
-        {
-            super::command::command_help(&mut command, session);
-        } else if extc::strcasecmp(
-            command.text[0 as libc::c_int as usize],
-            b"quit\0" as *const u8 as *const libc::c_char,
-        ) == 0
-            || extc::strcasecmp(
-                command.text[0 as libc::c_int as usize],
-                b"exit\0" as *const u8 as *const libc::c_char,
-            ) == 0
-            || extc::strcasecmp(
-                command.text[0 as libc::c_int as usize],
-                b"bye\0" as *const u8 as *const libc::c_char,
-            ) == 0
-        {
-            super::command::command_quit(&mut command, session);
         } else if extc::strcasecmp(
             command.text[0 as libc::c_int as usize],
             b"set\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
             super::command::command_set(&mut command, &mut parameter);
+        } else if let Some(session) = session.as_mut() {
+            if extc::strcasecmp(
+                command.text[0 as libc::c_int as usize],
+                b"close\0" as *const u8 as *const libc::c_char,
+            ) == 0
+            {
+                super::command::command_close(&mut command, session);
+            } else if extc::strcasecmp(
+                command.text[0 as libc::c_int as usize],
+                b"get\0" as *const u8 as *const libc::c_char,
+            ) == 0
+            {
+                super::command::command_get(&mut command, session);
+            } else if extc::strcasecmp(
+                command.text[0 as libc::c_int as usize],
+                b"dir\0" as *const u8 as *const libc::c_char,
+            ) == 0
+            {
+                super::command::command_dir(&mut command, session);
+            } else if extc::strcasecmp(
+                command.text[0 as libc::c_int as usize],
+                b"help\0" as *const u8 as *const libc::c_char,
+            ) == 0
+            {
+                super::command::command_help(&mut command, session);
+            } else if extc::strcasecmp(
+                command.text[0 as libc::c_int as usize],
+                b"quit\0" as *const u8 as *const libc::c_char,
+            ) == 0
+                || extc::strcasecmp(
+                    command.text[0 as libc::c_int as usize],
+                    b"exit\0" as *const u8 as *const libc::c_char,
+                ) == 0
+                || extc::strcasecmp(
+                    command.text[0 as libc::c_int as usize],
+                    b"bye\0" as *const u8 as *const libc::c_char,
+                ) == 0
+            {
+                super::command::command_quit(&mut command, session);
+            } else {
+                found = false;
+            }
         } else {
+            found = false;
+        }
+
+        if !found {
             extc::fprintf(
                 extc::stderr,
                 b"Unrecognized command: '%s'.  Use 'HELP' for help.\n\n\0" as *const u8
@@ -259,7 +270,7 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *const libc::c_char) 
         }
     }
 }
-pub unsafe fn parse_command(mut command: *mut command_t, mut buffer: *mut libc::c_char) {
+pub unsafe fn parse_command(mut command: *mut Command, mut buffer: *mut libc::c_char) {
     (*command).count = 0 as libc::c_int as u8;
     while *(*extc::__ctype_b_loc()).offset(*buffer as libc::c_int as isize) as libc::c_int
         & extc::_ISspace as libc::c_int as libc::c_ushort as libc::c_int

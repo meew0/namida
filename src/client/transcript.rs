@@ -2,14 +2,14 @@ use ::libc;
 
 use crate::extc;
 
-use super::{ttp_parameter_t, ttp_session_t, ttp_transfer_t};
+use super::{Parameter, Session, Transfer};
 
-pub unsafe fn xscript_close_client(mut session: *mut ttp_session_t, mut delta: u64) {
+pub unsafe fn xscript_close_client(mut session: *mut Session, mut delta: u64) {
     let mut mb_thru: libc::c_double = 0.;
     let mut mb_good: libc::c_double = 0.;
     let mut mb_file: libc::c_double = 0.;
     let mut secs: libc::c_double = 0.;
-    let mut xfer: *mut ttp_transfer_t = &mut (*session).transfer;
+    let mut xfer: *mut Transfer = &mut (*session).transfer;
     mb_thru = ((*xfer).stats.total_blocks * (*(*session).parameter).block_size) as libc::c_double;
     mb_good = mb_thru
         - ((*xfer).stats.total_recvd_retransmits * (*(*session).parameter).block_size)
@@ -56,10 +56,7 @@ pub unsafe fn xscript_close_client(mut session: *mut ttp_session_t, mut delta: u
     );
     extc::fclose((*xfer).transcript);
 }
-pub unsafe fn xscript_data_log_client(
-    mut session: *mut ttp_session_t,
-    mut logline: *const libc::c_char,
-) {
+pub unsafe fn xscript_data_log_client(mut session: *mut Session, mut logline: *const libc::c_char) {
     extc::fprintf(
         (*session).transfer.transcript,
         b"%s\0" as *const u8 as *const libc::c_char,
@@ -68,7 +65,7 @@ pub unsafe fn xscript_data_log_client(
     extc::fflush((*session).transfer.transcript);
 }
 pub unsafe fn xscript_data_start_client(
-    mut session: *mut ttp_session_t,
+    mut session: *mut Session,
     mut epoch: *const extc::timeval,
 ) {
     extc::fprintf(
@@ -79,10 +76,7 @@ pub unsafe fn xscript_data_start_client(
     );
     extc::fflush((*session).transfer.transcript);
 }
-pub unsafe fn xscript_data_stop_client(
-    mut session: *mut ttp_session_t,
-    mut epoch: *const extc::timeval,
-) {
+pub unsafe fn xscript_data_stop_client(mut session: *mut Session, mut epoch: *const extc::timeval) {
     extc::fprintf(
         (*session).transfer.transcript,
         b"STOP %lu.%06lu\n\n\0" as *const u8 as *const libc::c_char,
@@ -91,9 +85,9 @@ pub unsafe fn xscript_data_stop_client(
     );
     extc::fflush((*session).transfer.transcript);
 }
-pub unsafe fn xscript_open_client(mut session: *mut ttp_session_t) {
-    let mut xfer: *mut ttp_transfer_t = &mut (*session).transfer;
-    let mut param: *mut ttp_parameter_t = (*session).parameter;
+pub unsafe fn xscript_open_client(mut session: *mut Session) {
+    let mut xfer: *mut Transfer = &mut (*session).transfer;
+    let mut param: *mut Parameter = (*session).parameter;
     let mut filename: [libc::c_char; 64] = [0; 64];
     crate::common::common::make_transcript_filename(
         filename.as_mut_ptr(),

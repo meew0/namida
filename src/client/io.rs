@@ -1,51 +1,29 @@
-use super::{ttp_session_t, ttp_transfer_t};
-use crate::{datagram, extc};
-use ::libc;
-use anyhow::bail;
+use std::io::{Seek, SeekFrom, Write};
 
-pub unsafe fn accept_block(
-    mut session: *mut ttp_session_t,
+use crate::datagram;
+
+pub fn accept_block(
     datagram: datagram::View,
+    block_count: u32,
+    file_size: u64,
+    file: &mut std::fs::File,
 ) -> anyhow::Result<()> {
-    let mut transfer: *mut ttp_transfer_t = &mut (*session).transfer;
-    let mut block_size: u32 = (*(*session).parameter).block_size;
-    let mut write_size: u32 = 0;
-    let mut status: libc::c_int = 0;
-    if datagram.header.block_index == (*transfer).block_count {
-        write_size = ((*transfer).file_size % block_size as u64) as u32;
-        if write_size == 0 as libc::c_int as u32 {
-            write_size = block_size;
+    let block_size = datagram.block.len();
+
+    let offset = block_size as u64 * datagram.header.block_index.checked_sub(1).unwrap() as u64;
+    file.seek(SeekFrom::Start(offset))?;
+
+    let slice_to_write = if datagram.header.block_index == block_count {
+        let write_size: usize = (file_size % block_size as u64).try_into().unwrap();
+        if write_size == 0 {
+            datagram.block
+        } else {
+            &datagram.block[0..write_size]
         }
     } else {
-        write_size = block_size;
-    }
-    status = extc::fseeko(
-        (*transfer).file,
-        (block_size as u64
-            * datagram
-                .header
-                .block_index
-                .wrapping_sub(1 as libc::c_int as u32) as u64) as extc::__off64_t,
-        0 as libc::c_int,
-    );
-    if status < 0 as libc::c_int {
-        bail!(
-            "Could not seek at block {} of file",
-            datagram.header.block_index
-        );
-    }
-    status = extc::fwrite(
-        datagram.block.as_ptr() as *const libc::c_void,
-        1 as libc::c_int as libc::c_ulong,
-        write_size as libc::c_ulong,
-        (*transfer).file,
-    ) as libc::c_int;
-    if (status as u32) < write_size {
-        bail!(
-            "Could not write block {} of file",
-            datagram.header.block_index
-        );
-    }
+        datagram.block
+    };
+    file.write_all(slice_to_write)?;
 
     Ok(())
 }

@@ -2,10 +2,10 @@ use crate::extc;
 use ::libc;
 use anyhow::bail;
 
-use super::{ttp_parameter_t, ttp_session_t};
+use super::{Parameter, Session};
 
 pub unsafe fn create_tcp_socket_client(
-    mut session: *mut ttp_session_t,
+    mut session: *mut Session,
     mut server_name: *const libc::c_char,
     mut server_port: u16,
 ) -> anyhow::Result<i32> {
@@ -109,7 +109,7 @@ pub unsafe fn create_tcp_socket_client(
     }
     Ok(socket_fd)
 }
-pub unsafe fn create_udp_socket_client(mut parameter: *mut ttp_parameter_t) -> anyhow::Result<i32> {
+pub unsafe fn create_udp_socket_client(mut parameter: *mut Parameter) -> anyhow::Result<i32> {
     let mut hints: extc::addrinfo = extc::addrinfo {
         ai_flags: 0,
         ai_family: 0,
