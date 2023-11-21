@@ -362,11 +362,9 @@ pub unsafe fn command_get(
         session.transfer.retransmit.index_max = 0 as libc::c_int as u32;
         session.transfer.next_block = 1 as libc::c_int as u32;
         session.transfer.gapless_to_block = 0 as libc::c_int as u32;
-        extc::memset(
-            &mut session.transfer.stats as *mut Statistics as *mut libc::c_void,
-            0 as libc::c_int,
-            ::core::mem::size_of::<Statistics>() as libc::c_ulong,
-        );
+
+        session.transfer.stats = Statistics::default();
+
         session.transfer.stats.start_udp_errors = crate::common::common::get_udp_in_errors();
         session.transfer.stats.this_udp_errors = session.transfer.stats.start_udp_errors;
         extc::gettimeofday(

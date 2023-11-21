@@ -230,9 +230,7 @@ pub unsafe fn client_handler(mut session: *mut super::ttp_session_t) {
                         + (prevpacketT.tv_usec - currpacketT.tv_usec) as libc::c_double))
                     as i64;
                 prevpacketT = currpacketT;
-                if ipd_usleep_diff > 0 as libc::c_int as i64
-                    || ipd_time > 0 as libc::c_int as i64
-                {
+                if ipd_usleep_diff > 0 as libc::c_int as i64 || ipd_time > 0 as libc::c_int as i64 {
                     ipd_time += ipd_usleep_diff;
                 }
                 ipd_time_max = if ipd_time > ipd_time_max {
@@ -243,13 +241,11 @@ pub unsafe fn client_handler(mut session: *mut super::ttp_session_t) {
                 status = extc::read(
                     (*session).client_fd,
                     (&mut retransmission as *mut super::retransmission_t as *mut libc::c_char)
-                        .offset(retransmitlen as isize)
-                        as *mut libc::c_void,
+                        .offset(retransmitlen as isize) as *mut libc::c_void,
                     ::core::mem::size_of::<super::retransmission_t>()
                         .wrapping_sub(retransmitlen as usize) as u64,
                 ) as libc::c_int;
-                if status <= 0 as libc::c_int && *extc::__errno_location() != 11 as libc::c_int
-                {
+                if status <= 0 as libc::c_int && *extc::__errno_location() != 11 as libc::c_int {
                     panic!("Retransmission read failed");
                 }
                 if status > 0 as libc::c_int {
@@ -266,8 +262,7 @@ pub unsafe fn client_handler(mut session: *mut super::ttp_session_t) {
                     {
                         extc::fprintf(
                             extc::stderr,
-                            b"Transmission of %s complete.\n\0" as *const u8
-                                as *const libc::c_char,
+                            b"Transmission of %s complete.\n\0" as *const u8 as *const libc::c_char,
                             (*xfer).filename,
                         );
                         if !((*param).finishhook).is_null() {
@@ -425,8 +420,7 @@ pub unsafe fn client_handler(mut session: *mut super::ttp_session_t) {
             if (*param).transcript_yn != 0 {
                 super::transcript::xscript_data_stop_server(session, &mut stop);
             }
-            delta = (1000000 as libc::c_longlong
-                * (stop.tv_sec - start.tv_sec) as libc::c_longlong
+            delta = (1000000 as libc::c_longlong * (stop.tv_sec - start.tv_sec) as libc::c_longlong
                 + stop.tv_usec as libc::c_longlong
                 - start.tv_usec as libc::c_longlong) as u64;
             if (*param).verbose_yn != 0 {
@@ -465,7 +459,6 @@ pub unsafe fn process_options(
 ) {
     let mut long_options: [extc::option; 12] = [
         {
-            
             extc::option {
                 name: b"verbose\0" as *const u8 as *const libc::c_char,
                 has_arg: 0 as libc::c_int,
@@ -474,7 +467,6 @@ pub unsafe fn process_options(
             }
         },
         {
-            
             extc::option {
                 name: b"transcript\0" as *const u8 as *const libc::c_char,
                 has_arg: 0 as libc::c_int,
@@ -483,7 +475,6 @@ pub unsafe fn process_options(
             }
         },
         {
-            
             extc::option {
                 name: b"v6\0" as *const u8 as *const libc::c_char,
                 has_arg: 0 as libc::c_int,
@@ -492,7 +483,6 @@ pub unsafe fn process_options(
             }
         },
         {
-            
             extc::option {
                 name: b"port\0" as *const u8 as *const libc::c_char,
                 has_arg: 1 as libc::c_int,
@@ -501,7 +491,6 @@ pub unsafe fn process_options(
             }
         },
         {
-            
             extc::option {
                 name: b"secret\0" as *const u8 as *const libc::c_char,
                 has_arg: 1 as libc::c_int,
@@ -510,7 +499,6 @@ pub unsafe fn process_options(
             }
         },
         {
-            
             extc::option {
                 name: b"buffer\0" as *const u8 as *const libc::c_char,
                 has_arg: 1 as libc::c_int,
@@ -519,7 +507,6 @@ pub unsafe fn process_options(
             }
         },
         {
-            
             extc::option {
                 name: b"hbtimeout\0" as *const u8 as *const libc::c_char,
                 has_arg: 1 as libc::c_int,
@@ -528,7 +515,6 @@ pub unsafe fn process_options(
             }
         },
         {
-            
             extc::option {
                 name: b"v\0" as *const u8 as *const libc::c_char,
                 has_arg: 0 as libc::c_int,
@@ -537,7 +523,6 @@ pub unsafe fn process_options(
             }
         },
         {
-            
             extc::option {
                 name: b"client\0" as *const u8 as *const libc::c_char,
                 has_arg: 1 as libc::c_int,
@@ -546,7 +531,6 @@ pub unsafe fn process_options(
             }
         },
         {
-            
             extc::option {
                 name: b"finishhook\0" as *const u8 as *const libc::c_char,
                 has_arg: 1 as libc::c_int,
@@ -555,7 +539,6 @@ pub unsafe fn process_options(
             }
         },
         {
-            
             extc::option {
                 name: b"allhook\0" as *const u8 as *const libc::c_char,
                 has_arg: 1 as libc::c_int,
@@ -564,7 +547,6 @@ pub unsafe fn process_options(
             }
         },
         {
-            
             extc::option {
                 name: std::ptr::null::<libc::c_char>(),
                 has_arg: 0 as libc::c_int,

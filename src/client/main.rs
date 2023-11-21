@@ -256,8 +256,8 @@ unsafe fn run_command(
     Ok(())
 }
 
-pub unsafe fn parse_command(mut command: *mut Command, mut buffer: *mut libc::c_char) {
-    (*command).count = 0 as libc::c_int as u8;
+pub unsafe fn parse_command(command: &mut Command, mut buffer: *mut libc::c_char) {
+    command.count = 0 as libc::c_int as u8;
     while *(*extc::__ctype_b_loc()).offset(*buffer as libc::c_int as isize) as libc::c_int
         & extc::_ISspace as libc::c_int as libc::c_ushort as libc::c_int
         != 0
@@ -266,10 +266,10 @@ pub unsafe fn parse_command(mut command: *mut Command, mut buffer: *mut libc::c_
         buffer = buffer.offset(1);
         buffer;
     }
-    while ((*command).count as libc::c_int) < 10 as libc::c_int && *buffer as libc::c_int != 0 {
-        let fresh0 = (*command).count;
-        (*command).count = ((*command).count).wrapping_add(1);
-        (*command).text[fresh0 as usize] = buffer;
+    while (command.count as libc::c_int) < 10 as libc::c_int && *buffer as libc::c_int != 0 {
+        let fresh0 = command.count;
+        command.count = (command.count).wrapping_add(1);
+        command.text[fresh0 as usize] = buffer;
         while *buffer as libc::c_int != 0
             && *(*extc::__ctype_b_loc()).offset(*buffer as libc::c_int as isize) as libc::c_int
                 & extc::_ISspace as libc::c_int as libc::c_ushort as libc::c_int
