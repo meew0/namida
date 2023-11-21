@@ -187,7 +187,6 @@ pub unsafe fn command_get(
     let mut xfer: *mut ttp_transfer_t = &mut (*session).transfer;
     let mut rexmit: *mut retransmit_t = &mut (*session).transfer.retransmit;
     let mut status: libc::c_int = 0 as libc::c_int;
-    let mut disk_thread_id: extc::pthread_t = 0 as libc::c_int as extc::pthread_t;
     let mut multimode: libc::c_int = 0 as libc::c_int;
     let mut file_names: *mut *mut libc::c_char = 0 as *mut *mut libc::c_char;
     let mut f_counter: u32 = 0 as libc::c_int as u32;
@@ -369,15 +368,14 @@ pub unsafe fn command_get(
         let mut local_datagram_buffer =
             ring::allocate_zeroed_boxed_slice(6 + (*(*session).parameter).block_size as usize);
 
-        status = extc::pthread_create(
-            &mut disk_thread_id,
-            0 as *const extc::pthread_attr_t,
-            Some(disk_thread as unsafe extern "C" fn(*mut libc::c_void) -> *mut libc::c_void),
-            session as *mut libc::c_void,
-        );
-        if status != 0 as libc::c_int {
-            panic!("Could not create I/O thread");
-        }
+        struct SessionWrapper(*mut ttp_session_t);
+        unsafe impl Send for SessionWrapper {}
+        unsafe impl Sync for SessionWrapper {}
+        let wrapped = SessionWrapper(session);
+        let disk_thread_handle = std::thread::spawn(|| {
+            let wrapped2 = wrapped;
+            disk_thread(wrapped2.0)
+        });
         (*rexmit).table_size = super::config::DEFAULT_TABLE_SIZE as u32;
         (*rexmit).index_max = 0 as libc::c_int as u32;
         (*xfer).next_block = 1 as libc::c_int as u32;
@@ -646,9 +644,7 @@ pub unsafe fn command_get(
             (*xfer).ring_buffer.reserve_zero();
             (*xfer).ring_buffer.confirm();
 
-            if extc::pthread_join(disk_thread_id, 0 as *mut *mut libc::c_void) < 0 as libc::c_int {
-                println!("WARNING: Disk thread terminated with error");
-            }
+            disk_thread_handle.join();
             extc::gettimeofday(&mut (*xfer).stats.stop_time, 0 as *mut libc::c_void);
             delta = crate::common::common::get_usec_since(&mut (*xfer).stats.start_time);
             (*xfer).stats.total_lost = 0 as libc::c_int as u32;
@@ -1438,15 +1434,13 @@ pub unsafe fn command_set(
     extc::printf(b"\n\0" as *const u8 as *const libc::c_char);
     Ok(())
 }
-pub unsafe extern "C" fn disk_thread(mut arg: *mut libc::c_void) -> *mut libc::c_void {
-    if let Err(err) = disk_thread_internal(arg) {
+pub unsafe extern "C" fn disk_thread(mut session: *mut ttp_session_t) {
+    if let Err(err) = disk_thread_internal(session) {
         println!("Error in disk thread: {:?}", err);
     }
-    std::ptr::null_mut()
 }
 
-pub unsafe fn disk_thread_internal(mut arg: *mut libc::c_void) -> anyhow::Result<()> {
-    let mut session: *mut ttp_session_t = arg as *mut ttp_session_t;
+pub unsafe fn disk_thread_internal(mut session: *mut ttp_session_t) -> anyhow::Result<()> {
     loop {
         (*session).transfer.ring_buffer.peek(|datagram_view| {
             if datagram_view.header.block_index == 0 {

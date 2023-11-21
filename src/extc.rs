@@ -37,33 +37,6 @@ pub struct timeval {
     pub tv_usec: __suseconds_t,
 }
 
-pub type pthread_t = libc::c_ulong;
-#[derive(Copy, Clone)]
-#[repr(C)]
-pub union pthread_attr_t {
-    pub __size: [libc::c_char; 56],
-    pub __align: libc::c_long,
-}
-
-#[derive(Copy, Clone)]
-#[repr(C)]
-pub struct __pthread_internal_list {
-    pub __prev: *mut __pthread_internal_list,
-    pub __next: *mut __pthread_internal_list,
-}
-pub type __pthread_list_t = __pthread_internal_list;
-#[derive(Copy, Clone)]
-#[repr(C)]
-pub struct __pthread_mutex_s {
-    pub __lock: libc::c_int,
-    pub __count: libc::c_uint,
-    pub __owner: libc::c_int,
-    pub __nusers: libc::c_uint,
-    pub __kind: libc::c_int,
-    pub __spins: libc::c_short,
-    pub __elision: libc::c_short,
-    pub __list: __pthread_list_t,
-}
 #[derive(Copy, Clone)]
 #[repr(C)]
 pub struct C2RustUnnamed {
@@ -75,31 +48,6 @@ pub struct C2RustUnnamed {
 pub union __atomic_wide_counter {
     pub __value64: libc::c_ulonglong,
     pub __value32: C2RustUnnamed,
-}
-#[derive(Copy, Clone)]
-#[repr(C)]
-pub struct __pthread_cond_s {
-    pub __wseq: __atomic_wide_counter,
-    pub __g1_start: __atomic_wide_counter,
-    pub __g_refs: [libc::c_uint; 2],
-    pub __g_size: [libc::c_uint; 2],
-    pub __g1_orig_size: libc::c_uint,
-    pub __wrefs: libc::c_uint,
-    pub __g_signals: [libc::c_uint; 2],
-}
-#[derive(Copy, Clone)]
-#[repr(C)]
-pub union pthread_mutex_t {
-    pub __data: __pthread_mutex_s,
-    pub __size: [libc::c_char; 40],
-    pub __align: libc::c_long,
-}
-#[derive(Copy, Clone)]
-#[repr(C)]
-pub union pthread_cond_t {
-    pub __data: __pthread_cond_s,
-    pub __size: [libc::c_char; 48],
-    pub __align: libc::c_longlong,
 }
 pub type socklen_t = __socklen_t;
 pub type sa_family_t = libc::c_ushort;
@@ -522,23 +470,6 @@ extern "C" {
     ) -> libc::c_int;
     pub fn listen(__fd: libc::c_int, __n: libc::c_int) -> libc::c_int;
     pub fn stat(__file: *const libc::c_char, __buf: *mut stat) -> libc::c_int;
-    pub fn pthread_mutex_init(
-        __mutex: *mut pthread_mutex_t,
-        __mutexattr: *const pthread_mutexattr_t,
-    ) -> libc::c_int;
-    pub fn pthread_mutex_destroy(__mutex: *mut pthread_mutex_t) -> libc::c_int;
-    pub fn pthread_mutex_lock(__mutex: *mut pthread_mutex_t) -> libc::c_int;
-    pub fn pthread_mutex_unlock(__mutex: *mut pthread_mutex_t) -> libc::c_int;
-    pub fn pthread_cond_init(
-        __cond: *mut pthread_cond_t,
-        __cond_attr: *const pthread_condattr_t,
-    ) -> libc::c_int;
-    pub fn pthread_cond_destroy(__cond: *mut pthread_cond_t) -> libc::c_int;
-    pub fn pthread_cond_signal(__cond: *mut pthread_cond_t) -> libc::c_int;
-    pub fn pthread_cond_wait(
-        __cond: *mut pthread_cond_t,
-        __mutex: *mut pthread_mutex_t,
-    ) -> libc::c_int;
     pub fn calloc(_: libc::c_ulong, _: libc::c_ulong) -> *mut libc::c_void;
     pub fn free(_: *mut libc::c_void);
     pub fn connect(
@@ -546,13 +477,6 @@ extern "C" {
         __addr: __CONST_SOCKADDR_ARG,
         __len: socklen_t,
     ) -> libc::c_int;
-    pub fn pthread_create(
-        __newthread: *mut pthread_t,
-        __attr: *const pthread_attr_t,
-        __start_routine: Option<unsafe extern "C" fn(*mut libc::c_void) -> *mut libc::c_void>,
-        __arg: *mut libc::c_void,
-    ) -> libc::c_int;
-    pub fn pthread_join(__th: pthread_t, __thread_return: *mut *mut libc::c_void) -> libc::c_int;
     pub fn strtod(_: *const libc::c_char, _: *mut *mut libc::c_char) -> libc::c_double;
     pub fn strcpy(_: *mut libc::c_char, _: *const libc::c_char) -> *mut libc::c_char;
     pub fn strcat(_: *mut libc::c_char, _: *const libc::c_char) -> *mut libc::c_char;
