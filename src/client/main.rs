@@ -233,18 +233,14 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *const libc::c_char) 
             command.text[0 as libc::c_int as usize],
             b"quit\0" as *const u8 as *const libc::c_char,
         ) == 0
-        {
-            super::command::command_quit(&mut command, session);
-        } else if extc::strcasecmp(
-            command.text[0 as libc::c_int as usize],
-            b"exit\0" as *const u8 as *const libc::c_char,
-        ) == 0
-        {
-            super::command::command_quit(&mut command, session);
-        } else if extc::strcasecmp(
-            command.text[0 as libc::c_int as usize],
-            b"bye\0" as *const u8 as *const libc::c_char,
-        ) == 0
+            || extc::strcasecmp(
+                command.text[0 as libc::c_int as usize],
+                b"exit\0" as *const u8 as *const libc::c_char,
+            ) == 0
+            || extc::strcasecmp(
+                command.text[0 as libc::c_int as usize],
+                b"bye\0" as *const u8 as *const libc::c_char,
+            ) == 0
         {
             super::command::command_quit(&mut command, session);
         } else if extc::strcasecmp(

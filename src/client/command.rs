@@ -1066,18 +1066,7 @@ pub unsafe fn command_set(
                     if ::core::mem::size_of::<libc::c_char>() as libc::c_ulong
                         > 1 as libc::c_int as libc::c_ulong
                     {
-                        if 0 != 0 {
-                            let mut __c: libc::c_int =
-                                cpy[(l - 1 as libc::c_int) as usize] as libc::c_int;
-                            __res = if __c < -(128 as libc::c_int) || __c > 255 as libc::c_int {
-                                __c
-                            } else {
-                                *(*extc::__ctype_toupper_loc()).offset(__c as isize)
-                            };
-                        } else {
-                            __res =
-                                extc::toupper(cpy[(l - 1 as libc::c_int) as usize] as libc::c_int);
-                        }
+                        __res = extc::toupper(cpy[(l - 1 as libc::c_int) as usize] as libc::c_int);
                     } else {
                         __res = *(*extc::__ctype_toupper_loc())
                             .offset(cpy[(l - 1 as libc::c_int) as usize] as libc::c_int as isize);
@@ -1093,18 +1082,7 @@ pub unsafe fn command_set(
                     if ::core::mem::size_of::<libc::c_char>() as libc::c_ulong
                         > 1 as libc::c_int as libc::c_ulong
                     {
-                        if 0 != 0 {
-                            let mut __c: libc::c_int =
-                                cpy[(l - 1 as libc::c_int) as usize] as libc::c_int;
-                            __res = if __c < -(128 as libc::c_int) || __c > 255 as libc::c_int {
-                                __c
-                            } else {
-                                *(*extc::__ctype_toupper_loc()).offset(__c as isize)
-                            };
-                        } else {
-                            __res =
-                                extc::toupper(cpy[(l - 1 as libc::c_int) as usize] as libc::c_int);
-                        }
+                        __res = extc::toupper(cpy[(l - 1 as libc::c_int) as usize] as libc::c_int);
                     } else {
                         __res = *(*extc::__ctype_toupper_loc())
                             .offset(cpy[(l - 1 as libc::c_int) as usize] as libc::c_int as isize);
