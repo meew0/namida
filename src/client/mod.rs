@@ -83,7 +83,6 @@ pub struct Parameter {
     pub losswindow_ms: u32,
     pub blockdump: u8,
     pub passphrase: Option<String>,
-    pub ringbuf: String,
 }
 
 impl Default for Parameter {
@@ -110,7 +109,6 @@ impl Default for Parameter {
             losswindow_ms: config::DEFAULT_LOSSWINDOW_MS,
             blockdump: config::DEFAULT_BLOCKDUMP,
             passphrase: None,
-            ringbuf: String::new(),
         }
     }
 }
