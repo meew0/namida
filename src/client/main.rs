@@ -10,39 +10,11 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *const libc::c_char) 
     let vla = super::config::MAX_COMMAND_LENGTH as usize;
     let mut command_text: Vec<libc::c_char> = ::std::vec::from_elem(0, vla);
     let mut session: Option<Session> = None;
-    let mut parameter: Parameter = Parameter {
-        server_name: std::ptr::null_mut::<libc::c_char>(),
-        server_port: 0,
-        client_port: 0,
-        udp_buffer: 0,
-        verbose_yn: 0,
-        transcript_yn: 0,
-        ipv6_yn: 0,
-        output_mode: 0,
-        block_size: 0,
-        target_rate: 0,
-        rate_adjust: 0,
-        error_rate: 0,
-        slower_num: 0,
-        slower_den: 0,
-        faster_num: 0,
-        faster_den: 0,
-        history: 0,
-        lossless: 0,
-        losswindow_ms: 0,
-        blockdump: 0,
-        passphrase: std::ptr::null_mut::<libc::c_char>(),
-        ringbuf: std::ptr::null_mut::<libc::c_char>(),
-    };
+    let mut parameter: Parameter = Parameter::default();
     let mut argc_curr: libc::c_int = 1 as libc::c_int;
     let mut ptr_command_text: *mut libc::c_char =
         &mut *command_text.as_mut_ptr().offset(0 as libc::c_int as isize) as *mut libc::c_char;
-    extc::memset(
-        &mut parameter as *mut Parameter as *mut libc::c_void,
-        0 as libc::c_int,
-        ::core::mem::size_of::<Parameter>() as libc::c_ulong,
-    );
-    super::config::reset_client(&mut parameter);
+
     extc::fprintf(
         extc::stderr,
         b"Tsunami Client for protocol rev %X\nRevision: %s\nCompiled: %s %s\n\0" as *const u8
@@ -232,13 +204,13 @@ unsafe fn run_command(
             b"close\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            super::command::command_close(command, session)?;
+            super::command::command_close(parameter, session)?;
         } else if extc::strcasecmp(
             command.text[0 as libc::c_int as usize],
             b"get\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            super::command::command_get(command, session)?;
+            super::command::command_get(command, parameter, session)?;
         } else if extc::strcasecmp(
             command.text[0 as libc::c_int as usize],
             b"dir\0" as *const u8 as *const libc::c_char,
@@ -250,7 +222,7 @@ unsafe fn run_command(
             b"help\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            super::command::command_help(command, session)?;
+            super::command::command_help(command)?;
         } else if extc::strcasecmp(
             command.text[0 as libc::c_int as usize],
             b"quit\0" as *const u8 as *const libc::c_char,
@@ -264,7 +236,7 @@ unsafe fn run_command(
                 b"bye\0" as *const u8 as *const libc::c_char,
             ) == 0
         {
-            super::command::command_quit(command, session);
+            super::command::command_quit(session);
         } else {
             found = false;
         }

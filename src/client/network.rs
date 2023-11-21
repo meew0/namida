@@ -1,3 +1,5 @@
+use std::ffi::CString;
+
 use crate::extc;
 use ::libc;
 use anyhow::bail;
@@ -5,9 +7,8 @@ use anyhow::bail;
 use super::{Parameter, Session};
 
 pub unsafe fn create_tcp_socket_client(
-    mut session: *mut Session,
-    mut server_name: *const libc::c_char,
-    mut server_port: u16,
+    session: &mut Session,
+    parameter: &Parameter,
 ) -> anyhow::Result<i32> {
     let mut hints: extc::addrinfo = extc::addrinfo {
         ai_flags: 0,
@@ -30,7 +31,7 @@ pub unsafe fn create_tcp_socket_client(
         0 as libc::c_int,
         ::core::mem::size_of::<extc::addrinfo>() as libc::c_ulong,
     );
-    hints.ai_family = if (*(*session).parameter).ipv6_yn as libc::c_int != 0 {
+    hints.ai_family = if parameter.ipv6_yn as libc::c_int != 0 {
         10 as libc::c_int
     } else {
         2 as libc::c_int
@@ -39,9 +40,15 @@ pub unsafe fn create_tcp_socket_client(
     extc::sprintf(
         buffer.as_mut_ptr(),
         b"%d\0" as *const u8 as *const libc::c_char,
-        server_port as libc::c_int,
+        parameter.server_port as libc::c_int,
     );
-    status = extc::getaddrinfo(server_name, buffer.as_mut_ptr(), &mut hints, &mut info);
+    let c_server_name = CString::new(parameter.server_name.as_str()).unwrap();
+    status = extc::getaddrinfo(
+        c_server_name.as_ptr(),
+        buffer.as_mut_ptr(),
+        &mut hints,
+        &mut info,
+    );
     if status != 0 {
         bail!("Error in getting address information for server");
     }
@@ -109,7 +116,7 @@ pub unsafe fn create_tcp_socket_client(
     }
     Ok(socket_fd)
 }
-pub unsafe fn create_udp_socket_client(mut parameter: *mut Parameter) -> anyhow::Result<i32> {
+pub unsafe fn create_udp_socket_client(parameter: &mut Parameter) -> anyhow::Result<i32> {
     let mut hints: extc::addrinfo = extc::addrinfo {
         ai_flags: 0,
         ai_family: 0,
@@ -161,7 +168,7 @@ pub unsafe fn create_udp_socket_client(mut parameter: *mut Parameter) -> anyhow:
                     socket_fd,
                     1 as libc::c_int,
                     8 as libc::c_int,
-                    &mut (*parameter).udp_buffer as *mut u32 as *const libc::c_void,
+                    &(*parameter).udp_buffer as *const u32 as *const libc::c_void,
                     ::core::mem::size_of::<u32>() as libc::c_ulong as extc::socklen_t,
                 );
                 if status < 0 as libc::c_int {

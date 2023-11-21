@@ -8,14 +8,9 @@ use crate::extc;
 
 pub unsafe fn ttp_authenticate_client(
     session: &mut Session,
-    mut secret_c: *mut u8,
+    mut secret: String,
 ) -> anyhow::Result<()> {
-    let mut secret = std::ffi::CStr::from_ptr(secret_c as *const i8)
-        .to_bytes()
-        .to_owned();
-
     let mut random: [u8; 64] = [0; 64];
-    let mut _digest: [u8; 16] = [0; 16];
     let mut result: u8 = 0;
     let mut status: libc::c_int = 0;
     status = extc::fread(
@@ -27,11 +22,8 @@ pub unsafe fn ttp_authenticate_client(
     if status < 64 as libc::c_int {
         bail!("Could not read authentication challenge from server");
     }
-    let mut digest: [u8; 16] = crate::common::common::prepare_proof(&mut random, &secret).into();
-
-    for byte in &mut secret {
-        *byte = b'0';
-    }
+    let mut digest: [u8; 16] =
+        crate::common::common::prepare_proof(&mut random, secret.as_bytes()).into();
 
     status = extc::fwrite(
         digest.as_mut_ptr() as *const libc::c_void,
@@ -87,6 +79,7 @@ pub unsafe fn ttp_negotiate_client(session: &mut Session) -> anyhow::Result<()> 
 }
 pub unsafe fn ttp_open_transfer_client(
     session: &mut Session,
+    parameter: &Parameter,
     mut remote_filename: *const libc::c_char,
     mut local_filename: *const libc::c_char,
 ) -> anyhow::Result<()> {
@@ -96,7 +89,6 @@ pub unsafe fn ttp_open_transfer_client(
     let mut temp16: u16 = 0;
     let mut status: libc::c_int = 0;
     let mut xfer: *mut Transfer = &mut session.transfer;
-    let mut param: *mut Parameter = session.parameter;
     status = extc::fprintf(
         session.server,
         b"%s\n\0" as *const u8 as *const libc::c_char,
@@ -117,7 +109,7 @@ pub unsafe fn ttp_open_transfer_client(
     if result as libc::c_int != 0 as libc::c_int {
         bail!("Server: File does not exist or cannot be transmitted");
     }
-    temp = extc::__bswap_32((*param).block_size);
+    temp = extc::__bswap_32(parameter.block_size);
     if extc::fwrite(
         &mut temp as *mut u32 as *const libc::c_void,
         4 as libc::c_int as libc::c_ulong,
@@ -127,7 +119,7 @@ pub unsafe fn ttp_open_transfer_client(
     {
         bail!("Could not submit block size");
     }
-    temp = extc::__bswap_32((*param).target_rate);
+    temp = extc::__bswap_32(parameter.target_rate);
     if extc::fwrite(
         &mut temp as *mut u32 as *const libc::c_void,
         4 as libc::c_int as libc::c_ulong,
@@ -137,7 +129,7 @@ pub unsafe fn ttp_open_transfer_client(
     {
         bail!("Could not submit target rate");
     }
-    temp = extc::__bswap_32((*param).error_rate);
+    temp = extc::__bswap_32(parameter.error_rate);
     if extc::fwrite(
         &mut temp as *mut u32 as *const libc::c_void,
         4 as libc::c_int as libc::c_ulong,
@@ -150,7 +142,7 @@ pub unsafe fn ttp_open_transfer_client(
     if extc::fflush(session.server) != 0 {
         bail!("Could not flush control channel");
     }
-    temp16 = extc::__bswap_16((*param).slower_num);
+    temp16 = extc::__bswap_16(parameter.slower_num);
     if extc::fwrite(
         &mut temp16 as *mut u16 as *const libc::c_void,
         2 as libc::c_int as libc::c_ulong,
@@ -160,7 +152,7 @@ pub unsafe fn ttp_open_transfer_client(
     {
         bail!("Could not submit slowdown numerator");
     }
-    temp16 = extc::__bswap_16((*param).slower_den);
+    temp16 = extc::__bswap_16(parameter.slower_den);
     if extc::fwrite(
         &mut temp16 as *mut u16 as *const libc::c_void,
         2 as libc::c_int as libc::c_ulong,
@@ -170,7 +162,7 @@ pub unsafe fn ttp_open_transfer_client(
     {
         bail!("Could not submit slowdown denominator");
     }
-    temp16 = extc::__bswap_16((*param).faster_num);
+    temp16 = extc::__bswap_16(parameter.faster_num);
     if extc::fwrite(
         &mut temp16 as *mut u16 as *const libc::c_void,
         2 as libc::c_int as libc::c_ulong,
@@ -180,7 +172,7 @@ pub unsafe fn ttp_open_transfer_client(
     {
         bail!("Could not submit speedup numerator");
     }
-    temp16 = extc::__bswap_16((*param).faster_den);
+    temp16 = extc::__bswap_16(parameter.faster_den);
     if extc::fwrite(
         &mut temp16 as *mut u16 as *const libc::c_void,
         2 as libc::c_int as libc::c_ulong,
@@ -219,7 +211,7 @@ pub unsafe fn ttp_open_transfer_client(
     {
         bail!("Could not read block size");
     }
-    if extc::__bswap_32(temp) != (*param).block_size {
+    if extc::__bswap_32(temp) != parameter.block_size {
         bail!("Block size disagreement");
     }
     if extc::fread(
@@ -258,21 +250,24 @@ pub unsafe fn ttp_open_transfer_client(
             .open(local_path)?,
     );
 
-    (*xfer).on_wire_estimate = (0.5f64 * (*param).target_rate as libc::c_double
-        / (8 as libc::c_int as u32 * (*param).block_size) as libc::c_double)
+    (*xfer).on_wire_estimate = (0.5f64 * parameter.target_rate as libc::c_double
+        / (8 as libc::c_int as u32 * parameter.block_size) as libc::c_double)
         as u32;
     (*xfer).on_wire_estimate = if (*xfer).block_count < (*xfer).on_wire_estimate {
         (*xfer).block_count
     } else {
         (*xfer).on_wire_estimate
     };
-    if (*param).transcript_yn != 0 {
-        super::transcript::xscript_open_client(session);
+    if parameter.transcript_yn != 0 {
+        super::transcript::xscript_open_client(session, parameter);
     }
 
     Ok(())
 }
-pub unsafe fn ttp_open_port_client(session: &mut Session) -> anyhow::Result<()> {
+pub unsafe fn ttp_open_port_client(
+    session: &mut Session,
+    parameter: &mut Parameter,
+) -> anyhow::Result<()> {
     let mut udp_address: extc::sockaddr = extc::sockaddr {
         sa_family: 0,
         sa_data: [0; 14],
@@ -281,7 +276,7 @@ pub unsafe fn ttp_open_port_client(session: &mut Session) -> anyhow::Result<()> 
         ::core::mem::size_of::<extc::sockaddr>() as libc::c_ulong as libc::c_uint;
     let mut status: libc::c_int = 0;
     let mut port: *mut u16 = std::ptr::null_mut::<u16>();
-    session.transfer.udp_fd = super::network::create_udp_socket_client(session.parameter)?;
+    session.transfer.udp_fd = super::network::create_udp_socket_client(parameter)?;
     extc::memset(
         &mut udp_address as *mut extc::sockaddr as *mut libc::c_void,
         0 as libc::c_int,
@@ -294,7 +289,7 @@ pub unsafe fn ttp_open_port_client(session: &mut Session) -> anyhow::Result<()> 
         },
         &mut udp_length,
     );
-    port = if (*session.parameter).ipv6_yn as libc::c_int != 0 {
+    port = if parameter.ipv6_yn as libc::c_int != 0 {
         &mut (*(&mut udp_address as *mut extc::sockaddr as *mut extc::sockaddr_in6)).sin6_port
     } else {
         &mut (*(&mut udp_address as *mut extc::sockaddr as *mut extc::sockaddr_in)).sin_port
@@ -456,7 +451,7 @@ pub unsafe fn ttp_request_stop(session: &mut Session) -> anyhow::Result<()> {
     }
     Ok(())
 }
-pub unsafe fn ttp_update_stats(session: &mut Session) -> anyhow::Result<()> {
+pub unsafe fn ttp_update_stats(session: &mut Session, parameter: &Parameter) -> anyhow::Result<()> {
     let mut now_epoch: extc::time_t = extc::time(std::ptr::null_mut::<extc::time_t>());
     let mut delta: u64 = 0;
     let mut d_seconds: libc::c_double = 0.;
@@ -503,14 +498,13 @@ pub unsafe fn ttp_update_stats(session: &mut Session) -> anyhow::Result<()> {
     hours = temp as libc::c_int;
     d_seconds = delta as libc::c_double / 1e6f64;
     d_seconds_total = delta_total as libc::c_double / 1e6f64;
-    data_total =
-        (*session.parameter).block_size as libc::c_double * (*stats).total_blocks as libc::c_double;
-    data_this = (*session.parameter).block_size as libc::c_double
+    data_total = parameter.block_size as libc::c_double * (*stats).total_blocks as libc::c_double;
+    data_this = parameter.block_size as libc::c_double
         * ((*stats).total_blocks).wrapping_sub((*stats).this_blocks) as libc::c_double;
-    data_this_rexmit = (*session.parameter).block_size as libc::c_double
+    data_this_rexmit = parameter.block_size as libc::c_double
         * (*stats).this_flow_retransmitteds as libc::c_double;
-    data_this_goodpt = (*session.parameter).block_size as libc::c_double
-        * (*stats).this_flow_originals as libc::c_double;
+    data_this_goodpt =
+        parameter.block_size as libc::c_double * (*stats).this_flow_originals as libc::c_double;
     (*stats).this_udp_errors = crate::common::common::get_udp_in_errors();
     retransmits_fraction = (*stats).this_retransmits as libc::c_double
         / (1.0f64
@@ -529,7 +523,7 @@ pub unsafe fn ttp_update_stats(session: &mut Session) -> anyhow::Result<()> {
     (*stats).this_transmit_rate = 8.0f64 * data_this / (d_seconds * u_mega);
     (*stats).this_retransmit_rate = 8.0f64 * data_this_rexmit / (d_seconds * u_mega);
     data_total_rate = 8.0f64 * data_total / (d_seconds_total * u_mega);
-    fb = (*session.parameter).history as libc::c_int as libc::c_double / 100.0f64;
+    fb = parameter.history as libc::c_int as libc::c_double / 100.0f64;
     ff = 1.0f64 - fb;
     (*stats).transmit_rate = fb * (*stats).transmit_rate + ff * (*stats).this_transmit_rate;
     (*stats).error_rate = fb * (*stats).error_rate
@@ -595,8 +589,8 @@ pub unsafe fn ttp_update_stats(session: &mut Session) -> anyhow::Result<()> {
         ((*stats).this_udp_errors).wrapping_sub((*stats).start_udp_errors),
         stats_flags.as_mut_ptr(),
     );
-    if (*session.parameter).verbose_yn != 0 {
-        if (*session.parameter).output_mode as libc::c_int == 0 as libc::c_int {
+    if parameter.verbose_yn != 0 {
+        if parameter.output_mode as libc::c_int == 0 as libc::c_int {
             extc::printf(b"\x1B[2J\x1B[H\0" as *const u8 as *const libc::c_char);
             extc::printf(
                 b"Current time:   %s\n\0" as *const u8 as *const libc::c_char,
@@ -679,8 +673,8 @@ pub unsafe fn ttp_update_stats(session: &mut Session) -> anyhow::Result<()> {
         }
         extc::fflush(extc::stdout);
     }
-    if (*session.parameter).transcript_yn != 0 {
-        super::transcript::xscript_data_log_client(session, stats_line.as_mut_ptr());
+    if parameter.transcript_yn != 0 {
+        super::transcript::xscript_data_log_client(session, parameter, stats_line.as_mut_ptr());
     }
     (*stats).this_blocks = (*stats).total_blocks;
     (*stats).this_retransmits = 0 as libc::c_int as u32;

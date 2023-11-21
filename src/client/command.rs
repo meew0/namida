@@ -6,14 +6,14 @@ use anyhow::bail;
 use super::{ring, Command, Parameter, Session, Statistics, Transfer};
 use crate::{datagram, extc};
 
-pub unsafe fn command_close(_command: &mut Command, session: &mut Session) -> anyhow::Result<()> {
+pub unsafe fn command_close(parameter: &Parameter, session: &mut Session) -> anyhow::Result<()> {
     if (session.server).is_null() {
         bail!("Tsunami session was not active");
     }
 
     extc::fclose(session.server);
     session.server = std::ptr::null_mut::<extc::FILE>();
-    if (*session.parameter).verbose_yn != 0 {
+    if parameter.verbose_yn != 0 {
         extc::printf(b"Connection closed.\n\n\0" as *const u8 as *const libc::c_char);
     }
     Ok(())
@@ -23,37 +23,27 @@ pub unsafe fn command_connect(
     parameter: &mut Parameter,
 ) -> anyhow::Result<Session> {
     let mut server_fd: libc::c_int = 0;
-    let mut secret: *mut libc::c_char = std::ptr::null_mut::<libc::c_char>();
     if command.count as libc::c_int > 1 as libc::c_int {
-        if !(parameter.server_name).is_null() {
-            extc::free(parameter.server_name as *mut libc::c_void);
-        }
-        parameter.server_name = extc::strdup(command.text[1 as libc::c_int as usize]);
-        if (parameter.server_name).is_null() {
-            bail!("Could not update server name");
-        }
+        parameter.server_name = CStr::from_ptr(command.text[1 as libc::c_int as usize])
+            .to_str()
+            .unwrap()
+            .to_owned();
     }
     if command.count as libc::c_int > 2 as libc::c_int {
         parameter.server_port = extc::atoi(command.text[2 as libc::c_int as usize]) as u16;
     }
 
     let mut session = Session {
-        parameter,
         transfer: Default::default(),
         server: std::ptr::null_mut(),
         server_address: std::ptr::null_mut(),
         server_address_length: 0,
     };
-    server_fd = super::network::create_tcp_socket_client(
-        &mut session,
-        parameter.server_name,
-        parameter.server_port,
-    )?;
+    server_fd = super::network::create_tcp_socket_client(&mut session, parameter)?;
     if server_fd < 0 as libc::c_int {
-        let rust_server_name = CStr::from_ptr(parameter.server_name);
         bail!(
             "Could not connect to {}:{}.",
-            rust_server_name.to_str().unwrap(),
+            parameter.server_name,
             parameter.server_port
         );
     }
@@ -66,20 +56,18 @@ pub unsafe fn command_connect(
         extc::fclose(session.server);
         bail!("Protocol negotiation failed: {:?}", err);
     }
-    if (parameter.passphrase).is_null() {
-        secret = extc::strdup(b"kitten\0" as *const u8 as *const libc::c_char);
-    } else {
-        secret = extc::strdup(parameter.passphrase);
-    }
-    if let Err(err) = super::protocol::ttp_authenticate_client(&mut session, secret as *mut u8) {
+
+    let secret = match &parameter.passphrase {
+        Some(passphrase) => passphrase.clone(),
+        None => "kitten".to_owned(),
+    };
+    if let Err(err) = super::protocol::ttp_authenticate_client(&mut session, secret) {
         extc::fclose(session.server);
-        extc::free(secret as *mut libc::c_void);
         bail!("Authentication failure: {:?}", err);
     }
-    if (*session.parameter).verbose_yn != 0 {
+    if parameter.verbose_yn != 0 {
         extc::printf(b"Connected.\n\n\0" as *const u8 as *const libc::c_char);
     }
-    extc::free(secret as *mut libc::c_void);
     Ok(session)
 }
 pub unsafe fn command_dir(_command: &mut Command, session: &mut Session) -> anyhow::Result<()> {
@@ -159,7 +147,11 @@ pub unsafe fn command_dir(_command: &mut Command, session: &mut Session) -> anyh
     );
     Ok(())
 }
-pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyhow::Result<()> {
+pub unsafe fn command_get(
+    command: &mut Command,
+    parameter: &mut Parameter,
+    session: &mut Session,
+) -> anyhow::Result<()> {
     let mut current_block: u64;
     let mut this_block: u32 = 0 as libc::c_int as u32;
     let mut this_type: u16 = 0 as libc::c_int as u16;
@@ -278,7 +270,7 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
                     session.server,
                     tmpname.as_mut_ptr(),
                     1024 as libc::c_int as u64,
-                );
+                )?;
                 let fresh0 = &mut (*file_names.offset(f_counter as isize));
                 *fresh0 = extc::strdup(tmpname.as_mut_ptr());
                 extc::printf(
@@ -326,11 +318,12 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
         }
         super::protocol::ttp_open_transfer_client(
             session,
+            parameter,
             session.transfer.remote_filename,
             session.transfer.local_filename,
         )?;
 
-        super::protocol::ttp_open_port_client(session)?;
+        super::protocol::ttp_open_port_client(session, parameter)?;
         session.transfer.retransmit.table = extc::calloc(
             super::config::DEFAULT_TABLE_SIZE as libc::c_ulong,
             ::core::mem::size_of::<u32>() as libc::c_ulong,
@@ -347,11 +340,11 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
             panic!("Could not allocate received-data bitfield");
         }
         session.transfer.ring_buffer = Some(Arc::new(super::ring::RingBuffer::create(
-            (*session.parameter).block_size,
+            parameter.block_size,
         )));
 
         let mut local_datagram_buffer =
-            ring::allocate_zeroed_boxed_slice(6 + (*session.parameter).block_size as usize);
+            ring::allocate_zeroed_boxed_slice(6 + parameter.block_size as usize);
 
         let cloned_ring_buffer = Arc::clone(session.transfer.ring_buffer.as_mut().unwrap());
         let block_count = session.transfer.block_count;
@@ -384,17 +377,18 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
             &mut session.transfer.stats.this_time,
             std::ptr::null_mut::<libc::c_void>(),
         );
-        if (*session.parameter).transcript_yn != 0 {
+        if parameter.transcript_yn != 0 {
             super::transcript::xscript_data_start_client(
                 session,
-                &mut session.transfer.stats.start_time,
+                parameter,
+                session.transfer.stats.start_time,
             );
         }
         loop {
             status = extc::recvfrom(
                 session.transfer.udp_fd,
                 local_datagram_buffer.as_mut_ptr() as *mut libc::c_void,
-                (6 as libc::c_int as u32).wrapping_add((*session.parameter).block_size) as usize,
+                (6 as libc::c_int as u32).wrapping_add(parameter.block_size) as usize,
                 0 as libc::c_int,
                 extc::__SOCKADDR_ARG {
                     __sockaddr__: std::ptr::null_mut::<libc::c_void>() as *mut extc::sockaddr,
@@ -483,22 +477,21 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
                     13361531435213260772 => {}
                     _ => {
                         if this_block > session.transfer.next_block {
-                            if (*session.parameter).lossless == 0 {
-                                if (*session.parameter).losswindow_ms == 0 as libc::c_int as u32 {
+                            if parameter.lossless == 0 {
+                                if parameter.losswindow_ms == 0 as libc::c_int as u32 {
                                     session.transfer.gapless_to_block = this_block;
                                 } else {
                                     let mut path_capability: libc::c_double = 0.;
                                     path_capability = 0.8f64
                                         * (session.transfer.stats.this_transmit_rate
                                             + session.transfer.stats.this_retransmit_rate);
-                                    path_capability *= 0.001f64
-                                        * (*session.parameter).losswindow_ms as libc::c_double;
+                                    path_capability *=
+                                        0.001f64 * parameter.losswindow_ms as libc::c_double;
                                     let mut earliest_block: u32 = (this_block as libc::c_double
                                         - (if ((1024 as libc::c_int * 1024 as libc::c_int)
                                             as libc::c_double
                                             * path_capability
-                                            / (8 as libc::c_int as u32
-                                                * (*session.parameter).block_size)
+                                            / (8 as libc::c_int as u32 * parameter.block_size)
                                                 as libc::c_double)
                                             < this_block
                                                 .wrapping_sub(session.transfer.gapless_to_block)
@@ -507,8 +500,7 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
                                             (1024 as libc::c_int * 1024 as libc::c_int)
                                                 as libc::c_double
                                                 * path_capability
-                                                / (8 as libc::c_int as u32
-                                                    * (*session.parameter).block_size)
+                                                / (8 as libc::c_int as u32 * parameter.block_size)
                                                     as libc::c_double
                                         } else {
                                             this_block
@@ -529,7 +521,6 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
                                             break 's_202;
                                         } else {
                                             block = block.wrapping_add(1);
-                                            block;
                                         }
                                     }
                                     session.transfer.next_block = earliest_block;
@@ -549,7 +540,6 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
                                         break 's_202;
                                     } else {
                                         block = block.wrapping_add(1);
-                                        block;
                                     }
                                 }
                             }
@@ -563,7 +553,6 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
                         {
                             session.transfer.gapless_to_block =
                                 (session.transfer.gapless_to_block).wrapping_add(1);
-                            session.transfer.gapless_to_block;
                         }
                         if this_type as libc::c_int == 'O' as i32 {
                             session.transfer.next_block =
@@ -578,7 +567,7 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
                             if session.transfer.blocks_left == 0 as libc::c_int as u32 {
                                 break;
                             }
-                            if (*session.parameter).lossless == 0
+                            if parameter.lossless == 0
                                 && session.transfer.retransmit.index_max == 0 as libc::c_int as u32
                                 && session.transfer.restart_pending == 0
                             {
@@ -595,10 +584,9 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
                                     break 's_202;
                                 } else {
                                     block = block.wrapping_add(1);
-                                    block;
                                 }
                             }
-                            super::protocol::ttp_repeat_retransmit(session);
+                            super::protocol::ttp_repeat_retransmit(session)?;
                         }
                     }
                 }
@@ -620,8 +608,8 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
                 current_block = 78252603380123710;
                 break 's_202;
             } else {
-                super::protocol::ttp_update_stats(session);
-                if (*session.parameter).blockdump != 0 {
+                super::protocol::ttp_update_stats(session, parameter)?;
+                if parameter.blockdump != 0 {
                     let mut postfix: [libc::c_char; 64] = [0; 64];
                     let fresh2 = dumpcount;
                     dumpcount = dumpcount.wrapping_add(1);
@@ -668,18 +656,16 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
                 if got_block(session, block) == 0 {
                     session.transfer.stats.total_lost =
                         (session.transfer.stats.total_lost).wrapping_add(1);
-                    session.transfer.stats.total_lost;
                 }
                 block = block.wrapping_add(1);
-                block;
             }
             mbit_thru = 8.0f64
                 * session.transfer.stats.total_blocks as libc::c_double
-                * (*session.parameter).block_size as libc::c_double;
+                * parameter.block_size as libc::c_double;
             mbit_good = mbit_thru
                 - 8.0f64
                     * session.transfer.stats.total_recvd_retransmits as libc::c_double
-                    * (*session.parameter).block_size as libc::c_double;
+                    * parameter.block_size as libc::c_double;
             mbit_file = 8.0f64 * session.transfer.file_size as libc::c_double;
             mbit_thru /= 1024.0f64 * 1024.0f64;
             mbit_good /= 1024.0f64 * 1024.0f64;
@@ -720,7 +706,7 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
                 mbit_file / time_secs,
             );
             extc::printf(b"Transfer mode         : \0" as *const u8 as *const libc::c_char);
-            if (*session.parameter).lossless != 0 {
+            if parameter.lossless != 0 {
                 if session.transfer.stats.total_lost == 0 as libc::c_int as u32 {
                     extc::printf(b"lossless\n\0" as *const u8 as *const libc::c_char);
                 } else {
@@ -731,12 +717,12 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
                     );
                 }
             } else {
-                if (*session.parameter).losswindow_ms == 0 as libc::c_int as u32 {
+                if parameter.losswindow_ms == 0 as libc::c_int as u32 {
                     extc::printf(b"lossy\n\0" as *const u8 as *const libc::c_char);
                 } else {
                     extc::printf(
                         b"semi-lossy, time window %d ms\n\0" as *const u8 as *const libc::c_char,
-                        (*session.parameter).losswindow_ms,
+                        parameter.losswindow_ms,
                     );
                 }
                 extc::printf(
@@ -748,14 +734,15 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
                 );
             }
             extc::printf(b"\n\0" as *const u8 as *const libc::c_char);
-            if (*session.parameter).transcript_yn != 0 {
+            if parameter.transcript_yn != 0 {
                 super::transcript::xscript_data_stop_client(
                     session,
-                    &mut session.transfer.stats.stop_time,
+                    parameter,
+                    session.transfer.stats.stop_time,
                 );
-                super::transcript::xscript_close_client(session, delta);
+                super::transcript::xscript_close_client(session, parameter, delta);
             }
-            if (*session.parameter).blockdump != 0 {
+            if parameter.blockdump != 0 {
                 dump_blockmap(
                     b".blockmap\0" as *const u8 as *const libc::c_char,
                     &session.transfer,
@@ -769,13 +756,12 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
                 extc::free(session.transfer.received as *mut libc::c_void);
                 session.transfer.received = std::ptr::null_mut::<u8>();
             }
-            if (*session.parameter).rate_adjust != 0 {
-                (*session.parameter).target_rate =
-                    (1.15f64 * 1e6f64 * (mbit_file / time_secs)) as u32;
+            if parameter.rate_adjust != 0 {
+                parameter.target_rate = (1.15f64 * 1e6f64 * (mbit_file / time_secs)) as u32;
                 extc::printf(
                     b"Adjusting target rate to %d Mbps for next transfer.\n\0" as *const u8
                         as *const libc::c_char,
-                    ((*session.parameter).target_rate as libc::c_double / 1e6f64) as libc::c_int,
+                    (parameter.target_rate as libc::c_double / 1e6f64) as libc::c_int,
                 );
             }
             f_counter = f_counter.wrapping_add(1);
@@ -817,7 +803,7 @@ pub unsafe fn command_get(command: &mut Command, session: &mut Session) -> anyho
         }
     }
 }
-pub unsafe fn command_help(command: &mut Command, _session: &mut Session) -> anyhow::Result<()> {
+pub unsafe fn command_help(command: &mut Command) -> anyhow::Result<()> {
     if (command.count as libc::c_int) < 2 as libc::c_int {
         extc::printf(
             b"Help is available for the following commands:\n\n\0" as *const u8
@@ -947,7 +933,7 @@ pub unsafe fn command_help(command: &mut Command, _session: &mut Session) -> any
     }
     Ok(())
 }
-pub unsafe fn command_quit(_command: &mut Command, session: &mut Session) -> libc::c_int {
+pub unsafe fn command_quit(session: &mut Session) -> libc::c_int {
     if !(session.server).is_null() {
         extc::fclose(session.server);
     }
@@ -970,13 +956,10 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
             b"server\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            if !(parameter.server_name).is_null() {
-                extc::free(parameter.server_name as *mut libc::c_void);
-            }
-            parameter.server_name = extc::strdup(command.text[2 as libc::c_int as usize]);
-            if (parameter.server_name).is_null() {
-                panic!("Could not update server name");
-            }
+            parameter.server_name = CStr::from_ptr(command.text[2 as libc::c_int as usize])
+                .to_str()
+                .unwrap()
+                .to_owned();
         } else if extc::strcasecmp(
             command.text[1 as libc::c_int as usize],
             b"port\0" as *const u8 as *const libc::c_char,
@@ -1158,13 +1141,12 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
             b"passphrase\0" as *const u8 as *const libc::c_char,
         ) == 0
         {
-            if !(parameter.passphrase).is_null() {
-                extc::free(parameter.passphrase as *mut libc::c_void);
-            }
-            parameter.passphrase = extc::strdup(command.text[2 as libc::c_int as usize]);
-            if (parameter.passphrase).is_null() {
-                panic!("Could not update passphrase");
-            }
+            parameter.passphrase = Some(
+                CStr::from_ptr(command.text[2 as libc::c_int as usize])
+                    .to_str()
+                    .unwrap()
+                    .to_owned(),
+            );
         }
     }
     if do_all != 0
@@ -1173,10 +1155,7 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
             b"server\0" as *const u8 as *const libc::c_char,
         ) == 0
     {
-        extc::printf(
-            b"server = %s\n\0" as *const u8 as *const libc::c_char,
-            parameter.server_name,
-        );
+        println!("server = {}", parameter.server_name);
     }
     if do_all != 0
         || extc::strcasecmp(
@@ -1403,7 +1382,7 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
     {
         extc::printf(
             b"passphrase = %s\n\0" as *const u8 as *const libc::c_char,
-            if (parameter.passphrase).is_null() {
+            if (parameter.passphrase).is_none() {
                 b"default\0" as *const u8 as *const libc::c_char
             } else {
                 b"<user-specified>\0" as *const u8 as *const libc::c_char

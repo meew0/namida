@@ -60,9 +60,9 @@ impl Default for Retransmit {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct Parameter {
-    pub server_name: *mut libc::c_char,
+    pub server_name: String,
     pub server_port: u16,
     pub client_port: u16,
     pub udp_buffer: u32,
@@ -82,8 +82,37 @@ pub struct Parameter {
     pub lossless: u8,
     pub losswindow_ms: u32,
     pub blockdump: u8,
-    pub passphrase: *mut libc::c_char,
-    pub ringbuf: *mut libc::c_char,
+    pub passphrase: Option<String>,
+    pub ringbuf: String,
+}
+
+impl Default for Parameter {
+    fn default() -> Self {
+        Self {
+            block_size: config::DEFAULT_BLOCK_SIZE,
+            server_name: config::DEFAULT_SERVER_NAME.to_owned(),
+            server_port: config::DEFAULT_SERVER_PORT,
+            client_port: config::DEFAULT_CLIENT_PORT,
+            udp_buffer: config::DEFAULT_UDP_BUFFER,
+            verbose_yn: config::DEFAULT_VERBOSE_YN,
+            transcript_yn: config::DEFAULT_TRANSCRIPT_YN,
+            ipv6_yn: config::DEFAULT_IPV6_YN,
+            output_mode: config::DEFAULT_OUTPUT_MODE,
+            target_rate: config::DEFAULT_TARGET_RATE,
+            rate_adjust: config::DEFAULT_RATE_ADJUST,
+            error_rate: config::DEFAULT_ERROR_RATE,
+            slower_num: config::DEFAULT_SLOWER_NUM,
+            slower_den: config::DEFAULT_SLOWER_DEN,
+            faster_num: config::DEFAULT_FASTER_NUM,
+            faster_den: config::DEFAULT_FASTER_DEN,
+            history: config::DEFAULT_HISTORY,
+            lossless: config::DEFAULT_LOSSLESS,
+            losswindow_ms: config::DEFAULT_LOSSWINDOW_MS,
+            blockdump: config::DEFAULT_BLOCKDUMP,
+            passphrase: None,
+            ringbuf: String::new(),
+        }
+    }
 }
 
 pub struct Transfer {
@@ -137,7 +166,6 @@ impl Default for Transfer {
 }
 
 pub struct Session {
-    pub parameter: *mut Parameter,
     pub transfer: Transfer,
     pub server: *mut extc::FILE,
     pub server_address: *mut extc::sockaddr,
