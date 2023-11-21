@@ -103,7 +103,7 @@ pub unsafe fn command_dir(_command: &mut Command, session: &mut Session) -> anyh
         &mut *read_str.as_mut_ptr().offset(1 as libc::c_int as isize),
         (::core::mem::size_of::<[libc::c_char; 2048]>() as libc::c_ulong)
             .wrapping_sub(2 as libc::c_int as libc::c_ulong),
-    );
+    )?;
     num_files = extc::atoi(read_str.as_mut_ptr()) as u16;
     extc::fprintf(
         extc::stderr,
@@ -116,7 +116,7 @@ pub unsafe fn command_dir(_command: &mut Command, session: &mut Session) -> anyh
             read_str.as_mut_ptr(),
             (::core::mem::size_of::<[libc::c_char; 2048]>() as libc::c_ulong)
                 .wrapping_sub(1 as libc::c_int as libc::c_ulong),
-        );
+        )?;
         extc::fprintf(
             extc::stderr,
             b" %2d) %-64s\0" as *const u8 as *const libc::c_char,
@@ -128,7 +128,7 @@ pub unsafe fn command_dir(_command: &mut Command, session: &mut Session) -> anyh
             read_str.as_mut_ptr(),
             (::core::mem::size_of::<[libc::c_char; 2048]>() as libc::c_ulong)
                 .wrapping_sub(1 as libc::c_int as libc::c_ulong),
-        );
+        )?;
         filelen = extc::atol(read_str.as_mut_ptr()) as usize;
         extc::fprintf(
             extc::stderr,
@@ -136,7 +136,6 @@ pub unsafe fn command_dir(_command: &mut Command, session: &mut Session) -> anyh
             filelen as u64,
         );
         i = i.wrapping_add(1);
-        i;
     }
     extc::fprintf(extc::stderr, b"\n\0" as *const u8 as *const libc::c_char);
     extc::fwrite(
@@ -278,7 +277,6 @@ pub unsafe fn command_get(
                     *file_names.offset(f_counter as isize),
                 );
                 f_counter = f_counter.wrapping_add(1);
-                f_counter;
             }
             extc::fprintf(
                 session.server,
@@ -793,7 +791,6 @@ pub unsafe fn command_get(
                 while f_counter < f_total {
                     extc::free(*file_names.offset(f_counter as isize) as *mut libc::c_void);
                     f_counter = f_counter.wrapping_add(1);
-                    f_counter;
                 }
                 extc::free(file_names as *mut libc::c_void);
             }
@@ -1093,7 +1090,7 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
                 command.text[2 as libc::c_int as usize],
                 &mut parameter.slower_num,
                 &mut parameter.slower_den,
-            );
+            )?;
         } else if extc::strcasecmp(
             command.text[1 as libc::c_int as usize],
             b"speedup\0" as *const u8 as *const libc::c_char,
@@ -1103,7 +1100,7 @@ pub unsafe fn command_set(command: &mut Command, parameter: &mut Parameter) -> a
                 command.text[2 as libc::c_int as usize],
                 &mut parameter.faster_num,
                 &mut parameter.faster_den,
-            );
+            )?;
         } else if extc::strcasecmp(
             command.text[1 as libc::c_int as usize],
             b"history\0" as *const u8 as *const libc::c_char,

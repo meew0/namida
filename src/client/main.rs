@@ -158,7 +158,6 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *const libc::c_char) 
                         *argv.offset(argc_curr as isize),
                     );
                     argc_curr += 1;
-                    argc_curr;
                 }
             }
         }
@@ -264,7 +263,6 @@ pub unsafe fn parse_command(command: &mut Command, mut buffer: *mut libc::c_char
         && *buffer as libc::c_int != 0
     {
         buffer = buffer.offset(1);
-        buffer;
     }
     while (command.count as libc::c_int) < 10 as libc::c_int && *buffer as libc::c_int != 0 {
         let fresh0 = command.count;
@@ -276,7 +274,6 @@ pub unsafe fn parse_command(command: &mut Command, mut buffer: *mut libc::c_char
                 == 0
         {
             buffer = buffer.offset(1);
-            buffer;
         }
         while *buffer as libc::c_int != 0
             && *(*extc::__ctype_b_loc()).offset(*buffer as libc::c_int as isize) as libc::c_int

@@ -1,4 +1,4 @@
-use super::Parameter;
+
 
 pub const DEFAULT_BLOCK_SIZE: u32 = 1024;
 pub const DEFAULT_TABLE_SIZE: libc::c_int = 4096;

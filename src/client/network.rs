@@ -46,7 +46,7 @@ pub unsafe fn create_tcp_socket_client(
     status = extc::getaddrinfo(
         c_server_name.as_ptr(),
         buffer.as_mut_ptr(),
-        &mut hints,
+        &hints,
         &mut info,
     );
     if status != 0 {
@@ -88,15 +88,14 @@ pub unsafe fn create_tcp_socket_client(
                         (*info).ai_addrlen,
                     );
                     if status == 0 as libc::c_int {
-                        (*session).server_address =
-                            extc::malloc((*info).ai_addrlen as libc::c_ulong)
-                                as *mut extc::sockaddr;
-                        (*session).server_address_length = (*info).ai_addrlen;
-                        if ((*session).server_address).is_null() {
+                        session.server_address = extc::malloc((*info).ai_addrlen as libc::c_ulong)
+                            as *mut extc::sockaddr;
+                        session.server_address_length = (*info).ai_addrlen;
+                        if (session.server_address).is_null() {
                             panic!("Could not allocate space for server address");
                         }
                         extc::memcpy(
-                            (*session).server_address as *mut libc::c_void,
+                            session.server_address as *mut libc::c_void,
                             (*info).ai_addr as *const libc::c_void,
                             (*info).ai_addrlen as libc::c_ulong,
                         );
@@ -139,7 +138,7 @@ pub unsafe fn create_udp_socket_client(parameter: &mut Parameter) -> anyhow::Res
         ::core::mem::size_of::<extc::addrinfo>() as libc::c_ulong,
     );
     hints.ai_flags = 0x1 as libc::c_int;
-    hints.ai_family = if (*parameter).ipv6_yn as libc::c_int != 0 {
+    hints.ai_family = if parameter.ipv6_yn as libc::c_int != 0 {
         10 as libc::c_int
     } else {
         2 as libc::c_int
@@ -149,12 +148,12 @@ pub unsafe fn create_udp_socket_client(parameter: &mut Parameter) -> anyhow::Res
         extc::sprintf(
             buffer.as_mut_ptr(),
             b"%d\0" as *const u8 as *const libc::c_char,
-            (*parameter).client_port as libc::c_int + higher_port_attempt,
+            parameter.client_port as libc::c_int + higher_port_attempt,
         );
         status = extc::getaddrinfo(
             std::ptr::null::<libc::c_char>(),
             buffer.as_mut_ptr(),
-            &mut hints,
+            &hints,
             &mut info,
         );
         if status != 0 {
@@ -168,7 +167,7 @@ pub unsafe fn create_udp_socket_client(parameter: &mut Parameter) -> anyhow::Res
                     socket_fd,
                     1 as libc::c_int,
                     8 as libc::c_int,
-                    &(*parameter).udp_buffer as *const u32 as *const libc::c_void,
+                    &parameter.udp_buffer as *const u32 as *const libc::c_void,
                     ::core::mem::size_of::<u32>() as libc::c_ulong as extc::socklen_t,
                 );
                 if status < 0 as libc::c_int {
@@ -182,12 +181,12 @@ pub unsafe fn create_udp_socket_client(parameter: &mut Parameter) -> anyhow::Res
                     (*info).ai_addrlen,
                 );
                 if status == 0 as libc::c_int {
-                    (*parameter).client_port =
+                    parameter.client_port =
                         extc::__bswap_16((*((*info).ai_addr as *mut extc::sockaddr_in)).sin_port);
                     extc::fprintf(
                         extc::stderr,
                         b"Receiving data on UDP port %d\n\0" as *const u8 as *const libc::c_char,
-                        (*parameter).client_port as libc::c_int,
+                        parameter.client_port as libc::c_int,
                     );
                     break;
                 }

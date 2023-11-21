@@ -18,7 +18,6 @@ pub unsafe fn get_usec_since(mut old_time: *mut extc::timeval) -> u64 {
     while now.tv_sec > (*old_time).tv_sec {
         result = result.wrapping_add(1000000 as libc::c_int as u64);
         now.tv_sec -= 1;
-        now.tv_sec;
     }
     result.wrapping_add((now.tv_usec - (*old_time).tv_usec) as u64)
 }
@@ -57,7 +56,7 @@ pub unsafe fn make_transcript_filename(
         tm_gmtoff: 0,
         tm_zone: std::ptr::null::<libc::c_char>(),
     };
-    extc::gmtime_r(&mut epoch, &mut gmt);
+    extc::gmtime_r(&epoch, &mut gmt);
     extc::sprintf(
         buffer,
         b"%04d-%02d-%02d-%02d-%02d-%02d.%s\0" as *const u8 as *const libc::c_char,
@@ -98,7 +97,6 @@ pub unsafe fn read_line(
             bail!("Could not read complete line of input");
         }
         buffer_offset += 1;
-        buffer_offset;
         if !(*buffer.offset((buffer_offset - 1 as libc::c_int) as isize) as libc::c_int
             != '\0' as i32
             && *buffer.offset((buffer_offset - 1 as libc::c_int) as isize) as libc::c_int
@@ -128,7 +126,6 @@ pub unsafe fn fread_line(
             bail!("Could not read complete line of input");
         }
         buffer_offset += 1;
-        buffer_offset;
         if !(*buffer.offset((buffer_offset - 1 as libc::c_int) as isize) as libc::c_int
             != '\0' as i32
             && *buffer.offset((buffer_offset - 1 as libc::c_int) as isize) as libc::c_int
@@ -226,9 +223,7 @@ pub unsafe fn get_udp_in_errors() -> u64 {
         {
             p = extc::strchr(p, ' ' as i32);
             i += 1;
-            i;
             p = p.offset(1);
-            p;
         }
         if !p.is_null()
             && p < buf

@@ -41,7 +41,7 @@ pub unsafe fn create_tcp_socket_server(
     status = extc::getaddrinfo(
         std::ptr::null::<libc::c_char>(),
         buffer.as_mut_ptr(),
-        &mut hints,
+        &hints,
         &mut info,
     );
     if status != 0 {

@@ -3,7 +3,7 @@ use std::{ffi::CStr, path::Path};
 use ::libc;
 use anyhow::bail;
 
-use super::{Parameter, Retransmission, Retransmit, Session, Statistics, Transfer};
+use super::{Parameter, Retransmission, Session, Transfer};
 use crate::extc;
 
 pub unsafe fn ttp_authenticate_client(
@@ -325,10 +325,8 @@ pub unsafe fn ttp_repeat_retransmit(session: &mut Session) -> anyhow::Result<()>
                 extc::__bswap_16(crate::common::common::REQUEST_RETRANSMIT);
             retransmission[count as usize].block = extc::__bswap_32(block as u32);
             count += 1;
-            count;
         }
         entry += 1;
-        entry;
     }
     if count >= 2048 as libc::c_int {
         block = (if session.transfer.block_count
@@ -586,7 +584,7 @@ pub unsafe fn ttp_update_stats(session: &mut Session, parameter: &Parameter) -> 
             extc::printf(b"\x1B[2J\x1B[H\0" as *const u8 as *const libc::c_char);
             extc::printf(
                 b"Current time:   %s\n\0" as *const u8 as *const libc::c_char,
-                extc::ctime(&mut now_epoch),
+                extc::ctime(&now_epoch),
             );
             extc::printf(
                 b"Elapsed time:   %02d:%02d:%02d.%03d\n\n\0" as *const u8 as *const libc::c_char,

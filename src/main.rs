@@ -5,9 +5,9 @@
 #![allow(non_upper_case_globals)]
 #![allow(unused_assignments)]
 #![allow(unused_mut)]
+#![allow(clippy::missing_safety_doc)]
 #![feature(c_variadic)]
 #![feature(extern_types)]
-#![feature(label_break_value)]
 
 extern crate libc;
 pub mod client;

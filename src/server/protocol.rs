@@ -153,7 +153,6 @@ pub unsafe fn ttp_authenticate_server(
             bail!("Authentication failed");
         }
         i += 1;
-        i;
     }
     status = crate::common::common::full_write(
         (*session).client_fd,
@@ -347,7 +346,6 @@ pub unsafe fn ttp_open_transfer_server(
                     .wrapping_add(1 as libc::c_int as libc::c_ulong),
             );
             i = i.wrapping_add(1);
-            i;
         }
         crate::common::common::full_read(
             (*session).client_fd,
@@ -394,7 +392,6 @@ pub unsafe fn ttp_open_transfer_server(
                     l = 0 as libc::c_int;
                     while message[l as usize] as libc::c_int >= ' ' as i32 {
                         l += 1;
-                        l;
                     }
                     message[l as usize] = 0 as libc::c_int as libc::c_char;
                     extc::fprintf(
@@ -412,7 +409,6 @@ pub unsafe fn ttp_open_transfer_server(
                     );
                     length += l + 1 as libc::c_int;
                     nFile += 1;
-                    nFile;
                 }
             }
             extc::pclose(p);
@@ -478,7 +474,6 @@ pub unsafe fn ttp_open_transfer_server(
                     );
                     fl = fl.offset((l + 1 as libc::c_int) as isize);
                     i = i.wrapping_add(1);
-                    i;
                 }
                 extc::memset(
                     message.as_mut_ptr() as *mut libc::c_void,
@@ -560,7 +555,6 @@ pub unsafe fn ttp_open_transfer_server(
                         .wrapping_add(1 as libc::c_int as libc::c_ulong),
                 );
                 i = i.wrapping_add(1);
-                i;
             }
             extc::memset(
                 message.as_mut_ptr() as *mut libc::c_void,

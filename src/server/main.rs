@@ -105,7 +105,6 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) ->
                 println!("WARNING: Could not create child process");
             } else {
                 session.session_id += 1;
-                session.session_id;
                 if child_pid == 0 as libc::c_int {
                     extc::close(server_fd);
                     session.client_fd = client_fd;
@@ -211,7 +210,7 @@ pub unsafe fn client_handler(mut session: *mut super::ttp_session_t) {
             }
             extc::gettimeofday(&mut start, std::ptr::null_mut::<libc::c_void>());
             if (*param).transcript_yn != 0 {
-                super::transcript::xscript_data_start_server(session, &mut start);
+                super::transcript::xscript_data_start_server(session, &start);
             }
             lasthblostreport = start;
             lastfeedback = start;
@@ -366,11 +365,13 @@ pub unsafe fn client_handler(mut session: *mut super::ttp_session_t) {
                         extc::__bswap_16(crate::common::common::REQUEST_ERROR_RATE);
                     retransmission.error_rate = extc::__bswap_32(100000 as libc::c_int as u32);
                     retransmission.block = 0 as libc::c_int as u32;
-                    super::protocol::ttp_accept_retransmit(
+                    if let Err(err) = super::protocol::ttp_accept_retransmit(
                         session,
                         &mut retransmission,
                         datagram.as_mut_ptr(),
-                    );
+                    ) {
+                        println!("Error in accept_retransmit: {:?}", err);
+                    }
                     delta = crate::common::common::get_usec_since(&mut lastfeedback);
                     extc::snprintf(
                         stats_line.as_mut_ptr(),
@@ -418,7 +419,7 @@ pub unsafe fn client_handler(mut session: *mut super::ttp_session_t) {
             }
             extc::gettimeofday(&mut stop, std::ptr::null_mut::<libc::c_void>());
             if (*param).transcript_yn != 0 {
-                super::transcript::xscript_data_stop_server(session, &mut stop);
+                super::transcript::xscript_data_stop_server(session, &stop);
             }
             delta = (1000000 as libc::c_longlong * (stop.tv_sec - start.tv_sec) as libc::c_longlong
                 + stop.tv_usec as libc::c_longlong
@@ -769,7 +770,6 @@ pub unsafe fn process_options(
                 *((*parameter).file_sizes).offset(counter as isize) as u64,
             );
             counter += 1;
-            counter;
         }
         extc::fprintf(
             extc::stderr,
@@ -822,9 +822,6 @@ pub fn main() {
     }
     args.push(::core::ptr::null_mut());
     unsafe {
-        ::std::process::exit(main_0(
-            (args.len() - 1) as libc::c_int,
-            args.as_mut_ptr() as *mut *mut libc::c_char,
-        ) as i32)
+        ::std::process::exit(main_0((args.len() - 1) as libc::c_int, args.as_mut_ptr()) as i32)
     }
 }
