@@ -157,7 +157,5 @@ impl RingBuffer {
 }
 
 pub fn allocate_zeroed_boxed_slice(len: usize) -> Box<[u8]> {
-    let mut vec = Vec::with_capacity(len);
-    vec.resize(len, 0);
-    vec.into_boxed_slice()
+    vec![0; len].into_boxed_slice()
 }
