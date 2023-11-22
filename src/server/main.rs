@@ -110,7 +110,10 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
     };
     let mut deadconnection_counter: u32 = 0;
     let mut retransmitlen: libc::c_int = 0;
-    let mut datagram: [u8; 65536] = [0; 65536];
+
+    let mut datagram_block_buffer: Vec<u8> = vec![0_u8; parameter.block_size as usize];
+    let mut datagram_buffer: Vec<u8> = vec![0_u8; parameter.block_size as usize + 6];
+
     let mut ipd_time: i64 = 0;
     let mut ipd_usleep_diff: i64 = 0;
     let mut ipd_time_max: i64 = 0;
@@ -250,7 +253,8 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                                 session,
                                 parameter,
                                 &mut retransmission,
-                                datagram.as_mut_ptr(),
+                                datagram_block_buffer.as_mut_slice(),
+                                datagram_buffer.as_mut_slice(),
                             ) {
                                 println!("WARNING: Retransmission error: {:?}", err);
                             }
@@ -271,17 +275,19 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                         } else {
                             'O' as i32
                         }) as u8;
-                        super::io::build_datagram(
+                        let datagram = super::io::build_datagram(
                             session,
                             parameter,
                             session.transfer.block,
                             block_type as u16,
-                            datagram.as_mut_ptr(),
+                            datagram_block_buffer.as_mut_slice(),
                         )
                         .unwrap();
+                        datagram.write_to(datagram_buffer.as_mut_slice());
+
                         status = extc::sendto(
                             session.transfer.udp_fd,
-                            datagram.as_mut_ptr() as *const libc::c_void,
+                            datagram_buffer.as_mut_ptr() as *const libc::c_void,
                             (6 as libc::c_int as u32).wrapping_add(parameter.block_size) as u64,
                             0 as libc::c_int,
                             extc::__CONST_SOCKADDR_ARG {
@@ -326,7 +332,8 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                         session,
                         parameter,
                         &mut retransmission,
-                        datagram.as_mut_ptr(),
+                        datagram_block_buffer.as_mut_slice(),
+                        datagram_buffer.as_mut_slice(),
                     ) {
                         println!("Error in accept_retransmit: {:?}", err);
                     }
@@ -400,7 +407,6 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
             if parameter.transcript_yn != 0 {
                 super::transcript::xscript_close_server(session, parameter, delta);
             }
-            extc::fclose(session.transfer.file);
             extc::close(session.transfer.udp_fd);
             session.transfer = Transfer::default();
         }

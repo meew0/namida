@@ -1,3 +1,8 @@
+use std::{
+    io::{Seek, SeekFrom},
+    path::Path,
+};
+
 use crate::extc;
 use ::libc;
 use anyhow::bail;
@@ -8,7 +13,8 @@ pub unsafe fn ttp_accept_retransmit(
     session: &mut Session,
     parameter: &Parameter,
     retransmission: &mut Retransmission,
-    mut datagram: *mut u8,
+    datagram_block_buffer: &mut [u8],
+    datagram_buffer: &mut [u8],
 ) -> anyhow::Result<()> {
     static mut iteration: libc::c_int = 0 as libc::c_int;
     static mut stats_line: [libc::c_char; 80] = [0; 80];
@@ -84,16 +90,18 @@ pub unsafe fn ttp_accept_retransmit(
             session.transfer.block = retransmission.block;
         }
     } else if type_0 as libc::c_int == crate::common::REQUEST_RETRANSMIT as libc::c_int {
-        super::io::build_datagram(
+        let datagram = super::io::build_datagram(
             session,
             parameter,
             retransmission.block,
             'R' as i32 as u16,
-            datagram,
+            datagram_block_buffer,
         )?;
+        datagram.write_to(datagram_buffer);
+
         status = extc::sendto(
             session.transfer.udp_fd,
-            datagram as *const libc::c_void,
+            datagram_buffer.as_ptr() as *const libc::c_void,
             (6 as libc::c_int as u32).wrapping_add(parameter.block_size) as u64,
             0 as libc::c_int,
             extc::__CONST_SOCKADDR_ARG {
@@ -579,33 +587,38 @@ pub unsafe fn ttp_open_transfer_server(
             )?;
         }
     }
-    session.transfer.filename = Some(extc::c_to_string(filename.as_mut_ptr()));
+
+    let filename_rust = session
+        .transfer
+        .filename
+        .insert(extc::c_to_string(filename.as_mut_ptr()));
     if parameter.verbose_yn != 0 {
         extc::printf(
             b"Request for file: '%s'\n\0" as *const u8 as *const libc::c_char,
             filename.as_mut_ptr(),
         );
     }
-    session.transfer.file = extc::fopen(
-        filename.as_mut_ptr(),
-        b"r\0" as *const u8 as *const libc::c_char,
-    );
-    if (session.transfer.file).is_null() {
-        status = crate::common::full_write(
-            session.client_fd,
-            b"\x08\0" as *const u8 as *const libc::c_char as *const libc::c_void,
-            1 as libc::c_int as u64,
-        ) as libc::c_int;
-        if status < 0 as libc::c_int {
-            println!("WARNING: Could not signal request failure to client");
+
+    let path = Path::new(filename_rust);
+    let file = match std::fs::File::open(path) {
+        Ok(opened_file) => session.transfer.file.insert(opened_file),
+        Err(err) => {
+            status = crate::common::full_write(
+                session.client_fd,
+                b"\x08\0" as *const u8 as *const libc::c_char as *const libc::c_void,
+                1 as libc::c_int as u64,
+            ) as libc::c_int;
+            if status < 0 as libc::c_int {
+                println!("WARNING: Could not signal request failure to client");
+            }
+            bail!(
+                "File '{}' does not exist or cannot be read: {}",
+                filename_rust,
+                err
+            );
         }
-        bail!(
-            "File '{}' does not exist or cannot be read",
-            std::ffi::CStr::from_ptr(filename.as_mut_ptr())
-                .to_str()
-                .unwrap(),
-        );
-    }
+    };
+
     extc::gettimeofday(&mut ping_s, std::ptr::null_mut::<libc::c_void>());
     status = crate::common::full_write(
         session.client_fd,
@@ -679,17 +692,10 @@ pub unsafe fn ttp_open_transfer_server(
         bail!("Could not read speedup denominator");
     }
     parameter.faster_den = extc::__bswap_16(parameter.faster_den);
-    extc::fseeko(
-        session.transfer.file,
-        0 as libc::c_int as extc::__off64_t,
-        2 as libc::c_int,
-    );
-    parameter.file_size = extc::ftello(session.transfer.file) as u64;
-    extc::fseeko(
-        session.transfer.file,
-        0 as libc::c_int as extc::__off64_t,
-        0 as libc::c_int,
-    );
+
+    parameter.file_size = file.seek(SeekFrom::End(0))?;
+    file.seek(SeekFrom::Start(0))?;
+
     parameter.block_count = (parameter.file_size / parameter.block_size as u64).wrapping_add(
         (parameter.file_size % parameter.block_size as u64 != 0 as libc::c_int as u64)
             as libc::c_int as u64,

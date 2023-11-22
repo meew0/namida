@@ -85,10 +85,9 @@ impl Default for Parameter {
     }
 }
 
-#[derive(Clone)]
 pub struct Transfer {
     pub filename: Option<String>,
-    pub file: *mut extc::FILE,
+    pub file: Option<std::fs::File>,
     pub transcript: *mut extc::FILE,
     pub udp_fd: libc::c_int,
     pub udp_address: *mut extc::sockaddr,
@@ -101,7 +100,7 @@ impl Default for Transfer {
     fn default() -> Self {
         Self {
             filename: None,
-            file: std::ptr::null_mut(),
+            file: None,
             transcript: std::ptr::null_mut(),
             udp_fd: 0,
             udp_address: std::ptr::null_mut(),
@@ -112,7 +111,6 @@ impl Default for Transfer {
     }
 }
 
-#[derive(Clone)]
 pub struct Session {
     pub transfer: Transfer,
     pub client_fd: libc::c_int,
