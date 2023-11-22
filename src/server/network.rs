@@ -2,9 +2,9 @@ use crate::extc;
 use ::libc;
 use anyhow::bail;
 
-pub unsafe fn create_tcp_socket_server(
-    mut parameter: *mut super::ttp_parameter_t,
-) -> anyhow::Result<i32> {
+use super::Parameter;
+
+pub unsafe fn create_tcp_socket_server(parameter: &Parameter) -> anyhow::Result<i32> {
     let mut hints: extc::addrinfo = extc::addrinfo {
         ai_flags: 0,
         ai_family: 0,
@@ -86,9 +86,7 @@ pub unsafe fn create_tcp_socket_server(
     }
     Ok(socket_fd)
 }
-pub unsafe fn create_udp_socket_server(
-    mut parameter: *mut super::ttp_parameter_t,
-) -> anyhow::Result<i32> {
+pub unsafe fn create_udp_socket_server(parameter: &Parameter) -> anyhow::Result<i32> {
     let mut socket_fd: libc::c_int = 0;
     let mut status: libc::c_int = 0;
     let mut yes: libc::c_int = 1 as libc::c_int;
@@ -119,7 +117,7 @@ pub unsafe fn create_udp_socket_server(
         socket_fd,
         1 as libc::c_int,
         7 as libc::c_int,
-        &mut (*parameter).udp_buffer as *mut u32 as *const libc::c_void,
+        &(*parameter).udp_buffer as *const u32 as *const libc::c_void,
         ::core::mem::size_of::<u32>() as libc::c_ulong as extc::socklen_t,
     );
     if status < 0 as libc::c_int {
