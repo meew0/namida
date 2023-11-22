@@ -87,7 +87,6 @@ impl Default for Parameter {
 
 #[derive(Copy, Clone)]
 pub struct Transfer {
-    pub parameter: *mut Parameter,
     pub filename: *mut libc::c_char,
     pub file: *mut extc::FILE,
     pub vsib: *mut extc::FILE,
@@ -98,6 +97,23 @@ pub struct Transfer {
     pub ipd_current: libc::c_double,
     pub block: u32,
 }
+
+impl Default for Transfer {
+    fn default() -> Self {
+        Self {
+            filename: std::ptr::null_mut(),
+            file: std::ptr::null_mut(),
+            vsib: std::ptr::null_mut(),
+            transcript: std::ptr::null_mut(),
+            udp_fd: 0,
+            udp_address: std::ptr::null_mut(),
+            udp_length: 0,
+            ipd_current: 0.0,
+            block: 0,
+        }
+    }
+}
+
 #[derive(Copy, Clone)]
 pub struct Session {
     pub transfer: Transfer,

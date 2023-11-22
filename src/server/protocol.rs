@@ -2,29 +2,29 @@ use crate::extc;
 use ::libc;
 use anyhow::bail;
 
-use super::{Parameter, Session, Transfer};
+use super::{Parameter, Retransmission, Session, Transfer};
 
 pub unsafe fn ttp_accept_retransmit(
     session: &mut Session,
     parameter: &Parameter,
-    mut retransmission: *mut super::Retransmission,
+    retransmission: &mut Retransmission,
     mut datagram: *mut u8,
 ) -> anyhow::Result<()> {
     static mut iteration: libc::c_int = 0 as libc::c_int;
     static mut stats_line: [libc::c_char; 80] = [0; 80];
     let mut status: libc::c_int = 0;
     let mut type_0: u16 = 0;
-    (*retransmission).block = extc::__bswap_32((*retransmission).block);
-    (*retransmission).error_rate = extc::__bswap_32((*retransmission).error_rate);
-    type_0 = extc::__bswap_16((*retransmission).request_type);
+    retransmission.block = extc::__bswap_32(retransmission.block);
+    retransmission.error_rate = extc::__bswap_32(retransmission.error_rate);
+    type_0 = extc::__bswap_16(retransmission.request_type);
     if type_0 as libc::c_int == crate::common::common::REQUEST_ERROR_RATE as libc::c_int {
-        if (*retransmission).error_rate > parameter.error_rate {
+        if retransmission.error_rate > parameter.error_rate {
             let mut factor1: libc::c_double = 1.0f64
                 * parameter.slower_num as libc::c_int as libc::c_double
                 / parameter.slower_den as libc::c_int as libc::c_double
                 - 1.0f64;
             let mut factor2: libc::c_double = (1.0f64
-                + (*retransmission).error_rate as libc::c_double
+                + retransmission.error_rate as libc::c_double
                 - parameter.error_rate as libc::c_double)
                 / (100000.0f64 - parameter.error_rate as libc::c_double);
             session.transfer.ipd_current *= 1.0f64 + factor1 * factor2;
@@ -49,7 +49,7 @@ pub unsafe fn ttp_accept_retransmit(
         extc::sprintf(
             stats_line.as_mut_ptr(),
             b"%6u %3.2fus %5uus %7u %6.2f %3u\n\0" as *const u8 as *const libc::c_char,
-            (*retransmission).error_rate,
+            retransmission.error_rate,
             session.transfer.ipd_current as libc::c_float as libc::c_double,
             parameter.ipd_time,
             session.transfer.block,
@@ -73,21 +73,21 @@ pub unsafe fn ttp_accept_retransmit(
             super::transcript::xscript_data_log_server(session, stats_line.as_mut_ptr());
         }
     } else if type_0 as libc::c_int == crate::common::common::REQUEST_RESTART as libc::c_int {
-        if (*retransmission).block == 0 as libc::c_int as u32
-            || (*retransmission).block > parameter.block_count
+        if retransmission.block == 0 as libc::c_int as u32
+            || retransmission.block > parameter.block_count
         {
             bail!(
                 "Attempt to restart at illegal block {}",
-                (*retransmission).block
+                retransmission.block
             );
         } else {
-            session.transfer.block = (*retransmission).block;
+            session.transfer.block = retransmission.block;
         }
     } else if type_0 as libc::c_int == crate::common::common::REQUEST_RETRANSMIT as libc::c_int {
         super::io::build_datagram(
             session,
             parameter,
-            (*retransmission).block,
+            retransmission.block,
             'R' as i32 as u16,
             datagram,
         )?;
@@ -102,12 +102,12 @@ pub unsafe fn ttp_accept_retransmit(
             session.transfer.udp_length,
         ) as libc::c_int;
         if status < 0 as libc::c_int {
-            bail!("Could not retransmit block {}", (*retransmission).block,);
+            bail!("Could not retransmit block {}", retransmission.block,);
         }
     } else {
         bail!(
             "Received unknown retransmission request of type {}",
-            extc::__bswap_16((*retransmission).request_type) as libc::c_int,
+            extc::__bswap_16(retransmission.request_type) as libc::c_int,
         );
     }
     Ok(())
@@ -299,11 +299,7 @@ pub unsafe fn ttp_open_transfer_server(
         tv_sec: 0,
         tv_usec: 0,
     };
-    extc::memset(
-        &mut session.transfer as *mut Transfer as *mut libc::c_void,
-        0 as libc::c_int,
-        ::core::mem::size_of::<Transfer>() as libc::c_ulong,
-    );
+    session.transfer = Transfer::default();
     crate::common::common::read_line(
         session.client_fd,
         filename.as_mut_ptr(),

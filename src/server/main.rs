@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, ffi::CStr};
 
-use super::{Parameter, Session, Transfer};
+use super::{Parameter, Retransmission, Session, Transfer};
 
 use crate::extc;
 use ::libc;
@@ -18,27 +18,11 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) ->
         ::core::mem::size_of::<extc::sockaddr_in>() as libc::c_ulong as extc::socklen_t;
     let mut parameter: Parameter = Parameter::default();
     let mut session: Session = Session {
-        transfer: Transfer {
-            parameter: std::ptr::null_mut::<Parameter>(),
-            filename: std::ptr::null_mut::<libc::c_char>(),
-            file: std::ptr::null_mut::<extc::FILE>(),
-            vsib: std::ptr::null_mut::<extc::FILE>(),
-            transcript: std::ptr::null_mut::<extc::FILE>(),
-            udp_fd: 0,
-            udp_address: std::ptr::null_mut::<extc::sockaddr>(),
-            udp_length: 0,
-            ipd_current: 0.,
-            block: 0,
-        },
+        transfer: Transfer::default(),
         client_fd: 0,
         session_id: 0,
     };
     let mut child_pid: extc::pid_t = 0;
-    extc::memset(
-        &mut session as *mut Session as *mut libc::c_void,
-        0 as libc::c_int,
-        ::core::mem::size_of::<Session>() as libc::c_ulong,
-    );
     process_options(argc, argv, &mut parameter);
     server_fd = super::network::create_tcp_socket_server(&parameter).unwrap();
     extc::signal(
@@ -78,11 +62,7 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) ->
                 if child_pid == 0 as libc::c_int {
                     extc::close(server_fd);
                     session.client_fd = client_fd;
-                    extc::memset(
-                        &mut session.transfer as *mut Transfer as *mut libc::c_void,
-                        0 as libc::c_int,
-                        ::core::mem::size_of::<Transfer>() as libc::c_ulong,
-                    );
+                    session.transfer = Transfer::default();
                     session.transfer.ipd_current = 0.0f64;
                     client_handler(&mut session, &mut parameter);
                     return 0 as libc::c_int;
@@ -95,7 +75,7 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) ->
 }
 
 pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
-    let mut retransmission: super::Retransmission = super::Retransmission {
+    let mut retransmission: Retransmission = Retransmission {
         request_type: 0,
         block: 0,
         error_rate: 0,
@@ -131,7 +111,6 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
     let mut ipd_usleep_diff: i64 = 0;
     let mut ipd_time_max: i64 = 0;
     let mut status: libc::c_int = 0;
-    let mut xfer: *mut Transfer = &mut session.transfer;
     let mut delta: u64 = 0;
     let mut block_type: u8 = 0;
     super::protocol::ttp_negotiate_server(session).unwrap();
@@ -184,11 +163,11 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
             ipd_time_max = 0 as libc::c_int as i64;
             ipd_usleep_diff = 0 as libc::c_int as i64;
             retransmitlen = 0 as libc::c_int;
-            (*xfer).block = 0 as libc::c_int as u32;
-            while (*xfer).block <= parameter.block_count {
+            session.transfer.block = 0 as libc::c_int as u32;
+            while session.transfer.block <= parameter.block_count {
                 block_type = 'R' as i32 as u8;
                 extc::gettimeofday(&mut currpacketT, std::ptr::null_mut::<libc::c_void>());
-                ipd_usleep_diff = ((*xfer).ipd_current
+                ipd_usleep_diff = (session.transfer.ipd_current
                     + ((prevpacketT.tv_sec - currpacketT.tv_sec) as libc::c_double * 1e6f64
                         + (prevpacketT.tv_usec - currpacketT.tv_usec) as libc::c_double))
                     as i64;
@@ -203,10 +182,10 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                 };
                 status = extc::read(
                     session.client_fd,
-                    (&mut retransmission as *mut super::Retransmission as *mut libc::c_char)
+                    (&mut retransmission as *mut Retransmission as *mut libc::c_char)
                         .offset(retransmitlen as isize) as *mut libc::c_void,
-                    ::core::mem::size_of::<super::Retransmission>()
-                        .wrapping_sub(retransmitlen as usize) as u64,
+                    ::core::mem::size_of::<Retransmission>().wrapping_sub(retransmitlen as usize)
+                        as u64,
                 ) as libc::c_int;
                 if status <= 0 as libc::c_int && *extc::__errno_location() != 11 as libc::c_int {
                     panic!("Retransmission read failed");
@@ -216,7 +195,7 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                 }
 
                 match (retransmitlen as libc::c_ulong)
-                    .cmp(&(::core::mem::size_of::<super::Retransmission>() as libc::c_ulong))
+                    .cmp(&(::core::mem::size_of::<Retransmission>() as libc::c_ulong))
                 {
                     Ordering::Equal => {
                         lastfeedback = currpacketT;
@@ -229,7 +208,7 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                                 extc::stderr,
                                 b"Transmission of %s complete.\n\0" as *const u8
                                     as *const libc::c_char,
-                                (*xfer).filename,
+                                session.transfer.filename,
                             );
                             if !(parameter.finishhook).is_null() {
                                 let MaxCommandLength: libc::c_int = 1024 as libc::c_int;
@@ -241,7 +220,7 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                                     MaxCommandLength as libc::c_ulong,
                                     b"%s %s\0" as *const u8 as *const libc::c_char,
                                     parameter.finishhook,
-                                    (*xfer).filename,
+                                    session.transfer.filename,
                                 );
                                 if v >= MaxCommandLength {
                                     extc::fprintf(
@@ -272,14 +251,15 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                         }
                     }
                     Ordering::Less => {
-                        (*xfer).block = if ((*xfer).block).wrapping_add(1 as libc::c_int as u32)
+                        session.transfer.block = if (session.transfer.block)
+                            .wrapping_add(1 as libc::c_int as u32)
                             < parameter.block_count
                         {
-                            ((*xfer).block).wrapping_add(1 as libc::c_int as u32)
+                            (session.transfer.block).wrapping_add(1 as libc::c_int as u32)
                         } else {
                             parameter.block_count
                         };
-                        block_type = (if (*xfer).block == parameter.block_count {
+                        block_type = (if session.transfer.block == parameter.block_count {
                             'X' as i32
                         } else {
                             'O' as i32
@@ -287,23 +267,26 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                         super::io::build_datagram(
                             session,
                             parameter,
-                            (*xfer).block,
+                            session.transfer.block,
                             block_type as u16,
                             datagram.as_mut_ptr(),
                         )
                         .unwrap();
                         status = extc::sendto(
-                            (*xfer).udp_fd,
+                            session.transfer.udp_fd,
                             datagram.as_mut_ptr() as *const libc::c_void,
                             (6 as libc::c_int as u32).wrapping_add(parameter.block_size) as u64,
                             0 as libc::c_int,
                             extc::__CONST_SOCKADDR_ARG {
-                                __sockaddr__: (*xfer).udp_address,
+                                __sockaddr__: session.transfer.udp_address,
                             },
-                            (*xfer).udp_length,
+                            session.transfer.udp_length,
                         ) as libc::c_int;
                         if status < 0 as libc::c_int {
-                            println!("WARNING: Could not transmit block #{}", (*xfer).block);
+                            println!(
+                                "WARNING: Could not transmit block #{}",
+                                session.transfer.block
+                            );
                             continue;
                         }
                     }
@@ -311,7 +294,7 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                         extc::fprintf(
                             extc::stderr,
                             b"warn: retransmitlen > %d\n\0" as *const u8 as *const libc::c_char,
-                            ::core::mem::size_of::<super::Retransmission>() as libc::c_ulong
+                            ::core::mem::size_of::<Retransmission>() as libc::c_ulong
                                 as libc::c_int,
                         );
                         retransmitlen = 0 as libc::c_int;
@@ -348,8 +331,8 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                             .wrapping_sub(1 as libc::c_int as libc::c_ulong),
                         b"   n/a     n/a     n/a %7u %6.2f %3u -- no heartbeat since %3.2fs\n\0"
                             as *const u8 as *const libc::c_char,
-                        (*xfer).block,
-                        100.0f64 * (*xfer).block as libc::c_double
+                        session.transfer.block,
+                        100.0f64 * session.transfer.block as libc::c_double
                             / parameter.block_count as libc::c_double,
                         session.session_id,
                         1e-6f64 * delta as libc::c_double,
@@ -411,13 +394,9 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
             if parameter.transcript_yn != 0 {
                 super::transcript::xscript_close_server(session, parameter, delta);
             }
-            extc::fclose((*xfer).file);
-            extc::close((*xfer).udp_fd);
-            extc::memset(
-                xfer as *mut libc::c_void,
-                0 as libc::c_int,
-                ::core::mem::size_of::<Transfer>() as libc::c_ulong,
-            );
+            extc::fclose(session.transfer.file);
+            extc::close(session.transfer.udp_fd);
+            session.transfer = Transfer::default();
         }
     }
 }
@@ -425,7 +404,7 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
 pub unsafe fn process_options(
     mut argc: libc::c_int,
     mut argv: *mut *mut libc::c_char,
-    mut parameter: *mut Parameter,
+    parameter: &mut Parameter,
 ) {
     let mut long_options: [extc::option; 12] = [
         {
@@ -565,34 +544,34 @@ pub unsafe fn process_options(
         }
         match which {
             118 => {
-                (*parameter).verbose_yn = 1 as libc::c_int as u8;
+                parameter.verbose_yn = 1 as libc::c_int as u8;
             }
             116 => {
-                (*parameter).transcript_yn = 1 as libc::c_int as u8;
+                parameter.transcript_yn = 1 as libc::c_int as u8;
             }
             54 => {
-                (*parameter).ipv6_yn = 1 as libc::c_int as u8;
+                parameter.ipv6_yn = 1 as libc::c_int as u8;
             }
             112 => {
-                (*parameter).tcp_port = extc::atoi(extc::optarg) as u16;
+                parameter.tcp_port = extc::atoi(extc::optarg) as u16;
             }
             115 => {
-                (*parameter).secret = CStr::from_ptr(extc::optarg).to_str().unwrap().to_owned();
+                parameter.secret = CStr::from_ptr(extc::optarg).to_str().unwrap().to_owned();
             }
             99 => {
-                (*parameter).client = extc::optarg;
+                parameter.client = extc::optarg;
             }
             102 => {
-                (*parameter).finishhook = extc::optarg as *mut libc::c_uchar;
+                parameter.finishhook = extc::optarg as *mut libc::c_uchar;
             }
             97 => {
-                (*parameter).allhook = extc::optarg as *mut libc::c_uchar;
+                parameter.allhook = extc::optarg as *mut libc::c_uchar;
             }
             98 => {
-                (*parameter).udp_buffer = extc::atoi(extc::optarg) as u32;
+                parameter.udp_buffer = extc::atoi(extc::optarg) as u32;
             }
             104 => {
-                (*parameter).hb_timeout = extc::atoi(extc::optarg) as u16;
+                parameter.hb_timeout = extc::atoi(extc::optarg) as u16;
             }
             _ => {
                 extc::fprintf(
@@ -706,61 +685,60 @@ pub unsafe fn process_options(
     }
     if argc > extc::optind {
         let mut counter: libc::c_int = 0;
-        (*parameter).file_names = argv.offset(extc::optind as isize);
-        (*parameter).file_name_size = 0 as libc::c_int as u16;
-        (*parameter).total_files = (argc - extc::optind) as u16;
-        (*parameter).file_sizes = extc::malloc(
+        parameter.file_names = argv.offset(extc::optind as isize);
+        parameter.file_name_size = 0 as libc::c_int as u16;
+        parameter.total_files = (argc - extc::optind) as u16;
+        parameter.file_sizes = extc::malloc(
             (::core::mem::size_of::<usize>() as libc::c_ulong)
-                .wrapping_mul((*parameter).total_files as libc::c_ulong),
+                .wrapping_mul(parameter.total_files as libc::c_ulong),
         ) as *mut u64;
         extc::fprintf(
             extc::stderr,
             b"\nThe specified %d files will be listed on GET *:\n\0" as *const u8
                 as *const libc::c_char,
-            (*parameter).total_files as libc::c_int,
+            parameter.total_files as libc::c_int,
         );
         counter = 0 as libc::c_int;
         while counter < argc - extc::optind {
             extc::stat(
-                *((*parameter).file_names).offset(counter as isize),
+                *(parameter.file_names).offset(counter as isize),
                 &mut filestat,
             );
-            *((*parameter).file_sizes).offset(counter as isize) = filestat.st_size as u64;
-            (*parameter).file_name_size = ((*parameter).file_name_size as libc::c_ulong)
-                .wrapping_add(
-                    (extc::strlen(*((*parameter).file_names).offset(counter as isize)))
-                        .wrapping_add(1 as libc::c_int as libc::c_ulong),
-                ) as u16 as u16;
+            *(parameter.file_sizes).offset(counter as isize) = filestat.st_size as u64;
+            parameter.file_name_size = (parameter.file_name_size as libc::c_ulong).wrapping_add(
+                (extc::strlen(*(parameter.file_names).offset(counter as isize)))
+                    .wrapping_add(1 as libc::c_int as libc::c_ulong),
+            ) as u16 as u16;
             extc::fprintf(
                 extc::stderr,
                 b" %3d)   %-20s  %llu bytes\n\0" as *const u8 as *const libc::c_char,
                 counter + 1 as libc::c_int,
-                *((*parameter).file_names).offset(counter as isize),
-                *((*parameter).file_sizes).offset(counter as isize) as u64,
+                *(parameter.file_names).offset(counter as isize),
+                *(parameter.file_sizes).offset(counter as isize) as u64,
             );
             counter += 1;
         }
         extc::fprintf(
             extc::stderr,
             b"total characters %d\n\0" as *const u8 as *const libc::c_char,
-            (*parameter).file_name_size as libc::c_int,
+            parameter.file_name_size as libc::c_int,
         );
     }
-    if 1 as libc::c_int == (*parameter).verbose_yn as libc::c_int {
+    if 1 as libc::c_int == parameter.verbose_yn as libc::c_int {
         extc::fprintf(
             extc::stderr,
             b"Block size: %d\n\0" as *const u8 as *const libc::c_char,
-            (*parameter).block_size,
+            parameter.block_size,
         );
         extc::fprintf(
             extc::stderr,
             b"Buffer size: %d\n\0" as *const u8 as *const libc::c_char,
-            (*parameter).udp_buffer,
+            parameter.udp_buffer,
         );
         extc::fprintf(
             extc::stderr,
             b"Port: %d\n\0" as *const u8 as *const libc::c_char,
-            (*parameter).tcp_port as libc::c_int,
+            parameter.tcp_port as libc::c_int,
         );
     }
 }
