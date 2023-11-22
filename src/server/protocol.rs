@@ -1,5 +1,3 @@
-use std::ffi::CString;
-
 use crate::extc;
 use ::libc;
 use anyhow::bail;
@@ -548,7 +546,7 @@ pub unsafe fn ttp_open_transfer_server(
                 message.as_mut_ptr(),
             );
 
-            for (file_index, file_name) in parameter.file_names.iter().enumerate() {
+            for file_name in &parameter.file_names {
                 let bytes = file_name.as_os_str().as_encoded_bytes();
                 let mut null_terminated = vec![0; bytes.len() + 1];
                 null_terminated[0..(bytes.len())].copy_from_slice(bytes);

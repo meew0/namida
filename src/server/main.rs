@@ -686,8 +686,9 @@ pub unsafe fn process_options(
                 }
                 Err(err) => {
                     eprintln!(
-                        "Could not get metadata of specified file: {}",
-                        path.display()
+                        "Could not get metadata of specified file: '{}', error: {}",
+                        path.display(),
+                        err
                     );
                 }
             }
