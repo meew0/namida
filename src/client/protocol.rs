@@ -1,4 +1,4 @@
-use std::{ffi::CStr, path::Path};
+use std::{ffi::CString, path::Path};
 
 use ::libc;
 use anyhow::bail;
@@ -79,18 +79,20 @@ pub unsafe fn ttp_negotiate_client(session: &mut Session) -> anyhow::Result<()> 
 pub unsafe fn ttp_open_transfer_client(
     session: &mut Session,
     parameter: &Parameter,
-    mut remote_filename: *const libc::c_char,
-    mut local_filename: *const libc::c_char,
+    remote_filename: String,
+    local_filename: String,
 ) -> anyhow::Result<()> {
     dbg!();
     let mut result: u8 = 0;
     let mut temp: u32 = 0;
     let mut temp16: u16 = 0;
     let mut status: libc::c_int = 0;
+
+    let remote_c = CString::new(remote_filename.as_str()).unwrap();
     status = extc::fprintf(
         session.server,
         b"%s\n\0" as *const u8 as *const libc::c_char,
-        remote_filename,
+        remote_c.as_ptr(),
     );
     if status <= 0 as libc::c_int || extc::fflush(session.server) != 0 {
         bail!("Could not request file");
@@ -186,8 +188,8 @@ pub unsafe fn ttp_open_transfer_client(
 
     session.transfer = Transfer::default();
 
-    session.transfer.remote_filename = remote_filename;
-    session.transfer.local_filename = local_filename;
+    session.transfer.remote_filename = Some(remote_filename);
+    let local_filename = session.transfer.local_filename.insert(local_filename);
     if extc::fread(
         &mut session.transfer.file_size as *mut u64 as *mut libc::c_void,
         8 as libc::c_int as libc::c_ulong,
@@ -231,14 +233,15 @@ pub unsafe fn ttp_open_transfer_client(
     }
     session.transfer.epoch = extc::__bswap_32(session.transfer.epoch as u32) as extc::time_t;
     session.transfer.blocks_left = session.transfer.block_count;
-    if extc::access(session.transfer.local_filename, 0 as libc::c_int) == 0 {
-        extc::printf(
-            b"Warning: overwriting existing file '%s'\n\0" as *const u8 as *const libc::c_char,
-            local_filename,
+
+    let local_path = Path::new(local_filename);
+    if local_path.exists() {
+        println!(
+            "Warning: overwriting existing file '{}'",
+            local_path.display()
         );
     }
 
-    let local_path = Path::new(CStr::from_ptr(session.transfer.local_filename).to_str()?);
     session.transfer.file = Some(
         std::fs::File::options()
             .write(true)

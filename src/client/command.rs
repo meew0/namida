@@ -1,4 +1,4 @@
-use std::{ffi::CStr, sync::Arc};
+use std::{ffi::CStr, io::Write, path::Path, sync::Arc};
 
 use ::libc;
 use anyhow::bail;
@@ -290,35 +290,36 @@ pub unsafe fn command_get(
     f_counter = 0 as libc::c_int as u32;
 
     's_202: loop {
-        if multimode == 0 {
-            session.transfer.remote_filename = command.text[1 as libc::c_int as usize];
+        let remote_c = if multimode == 0 {
+            command.text[1 as libc::c_int as usize]
         } else {
-            session.transfer.remote_filename = *file_names.offset(f_counter as isize);
-        }
-        if multimode == 0 {
+            *file_names.offset(f_counter as isize)
+        };
+        let remote_filename = extc::c_to_string(remote_c);
+
+        let local_filename = if multimode == 0 {
             if command.count as libc::c_int >= 3 as libc::c_int {
-                session.transfer.local_filename = command.text[2 as libc::c_int as usize];
+                // Local filename was specified
+                extc::c_to_string(command.text[2 as libc::c_int as usize])
+            } else if let Some(last_slash) = remote_filename.rfind('/') {
+                // Remote filename contains slash, use only the last part as the local filename
+                remote_filename[(last_slash + 1)..].to_owned()
             } else {
-                session.transfer.local_filename =
-                    extc::strrchr(command.text[1 as libc::c_int as usize], '/' as i32);
-                if (session.transfer.local_filename).is_null() {
-                    session.transfer.local_filename = command.text[1 as libc::c_int as usize];
-                } else {
-                    session.transfer.local_filename = (session.transfer.local_filename).offset(1);
-                }
+                // Remote filename does not contain slash, use it as the local filename in its
+                // entirety
+                remote_filename.clone()
             }
         } else {
-            session.transfer.local_filename = *file_names.offset(f_counter as isize);
-            extc::printf(
-                b"GET *: now requesting file '%s'\n\0" as *const u8 as *const libc::c_char,
-                session.transfer.local_filename,
-            );
-        }
+            let local_filename = extc::c_to_string(*file_names.offset(f_counter as isize));
+            println!("GET *: now requesting file '{}'", local_filename);
+            local_filename
+        };
+
         super::protocol::ttp_open_transfer_client(
             session,
             parameter,
-            session.transfer.remote_filename,
-            session.transfer.local_filename,
+            remote_filename,
+            local_filename,
         )?;
 
         super::protocol::ttp_open_port_client(session, parameter)?;
@@ -606,16 +607,11 @@ pub unsafe fn command_get(
             } else {
                 super::protocol::ttp_update_stats(session, parameter)?;
                 if parameter.blockdump != 0 {
-                    let mut postfix: [libc::c_char; 64] = [0; 64];
-                    let fresh2 = dumpcount;
+                    let mut postfix = format!(".bmap{}", dumpcount);
+                    if let Err(err) = dump_blockmap(&postfix, &session.transfer) {
+                        eprintln!("Failed to write blockmap dump: {:?}", err);
+                    }
                     dumpcount = dumpcount.wrapping_add(1);
-                    extc::snprintf(
-                        postfix.as_mut_ptr(),
-                        63 as libc::c_int as libc::c_ulong,
-                        b".bmap%u\0" as *const u8 as *const libc::c_char,
-                        fresh2,
-                    );
-                    dump_blockmap(postfix.as_mut_ptr(), &session.transfer);
                 }
             }
         }
@@ -739,10 +735,9 @@ pub unsafe fn command_get(
                 super::transcript::xscript_close_client(session, parameter, delta);
             }
             if parameter.blockdump != 0 {
-                dump_blockmap(
-                    b".blockmap\0" as *const u8 as *const libc::c_char,
-                    &session.transfer,
-                );
+                if let Err(err) = dump_blockmap(".blockmap", &session.transfer) {
+                    eprintln!("Failed to write blockmap: {}", err);
+                }
             }
             if !(session.transfer.retransmit.table).is_null() {
                 extc::free(session.transfer.retransmit.table as *mut libc::c_void);
@@ -1427,38 +1422,20 @@ pub unsafe fn got_block(session: &mut Session, mut blocknr: u32) -> libc::c_int 
     *(session.transfer.received).offset((blocknr / 8 as libc::c_int as u32) as isize) as libc::c_int
         & (1 as libc::c_int) << (blocknr % 8 as libc::c_int as u32)
 }
-pub unsafe fn dump_blockmap(mut postfix: *const libc::c_char, xfer: &Transfer) {
-    let mut fbits: *mut extc::FILE = std::ptr::null_mut::<extc::FILE>();
-    let mut fname: *mut libc::c_char = std::ptr::null_mut::<libc::c_char>();
-    fname = extc::calloc(
-        (extc::strlen(xfer.local_filename))
-            .wrapping_add(extc::strlen(postfix))
-            .wrapping_add(1 as libc::c_int as libc::c_ulong),
-        ::core::mem::size_of::<u8>() as libc::c_ulong,
-    ) as *mut libc::c_char;
-    extc::strcpy(fname, xfer.local_filename);
-    extc::strcat(fname, postfix);
-    fbits = extc::fopen(fname, b"wb\0" as *const u8 as *const libc::c_char);
-    if !fbits.is_null() {
-        extc::fwrite(
-            &xfer.block_count as *const u32 as *const libc::c_void,
-            ::core::mem::size_of::<u32>() as libc::c_ulong,
-            1 as libc::c_int as libc::c_ulong,
-            fbits,
-        );
-        extc::fwrite(
-            xfer.received as *const libc::c_void,
-            ::core::mem::size_of::<u8>() as libc::c_ulong,
-            (xfer.block_count / 8 as libc::c_int as u32).wrapping_add(1 as libc::c_int as u32)
-                as libc::c_ulong,
-            fbits,
-        );
-        extc::fclose(fbits);
-    } else {
-        extc::fprintf(
-            extc::stderr,
-            b"Could not create a file for the blockmap dump\0" as *const u8 as *const libc::c_char,
-        );
-    }
-    extc::free(fname as *mut libc::c_void);
+pub unsafe fn dump_blockmap(postfix: &str, xfer: &Transfer) -> anyhow::Result<()> {
+    let fname = format!("{}{}", xfer.local_filename.as_ref().unwrap(), postfix);
+    let mut fbits = std::fs::File::options()
+        .write(true)
+        .create(true)
+        .open(Path::new(&fname))?;
+
+    fbits.write_all(&xfer.block_count.to_le_bytes())?;
+
+    let block_data = std::slice::from_raw_parts(
+        xfer.received,
+        (xfer.block_count / 8).wrapping_add(1) as usize,
+    );
+    fbits.write_all(block_data)?;
+
+    Ok(())
 }

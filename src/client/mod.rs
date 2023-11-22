@@ -115,8 +115,8 @@ impl Default for Parameter {
 
 pub struct Transfer {
     pub epoch: i64,
-    pub remote_filename: *const libc::c_char,
-    pub local_filename: *const libc::c_char,
+    pub remote_filename: Option<String>,
+    pub local_filename: Option<String>,
     pub file: Option<std::fs::File>,
     pub vsib: *mut extc::FILE,
     pub transcript: *mut extc::FILE,
@@ -140,8 +140,8 @@ impl Default for Transfer {
     fn default() -> Self {
         Self {
             epoch: Default::default(),
-            remote_filename: std::ptr::null(),
-            local_filename: std::ptr::null(),
+            remote_filename: None,
+            local_filename: None,
             file: None,
             vsib: std::ptr::null_mut(),
             transcript: std::ptr::null_mut(),

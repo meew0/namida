@@ -550,3 +550,7 @@ pub unsafe fn gai_strerror_wrap<'a>(ecode: i32) -> &'a str {
     let ptr = gai_strerror(ecode);
     std::ffi::CStr::from_ptr(ptr).to_str().unwrap()
 }
+
+pub unsafe fn c_to_string(c: *const libc::c_char) -> String {
+    std::ffi::CStr::from_ptr(c).to_str().unwrap().to_owned()
+}
