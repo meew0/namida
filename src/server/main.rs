@@ -1,4 +1,8 @@
-use std::{cmp::Ordering, ffi::CStr, path::Path};
+use std::{
+    cmp::Ordering,
+    ffi::{CStr, CString},
+    path::Path,
+};
 
 use super::{Parameter, Retransmission, Session, Transfer};
 
@@ -204,23 +208,26 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                         if extc::__bswap_16(retransmission.request_type) as libc::c_int
                             == crate::common::REQUEST_STOP as libc::c_int
                         {
-                            extc::fprintf(
-                                extc::stderr,
-                                b"Transmission of %s complete.\n\0" as *const u8
-                                    as *const libc::c_char,
-                                session.transfer.filename,
+                            eprintln!(
+                                "Transmission of {} complete.",
+                                session.transfer.filename.as_ref().unwrap()
                             );
                             if !(parameter.finishhook).is_null() {
                                 let MaxCommandLength: libc::c_int = 1024 as libc::c_int;
                                 let vla = MaxCommandLength as usize;
                                 let mut cmd: Vec<libc::c_char> = ::std::vec::from_elem(0, vla);
                                 let mut v: libc::c_int = 0;
+
+                                let filename_c = CString::new(
+                                    session.transfer.filename.as_ref().unwrap().as_str(),
+                                )
+                                .unwrap();
                                 v = extc::snprintf(
                                     cmd.as_mut_ptr(),
                                     MaxCommandLength as libc::c_ulong,
                                     b"%s %s\0" as *const u8 as *const libc::c_char,
                                     parameter.finishhook,
-                                    session.transfer.filename,
+                                    filename_c.as_ptr(),
                                 );
                                 if v >= MaxCommandLength {
                                     extc::fprintf(

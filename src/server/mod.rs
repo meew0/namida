@@ -85,9 +85,9 @@ impl Default for Parameter {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct Transfer {
-    pub filename: *mut libc::c_char,
+    pub filename: Option<String>,
     pub file: *mut extc::FILE,
     pub vsib: *mut extc::FILE,
     pub transcript: *mut extc::FILE,
@@ -101,7 +101,7 @@ pub struct Transfer {
 impl Default for Transfer {
     fn default() -> Self {
         Self {
-            filename: std::ptr::null_mut(),
+            filename: None,
             file: std::ptr::null_mut(),
             vsib: std::ptr::null_mut(),
             transcript: std::ptr::null_mut(),
@@ -114,7 +114,7 @@ impl Default for Transfer {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct Session {
     pub transfer: Transfer,
     pub client_fd: libc::c_int,

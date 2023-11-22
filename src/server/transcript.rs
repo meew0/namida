@@ -1,3 +1,5 @@
+use std::ffi::CString;
+
 use crate::extc;
 use ::libc;
 
@@ -66,10 +68,11 @@ pub unsafe fn xscript_open_server(session: &mut Session, parameter: &Parameter) 
         println!("WARNING: Could not create transcript file");
         return;
     }
+    let filename_c = CString::new(session.transfer.filename.as_ref().unwrap().as_str()).unwrap();
     extc::fprintf(
         session.transfer.transcript,
         b"filename = %s\n\0" as *const u8 as *const libc::c_char,
-        session.transfer.filename,
+        filename_c.as_ptr(),
     );
     extc::fprintf(
         session.transfer.transcript,

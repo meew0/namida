@@ -579,10 +579,7 @@ pub unsafe fn ttp_open_transfer_server(
             )?;
         }
     }
-    session.transfer.filename = extc::strdup(filename.as_mut_ptr());
-    if (session.transfer.filename).is_null() {
-        bail!("Memory allocation error");
-    }
+    session.transfer.filename = Some(extc::c_to_string(filename.as_mut_ptr()));
     if parameter.verbose_yn != 0 {
         extc::printf(
             b"Request for file: '%s'\n\0" as *const u8 as *const libc::c_char,
