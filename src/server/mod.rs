@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::extc;
 
 pub mod config;
@@ -41,10 +43,9 @@ pub struct Parameter {
     pub slotnumber: libc::c_int,
     pub totalslots: libc::c_int,
     pub samplerate: libc::c_int,
-    pub file_names: *mut *mut libc::c_char,
-    pub file_sizes: *mut u64,
-    pub file_name_size: u16,
-    pub total_files: u16,
+    pub file_names: Vec<PathBuf>,
+    pub file_sizes: Vec<u64>,
+    pub file_name_size: usize,
     pub wait_u_sec: libc::c_long,
 }
 
@@ -76,10 +77,9 @@ impl Default for Parameter {
             slotnumber: 0,
             totalslots: 0,
             samplerate: 0,
-            file_names: std::ptr::null_mut::<*mut libc::c_char>(),
-            file_sizes: std::ptr::null_mut::<u64>(),
+            file_names: vec![],
+            file_sizes: vec![],
             file_name_size: 0,
-            total_files: 0,
             wait_u_sec: 0,
         }
     }

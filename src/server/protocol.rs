@@ -1,3 +1,5 @@
+use std::ffi::CString;
+
 use crate::extc;
 use ::libc;
 use anyhow::bail;
@@ -316,26 +318,28 @@ pub unsafe fn ttp_open_transfer_server(
             file_no.as_mut_ptr(),
             ::core::mem::size_of::<[libc::c_char; 10]>() as libc::c_ulong,
             b"%u\0" as *const u8 as *const libc::c_char,
-            parameter.total_files as libc::c_int,
+            parameter.file_names.len() as libc::c_int,
         );
         crate::common::full_write(
             session.client_fd,
             file_no.as_mut_ptr() as *const libc::c_void,
             (extc::strlen(file_no.as_mut_ptr())).wrapping_add(1 as libc::c_int as libc::c_ulong),
         );
-        i = 0 as libc::c_int as u16;
-        while (i as libc::c_int) < parameter.total_files as libc::c_int {
+        for (file_index, file_name) in parameter.file_names.iter().enumerate() {
+            let bytes = file_name.as_os_str().as_encoded_bytes();
+            let mut null_terminated = vec![0; bytes.len() + 1];
+            null_terminated[0..(bytes.len())].copy_from_slice(bytes);
+
             crate::common::full_write(
                 session.client_fd,
-                *(parameter.file_names).offset(i as isize) as *const libc::c_void,
-                (extc::strlen(*(parameter.file_names).offset(i as isize)))
-                    .wrapping_add(1 as libc::c_int as libc::c_ulong),
+                null_terminated.as_ptr() as *const libc::c_void,
+                null_terminated.len() as u64,
             );
             extc::snprintf(
                 message.as_mut_ptr(),
                 ::core::mem::size_of::<[libc::c_char; 20]>() as libc::c_ulong,
                 b"%Lu\0" as *const u8 as *const libc::c_char,
-                *(parameter.file_sizes).offset(i as isize),
+                parameter.file_sizes[file_index],
             );
             crate::common::full_write(
                 session.client_fd,
@@ -343,7 +347,6 @@ pub unsafe fn ttp_open_transfer_server(
                 (extc::strlen(message.as_mut_ptr()))
                     .wrapping_add(1 as libc::c_int as libc::c_ulong),
             );
-            i = i.wrapping_add(1);
         }
         crate::common::full_read(
             session.client_fd,
@@ -519,7 +522,7 @@ pub unsafe fn ttp_open_transfer_server(
                 file_no.as_mut_ptr(),
                 ::core::mem::size_of::<[libc::c_char; 10]>() as libc::c_ulong,
                 b"%u\0" as *const u8 as *const libc::c_char,
-                parameter.total_files as libc::c_int,
+                parameter.file_names.len() as libc::c_int,
             );
             crate::common::full_write(
                 session.client_fd,
@@ -544,16 +547,19 @@ pub unsafe fn ttp_open_transfer_server(
                 b"Client response: %s\n\0" as *const u8 as *const libc::c_char,
                 message.as_mut_ptr(),
             );
-            i = 0 as libc::c_int as u16;
-            while (i as libc::c_int) < parameter.total_files as libc::c_int {
+
+            for (file_index, file_name) in parameter.file_names.iter().enumerate() {
+                let bytes = file_name.as_os_str().as_encoded_bytes();
+                let mut null_terminated = vec![0; bytes.len() + 1];
+                null_terminated[0..(bytes.len())].copy_from_slice(bytes);
+
                 crate::common::full_write(
                     session.client_fd,
-                    *(parameter.file_names).offset(i as isize) as *const libc::c_void,
-                    (extc::strlen(*(parameter.file_names).offset(i as isize)))
-                        .wrapping_add(1 as libc::c_int as libc::c_ulong),
+                    null_terminated.as_ptr() as *const libc::c_void,
+                    null_terminated.len() as u64,
                 );
-                i = i.wrapping_add(1);
             }
+
             extc::memset(
                 message.as_mut_ptr() as *mut libc::c_void,
                 0 as libc::c_int,

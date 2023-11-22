@@ -10,11 +10,13 @@ puts "namida client, namida server"
 puts "----------------------------"
 puts
 
-sin, sout, swait = Open3.popen2e(*NAMIDA_PATH, "server")
+sin, sout, swait = Open3.popen2e(*NAMIDA_PATH, "server", "source/fish.jpg")
 cin, cout, cwait = Open3.popen2e(*NAMIDA_PATH, "client")
 
 sleep 0.1
 cin.puts "connect 127.0.0.1"
+sleep 0.1
+cin.puts "dir"
 sleep 0.2
 cin.puts "get source/fish.jpg"
 sleep 0.5

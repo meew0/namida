@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, ffi::CStr};
+use std::{cmp::Ordering, ffi::CStr, path::Path};
 
 use super::{Parameter, Retransmission, Session, Transfer};
 
@@ -503,32 +503,7 @@ pub unsafe fn process_options(
             }
         },
     ];
-    let mut filestat: extc::stat = extc::stat {
-        st_dev: 0,
-        st_ino: 0,
-        st_nlink: 0,
-        st_mode: 0,
-        st_uid: 0,
-        st_gid: 0,
-        __pad0: 0,
-        st_rdev: 0,
-        st_size: 0,
-        st_blksize: 0,
-        st_blocks: 0,
-        st_atim: extc::timespec {
-            tv_sec: 0,
-            tv_nsec: 0,
-        },
-        st_mtim: extc::timespec {
-            tv_sec: 0,
-            tv_nsec: 0,
-        },
-        st_ctim: extc::timespec {
-            tv_sec: 0,
-            tv_nsec: 0,
-        },
-        __glibc_reserved: [0; 3],
-    };
+
     let mut which: libc::c_int = 0;
     loop {
         which = extc::getopt_long(
@@ -683,45 +658,42 @@ pub unsafe fn process_options(
         }
     }
     if argc > extc::optind {
-        let mut counter: libc::c_int = 0;
-        parameter.file_names = argv.offset(extc::optind as isize);
-        parameter.file_name_size = 0 as libc::c_int as u16;
-        parameter.total_files = (argc - extc::optind) as u16;
-        parameter.file_sizes = extc::malloc(
-            (::core::mem::size_of::<usize>() as libc::c_ulong)
-                .wrapping_mul(parameter.total_files as libc::c_ulong),
-        ) as *mut u64;
-        extc::fprintf(
-            extc::stderr,
-            b"\nThe specified %d files will be listed on GET *:\n\0" as *const u8
-                as *const libc::c_char,
-            parameter.total_files as libc::c_int,
+        let file_names_c = argv.offset(extc::optind as isize);
+        parameter.file_name_size = 0;
+
+        let total_files = argc - extc::optind;
+
+        eprintln!(
+            "\nThe specified {} files will be listed on GET *:",
+            total_files
         );
-        counter = 0 as libc::c_int;
-        while counter < argc - extc::optind {
-            extc::stat(
-                *(parameter.file_names).offset(counter as isize),
-                &mut filestat,
-            );
-            *(parameter.file_sizes).offset(counter as isize) = filestat.st_size as u64;
-            parameter.file_name_size = (parameter.file_name_size as libc::c_ulong).wrapping_add(
-                (extc::strlen(*(parameter.file_names).offset(counter as isize)))
-                    .wrapping_add(1 as libc::c_int as libc::c_ulong),
-            ) as u16 as u16;
-            extc::fprintf(
-                extc::stderr,
-                b" %3d)   %-20s  %llu bytes\n\0" as *const u8 as *const libc::c_char,
-                counter + 1 as libc::c_int,
-                *(parameter.file_names).offset(counter as isize),
-                *(parameter.file_sizes).offset(counter as isize) as u64,
-            );
-            counter += 1;
+        for counter in 0..total_files {
+            let file_name_c = *(file_names_c.offset(counter as isize));
+            let file_name_rust = CStr::from_ptr(file_name_c).to_str().unwrap();
+            let path = Path::new(file_name_rust);
+            match std::fs::metadata(path) {
+                Ok(metadata) => {
+                    parameter.file_names.push(path.to_owned());
+                    parameter.file_sizes.push(metadata.len());
+
+                    parameter.file_name_size += file_name_rust.len();
+                    eprintln!(
+                        " {:3}   {:<20}  {} bytes\n",
+                        counter + 1,
+                        path.display(),
+                        metadata.len(),
+                    );
+                }
+                Err(err) => {
+                    eprintln!(
+                        "Could not get metadata of specified file: {}",
+                        path.display()
+                    );
+                }
+            }
         }
-        extc::fprintf(
-            extc::stderr,
-            b"total characters %d\n\0" as *const u8 as *const libc::c_char,
-            parameter.file_name_size as libc::c_int,
-        );
+
+        eprintln!("total characters {}", parameter.file_name_size);
     }
     if 1 as libc::c_int == parameter.verbose_yn as libc::c_int {
         extc::fprintf(
