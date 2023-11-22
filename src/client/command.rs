@@ -375,11 +375,11 @@ pub unsafe fn command_get(
             std::ptr::null_mut::<libc::c_void>(),
         );
         if parameter.transcript_yn != 0 {
-            super::transcript::xscript_data_start_client(
+            crate::common::transcript_warn_error(super::transcript::xscript_data_start_client(
                 session,
                 parameter,
                 session.transfer.stats.start_time,
-            );
+            ));
         }
         loop {
             status = extc::recvfrom(
@@ -727,12 +727,14 @@ pub unsafe fn command_get(
             }
             extc::printf(b"\n\0" as *const u8 as *const libc::c_char);
             if parameter.transcript_yn != 0 {
-                super::transcript::xscript_data_stop_client(
+                crate::common::transcript_warn_error(super::transcript::xscript_data_stop_client(
                     session,
                     parameter,
                     session.transfer.stats.stop_time,
-                );
-                super::transcript::xscript_close_client(session, parameter, delta);
+                ));
+                crate::common::transcript_warn_error(super::transcript::xscript_close_client(
+                    session, parameter, delta,
+                ));
             }
             if parameter.blockdump != 0 {
                 if let Err(err) = dump_blockmap(".blockmap", &session.transfer) {

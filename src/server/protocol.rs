@@ -1,4 +1,5 @@
 use std::{
+    ffi::CStr,
     io::{Seek, SeekFrom},
     path::Path,
 };
@@ -76,7 +77,10 @@ pub unsafe fn ttp_accept_retransmit(
             stats_line.as_mut_ptr(),
         );
         if parameter.transcript_yn != 0 {
-            super::transcript::xscript_data_log_server(session, stats_line.as_mut_ptr());
+            crate::common::transcript_warn_error(super::transcript::xscript_data_log_server(
+                session,
+                CStr::from_ptr(stats_line.as_mut_ptr()).to_str().unwrap(),
+            ));
         }
     } else if type_0 as libc::c_int == crate::common::REQUEST_RESTART as libc::c_int {
         if retransmission.block == 0 as libc::c_int as u32
@@ -748,7 +752,9 @@ pub unsafe fn ttp_open_transfer_server(
         / parameter.target_rate as libc::c_longlong) as u32;
     session.transfer.ipd_current = (parameter.ipd_time * 3 as libc::c_int as u32) as libc::c_double;
     if parameter.transcript_yn != 0 {
-        super::transcript::xscript_open_server(session, parameter);
+        crate::common::transcript_warn_error(super::transcript::xscript_open_server(
+            session, parameter,
+        ));
     }
     Ok(())
 }

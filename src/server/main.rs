@@ -160,7 +160,9 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
             }
             extc::gettimeofday(&mut start, std::ptr::null_mut::<libc::c_void>());
             if parameter.transcript_yn != 0 {
-                super::transcript::xscript_data_start_server(session, &start);
+                crate::common::transcript_warn_error(super::transcript::xscript_data_start_server(
+                    session, start,
+                ));
             }
             lasthblostreport = start;
             lastfeedback = start;
@@ -351,9 +353,11 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                         1e-6f64 * delta as libc::c_double,
                     );
                     if parameter.transcript_yn != 0 {
-                        super::transcript::xscript_data_log_server(
-                            session,
-                            stats_line.as_mut_ptr(),
+                        crate::common::transcript_warn_error(
+                            super::transcript::xscript_data_log_server(
+                                session,
+                                CStr::from_ptr(stats_line.as_mut_ptr()).to_str().unwrap(),
+                            ),
                         );
                     }
                     extc::fprintf(
@@ -384,7 +388,9 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
             }
             extc::gettimeofday(&mut stop, std::ptr::null_mut::<libc::c_void>());
             if parameter.transcript_yn != 0 {
-                super::transcript::xscript_data_stop_server(session, &stop);
+                crate::common::transcript_warn_error(super::transcript::xscript_data_stop_server(
+                    session, stop,
+                ));
             }
             delta = (1000000 as libc::c_longlong * (stop.tv_sec - start.tv_sec) as libc::c_longlong
                 + stop.tv_usec as libc::c_longlong
@@ -405,7 +411,9 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                 );
             }
             if parameter.transcript_yn != 0 {
-                super::transcript::xscript_close_server(session, parameter, delta);
+                crate::common::transcript_warn_error(super::transcript::xscript_close_server(
+                    session, parameter, delta,
+                ));
             }
             extc::close(session.transfer.udp_fd);
             session.transfer = Transfer::default();

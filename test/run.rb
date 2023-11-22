@@ -10,9 +10,12 @@ puts "namida client, namida server"
 puts "----------------------------"
 puts
 
-sin, sout, swait = Open3.popen2e(*NAMIDA_PATH, "server", "source/fish.jpg")
+# TODO "--transcript", "source/fish.jpg"
+sin, sout, swait = Open3.popen2e(*NAMIDA_PATH, "server")
 cin, cout, cwait = Open3.popen2e(*NAMIDA_PATH, "client")
 
+sleep 0.1
+cin.puts "set transcript yes"
 sleep 0.1
 cin.puts "connect 127.0.0.1"
 sleep 0.1
@@ -41,7 +44,14 @@ if File.exist?("fish.jpg")
   content = File.read("fish.jpg")
   digest = Digest::MD5.hexdigest(content)
   if digest == "17f6d0c96590ad1c933314c0cbdb0aa0"
-    puts "ok"
+    if Dir["*.namc"].empty?
+      puts "not ok, missing client transcript"
+    else
+      puts "ok"
+      Dir["*.namc"].each do |file|
+        File.delete(file)
+      end
+    end
   else
     puts "not ok, read #{content.length} bytes, md5: #{digest}"
   end

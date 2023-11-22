@@ -1,4 +1,7 @@
-use std::{ffi::CString, path::Path};
+use std::{
+    ffi::{CStr, CString},
+    path::Path,
+};
 
 use ::libc;
 use anyhow::bail;
@@ -259,7 +262,9 @@ pub unsafe fn ttp_open_transfer_client(
             session.transfer.on_wire_estimate
         };
     if parameter.transcript_yn != 0 {
-        super::transcript::xscript_open_client(session, parameter);
+        crate::common::transcript_warn_error(super::transcript::xscript_open_client(
+            session, parameter,
+        ));
     }
 
     Ok(())
@@ -668,7 +673,11 @@ pub unsafe fn ttp_update_stats(session: &mut Session, parameter: &Parameter) -> 
         extc::fflush(extc::stdout);
     }
     if parameter.transcript_yn != 0 {
-        super::transcript::xscript_data_log_client(session, parameter, stats_line.as_mut_ptr());
+        crate::common::transcript_warn_error(super::transcript::xscript_data_log_client(
+            session,
+            parameter,
+            CStr::from_ptr(stats_line.as_mut_ptr()).to_str().unwrap(),
+        ));
     }
     session.transfer.stats.this_blocks = session.transfer.stats.total_blocks;
     session.transfer.stats.this_retransmits = 0 as libc::c_int as u32;

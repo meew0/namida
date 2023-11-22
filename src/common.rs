@@ -2,11 +2,18 @@ use crate::extc;
 use ::libc;
 use anyhow::bail;
 
+pub const NAMIDA_VERSION: &str = "devel";
 pub const PROTOCOL_REVISION: u32 = 0x20061025 as libc::c_int as u32;
 pub const REQUEST_RETRANSMIT: u16 = 0 as libc::c_int as u16;
 pub const REQUEST_RESTART: u16 = 1 as libc::c_int as u16;
 pub const REQUEST_STOP: u16 = 2 as libc::c_int as u16;
 pub const REQUEST_ERROR_RATE: u16 = 3 as libc::c_int as u16;
+
+pub fn transcript_warn_error(result: anyhow::Result<()>) {
+    if let Err(err) = result {
+        println!("Unable to perform transcript: {}", err);
+    }
+}
 
 pub unsafe fn get_usec_since(mut old_time: *mut extc::timeval) -> u64 {
     let mut now: extc::timeval = extc::timeval {
@@ -38,38 +45,14 @@ pub unsafe fn htonll(mut value: u64) -> u64 {
         value
     }
 }
-pub unsafe fn make_transcript_filename(
-    mut buffer: *mut libc::c_char,
-    mut epoch: extc::time_t,
-    mut extension: *const libc::c_char,
-) -> *mut libc::c_char {
-    let mut gmt: extc::tm = extc::tm {
-        tm_sec: 0,
-        tm_min: 0,
-        tm_hour: 0,
-        tm_mday: 0,
-        tm_mon: 0,
-        tm_year: 0,
-        tm_wday: 0,
-        tm_yday: 0,
-        tm_isdst: 0,
-        tm_gmtoff: 0,
-        tm_zone: std::ptr::null::<libc::c_char>(),
-    };
-    extc::gmtime_r(&epoch, &mut gmt);
-    extc::sprintf(
-        buffer,
-        b"%04d-%02d-%02d-%02d-%02d-%02d.%s\0" as *const u8 as *const libc::c_char,
-        gmt.tm_year + 1900 as libc::c_int,
-        gmt.tm_mon + 1 as libc::c_int,
-        gmt.tm_mday,
-        gmt.tm_hour,
-        gmt.tm_min,
-        gmt.tm_sec,
-        extension,
-    );
-    buffer
+pub fn make_transcript_filename(mut extension: &str) -> String {
+    let seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    format!("{}.{}", seconds, extension)
 }
+
 pub unsafe fn ntohll(mut value: u64) -> u64 {
     htonll(value)
 }
