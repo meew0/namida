@@ -89,7 +89,6 @@ impl Default for Parameter {
 pub struct Transfer {
     pub filename: Option<String>,
     pub file: *mut extc::FILE,
-    pub vsib: *mut extc::FILE,
     pub transcript: *mut extc::FILE,
     pub udp_fd: libc::c_int,
     pub udp_address: *mut extc::sockaddr,
@@ -103,7 +102,6 @@ impl Default for Transfer {
         Self {
             filename: None,
             file: std::ptr::null_mut(),
-            vsib: std::ptr::null_mut(),
             transcript: std::ptr::null_mut(),
             udp_fd: 0,
             udp_address: std::ptr::null_mut(),
