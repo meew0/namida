@@ -22,21 +22,17 @@ pub fn xscript_close_client(
 
     let transcript = session.transfer.transcript.as_mut().unwrap();
 
-    write!(transcript, "mbyte_transmitted = {:0>.2}\n", mb_thru)?;
-    write!(transcript, "mbyte_usable = {:0>.2}\n", mb_good)?;
-    write!(transcript, "mbyte_file = {:0>.2}\n", mb_file)?;
-    write!(transcript, "duration = {:0>.2}\n", secs)?;
-    write!(
+    writeln!(transcript, "mbyte_transmitted = {:0>.2}", mb_thru)?;
+    writeln!(transcript, "mbyte_usable = {:0>.2}", mb_good)?;
+    writeln!(transcript, "mbyte_file = {:0>.2}", mb_file)?;
+    writeln!(transcript, "duration = {:0>.2}", secs)?;
+    writeln!(transcript, "throughput = {:0>.2}", 8.0f64 * mb_thru / secs,)?;
+    writeln!(
         transcript,
-        "throughput = {:0>.2}\n",
-        8.0f64 * mb_thru / secs,
-    )?;
-    write!(
-        transcript,
-        "goodput_with_restarts = {:0>.2}\n",
+        "goodput_with_restarts = {:0>.2}",
         8.0f64 * mb_good / secs,
     )?;
-    write!(transcript, "file_rate = {:0>.2}\n", 8.0f64 * mb_file / secs)?;
+    writeln!(transcript, "file_rate = {:0>.2}", 8.0f64 * mb_file / secs)?;
 
     session.transfer.transcript.take();
     Ok(())
@@ -59,7 +55,7 @@ pub fn xscript_data_start_client(
     epoch: extc::timeval,
 ) -> anyhow::Result<()> {
     let transcript = session.transfer.transcript.as_mut().unwrap();
-    write!(transcript, "START {}.{:06}\n", epoch.tv_sec, epoch.tv_usec)?;
+    writeln!(transcript, "START {}.{:06}", epoch.tv_sec, epoch.tv_usec)?;
     transcript.flush()?;
     Ok(())
 }
@@ -70,7 +66,7 @@ pub unsafe fn xscript_data_stop_client(
     epoch: extc::timeval,
 ) -> anyhow::Result<()> {
     let transcript = session.transfer.transcript.as_mut().unwrap();
-    write!(transcript, "STOP {}.{:06}\n", epoch.tv_sec, epoch.tv_usec)?;
+    writeln!(transcript, "STOP {}.{:06}", epoch.tv_sec, epoch.tv_usec)?;
     transcript.flush()?;
     Ok(())
 }
@@ -84,47 +80,43 @@ pub fn xscript_open_client(session: &mut Session, parameter: &Parameter) -> anyh
             .open(Path::new(&transcript_filename))?,
     );
 
-    write!(
+    writeln!(
         transcript,
-        "remote_filename = {}\n",
+        "remote_filename = {}",
         session.transfer.remote_filename.as_ref().unwrap().as_str()
     )?;
-    write!(
+    writeln!(
         transcript,
-        "local_filename = {}\n",
+        "local_filename = {}",
         session.transfer.local_filename.as_ref().unwrap().as_str()
     )?;
-    write!(transcript, "file_size = {}\n", session.transfer.file_size)?;
-    write!(
+    writeln!(transcript, "file_size = {}", session.transfer.file_size)?;
+    writeln!(transcript, "block_count = {}", session.transfer.block_count,)?;
+    writeln!(transcript, "udp_buffer = {}", parameter.udp_buffer)?;
+    writeln!(transcript, "block_size = {}", parameter.block_size)?;
+    writeln!(transcript, "target_rate = {}", parameter.target_rate)?;
+    writeln!(transcript, "error_rate = {}", parameter.error_rate)?;
+    writeln!(transcript, "slower_num = {}", parameter.slower_num)?;
+    writeln!(transcript, "slower_den = {}", parameter.slower_den)?;
+    writeln!(transcript, "faster_num = {}", parameter.faster_num)?;
+    writeln!(transcript, "faster_den = {}", parameter.faster_den)?;
+    writeln!(transcript, "history = {}", parameter.history)?;
+    writeln!(transcript, "lossless = {}", parameter.lossless)?;
+    writeln!(transcript, "losswindow = {}", parameter.losswindow_ms)?;
+    writeln!(transcript, "blockdump = {}", parameter.blockdump)?;
+    writeln!(transcript, "update_period = {}", 350000)?;
+    writeln!(transcript, "rexmit_period = {}", 350000)?;
+    writeln!(
         transcript,
-        "block_count = {}\n",
-        session.transfer.block_count,
-    )?;
-    write!(transcript, "udp_buffer = {}\n", parameter.udp_buffer)?;
-    write!(transcript, "block_size = {}\n", parameter.block_size)?;
-    write!(transcript, "target_rate = {}\n", parameter.target_rate)?;
-    write!(transcript, "error_rate = {}\n", parameter.error_rate)?;
-    write!(transcript, "slower_num = {}\n", parameter.slower_num)?;
-    write!(transcript, "slower_den = {}\n", parameter.slower_den)?;
-    write!(transcript, "faster_num = {}\n", parameter.faster_num)?;
-    write!(transcript, "faster_den = {}\n", parameter.faster_den)?;
-    write!(transcript, "history = {}\n", parameter.history)?;
-    write!(transcript, "lossless = {}\n", parameter.lossless)?;
-    write!(transcript, "losswindow = {}\n", parameter.losswindow_ms)?;
-    write!(transcript, "blockdump = {}\n", parameter.blockdump)?;
-    write!(transcript, "update_period = {}\n", 350000)?;
-    write!(transcript, "rexmit_period = {}\n", 350000)?;
-    write!(
-        transcript,
-        "protocol_version = 0x{:x}\n",
+        "protocol_version = 0x{:x}",
         crate::common::PROTOCOL_REVISION,
     )?;
-    write!(
+    writeln!(
         transcript,
-        "software_version = {}\n",
+        "software_version = {}",
         crate::common::NAMIDA_VERSION,
     )?;
-    write!(transcript, "ipv6 = {}\n", parameter.ipv6_yn)?;
+    writeln!(transcript, "ipv6 = {}", parameter.ipv6_yn)?;
     writeln!(transcript)?;
     transcript.flush()?;
     Ok(())

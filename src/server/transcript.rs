@@ -12,17 +12,17 @@ pub fn xscript_close_server(
 ) -> anyhow::Result<()> {
     let transcript = session.transfer.transcript.as_mut().unwrap();
 
-    write!(
+    writeln!(
         transcript,
-        "mb_transmitted = {:0>.2}\n",
+        "mb_transmitted = {:0>.2}",
         parameter.file_size as f64 / 1000000.0,
     )?;
-    write!(transcript, "duration = {:0>.2}\n", delta as f64 / 1000000.0)?;
+    writeln!(transcript, "duration = {:0>.2}", delta as f64 / 1000000.0)?;
 
     // Bits per microsecond = megabits per second
-    write!(
+    writeln!(
         transcript,
-        "throughput = {:0>.2}\n",
+        "throughput = {:0>.2}",
         parameter.file_size as f64 * 8.0f64 / delta as f64,
     )?;
 
@@ -42,7 +42,7 @@ pub fn xscript_data_start_server(
     epoch: extc::timeval,
 ) -> anyhow::Result<()> {
     let transcript = session.transfer.transcript.as_mut().unwrap();
-    write!(transcript, "START {}.{:06}\n", epoch.tv_sec, epoch.tv_usec)?;
+    writeln!(transcript, "START {}.{:06}", epoch.tv_sec, epoch.tv_usec)?;
     transcript.flush()?;
     Ok(())
 }
@@ -63,38 +63,34 @@ pub fn xscript_open_server(session: &mut Session, parameter: &Parameter) -> anyh
             .open(Path::new(&transcript_filename))?,
     );
 
-    write!(
+    writeln!(
         transcript,
-        "filename = {}\n",
+        "filename = {}",
         session.transfer.filename.as_ref().unwrap()
     )?;
-    write!(transcript, "file_size = {}\n", parameter.file_size)?;
-    write!(transcript, "block_count = {}\n", parameter.block_count)?;
-    write!(transcript, "udp_buffer = {}\n", parameter.udp_buffer)?;
-    write!(transcript, "block_size = {}\n", parameter.block_size)?;
-    write!(transcript, "target_rate = {}\n", parameter.target_rate)?;
-    write!(transcript, "error_rate = {}\n", parameter.error_rate)?;
-    write!(transcript, "slower_num = {}\n", parameter.slower_num)?;
-    write!(transcript, "slower_den = {}\n", parameter.slower_den)?;
-    write!(transcript, "faster_num = {}\n", parameter.faster_num)?;
-    write!(transcript, "faster_den = {}\n", parameter.faster_den)?;
-    write!(transcript, "ipd_time = {}\n", parameter.ipd_time)?;
-    write!(
+    writeln!(transcript, "file_size = {}", parameter.file_size)?;
+    writeln!(transcript, "block_count = {}", parameter.block_count)?;
+    writeln!(transcript, "udp_buffer = {}", parameter.udp_buffer)?;
+    writeln!(transcript, "block_size = {}", parameter.block_size)?;
+    writeln!(transcript, "target_rate = {}", parameter.target_rate)?;
+    writeln!(transcript, "error_rate = {}", parameter.error_rate)?;
+    writeln!(transcript, "slower_num = {}", parameter.slower_num)?;
+    writeln!(transcript, "slower_den = {}", parameter.slower_den)?;
+    writeln!(transcript, "faster_num = {}", parameter.faster_num)?;
+    writeln!(transcript, "faster_den = {}", parameter.faster_den)?;
+    writeln!(transcript, "ipd_time = {}", parameter.ipd_time)?;
+    writeln!(transcript, "ipd_current = {}", session.transfer.ipd_current,)?;
+    writeln!(
         transcript,
-        "ipd_current = {}\n",
-        session.transfer.ipd_current,
-    )?;
-    write!(
-        transcript,
-        "protocol_version = 0x{:x}\n",
+        "protocol_version = 0x{:x}",
         crate::common::PROTOCOL_REVISION,
     )?;
-    write!(
+    writeln!(
         transcript,
-        "software_version = {}\n",
+        "software_version = {}",
         crate::common::NAMIDA_VERSION,
     )?;
-    write!(transcript, "ipv6 = {}\n", parameter.ipv6_yn)?;
+    writeln!(transcript, "ipv6 = {}", parameter.ipv6_yn)?;
     writeln!(transcript)?;
     transcript.flush()?;
     Ok(())
