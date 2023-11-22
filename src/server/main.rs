@@ -40,7 +40,7 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) ->
         ::core::mem::size_of::<Session>() as libc::c_ulong,
     );
     process_options(argc, argv, &mut parameter);
-    server_fd = super::network::create_tcp_socket_server(&mut parameter).unwrap();
+    server_fd = super::network::create_tcp_socket_server(&parameter).unwrap();
     extc::signal(
         17 as libc::c_int,
         Some(reap as unsafe extern "C" fn(libc::c_int) -> ()),
@@ -131,7 +131,7 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
     let mut ipd_usleep_diff: i64 = 0;
     let mut ipd_time_max: i64 = 0;
     let mut status: libc::c_int = 0;
-    let mut xfer: *mut Transfer = &mut (*session).transfer;
+    let mut xfer: *mut Transfer = &mut session.transfer;
     let mut delta: u64 = 0;
     let mut block_type: u8 = 0;
     super::protocol::ttp_negotiate_server(session).unwrap();
@@ -159,7 +159,7 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
         );
     }
     loop {
-        status = extc::fcntl((*session).client_fd, 4 as libc::c_int, 0 as libc::c_int);
+        status = extc::fcntl(session.client_fd, 4 as libc::c_int, 0 as libc::c_int);
         if status < 0 as libc::c_int {
             panic!("Could not make client socket blocking");
         }
@@ -168,11 +168,7 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
         } else if let Err(err) = super::protocol::ttp_open_port_server(session, parameter) {
             println!("WARNING: UDP socket creation failed: {:?}", err);
         } else {
-            status = extc::fcntl(
-                (*session).client_fd,
-                4 as libc::c_int,
-                0o4000 as libc::c_int,
-            );
+            status = extc::fcntl(session.client_fd, 4 as libc::c_int, 0o4000 as libc::c_int);
             if status < 0 as libc::c_int {
                 panic!("Could not make client socket non-blocking");
             }
@@ -206,7 +202,7 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                     ipd_time_max
                 };
                 status = extc::read(
-                    (*session).client_fd,
+                    session.client_fd,
                     (&mut retransmission as *mut super::Retransmission as *mut libc::c_char)
                         .offset(retransmitlen as isize) as *mut libc::c_void,
                     ::core::mem::size_of::<super::Retransmission>()
@@ -355,7 +351,7 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                         (*xfer).block,
                         100.0f64 * (*xfer).block as libc::c_double
                             / parameter.block_count as libc::c_double,
-                        (*session).session_id,
+                        session.session_id,
                         1e-6f64 * delta as libc::c_double,
                     );
                     if parameter.transcript_yn != 0 {
@@ -402,7 +398,7 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                     extc::stderr,
                     b"Server %d transferred %llu bytes in %0.2f seconds (%0.1f Mbps)\n\0"
                         as *const u8 as *const libc::c_char,
-                    (*session).session_id,
+                    session.session_id,
                     parameter.file_size,
                     delta as libc::c_double / 1000000.0f64,
                     8.0f64 * parameter.file_size as libc::c_double

@@ -27,29 +27,29 @@ pub unsafe fn xscript_close_server(session: &mut Session, parameter: &Parameter,
 }
 pub unsafe fn xscript_data_log_server(session: &mut Session, mut logline: *const libc::c_char) {
     extc::fprintf(
-        (*session).transfer.transcript,
+        session.transfer.transcript,
         b"%s\0" as *const u8 as *const libc::c_char,
         logline,
     );
-    extc::fflush((*session).transfer.transcript);
+    extc::fflush(session.transfer.transcript);
 }
 pub unsafe fn xscript_data_start_server(session: &mut Session, mut epoch: *const extc::timeval) {
     extc::fprintf(
-        (*session).transfer.transcript,
+        session.transfer.transcript,
         b"START %lu.%06lu\n\0" as *const u8 as *const libc::c_char,
         (*epoch).tv_sec as libc::c_ulong,
         (*epoch).tv_usec as libc::c_ulong,
     );
-    extc::fflush((*session).transfer.transcript);
+    extc::fflush(session.transfer.transcript);
 }
 pub unsafe fn xscript_data_stop_server(session: &mut Session, mut epoch: *const extc::timeval) {
     extc::fprintf(
-        (*session).transfer.transcript,
+        session.transfer.transcript,
         b"STOP %lu.%06lu\n\n\0" as *const u8 as *const libc::c_char,
         (*epoch).tv_sec as libc::c_ulong,
         (*epoch).tv_usec as libc::c_ulong,
     );
-    extc::fflush((*session).transfer.transcript);
+    extc::fflush(session.transfer.transcript);
 }
 pub unsafe fn xscript_open_server(session: &mut Session, parameter: &Parameter) {
     let mut filename: [libc::c_char; 64] = [0; 64];
@@ -150,5 +150,5 @@ pub unsafe fn xscript_open_server(session: &mut Session, parameter: &Parameter) 
         session.transfer.transcript,
         b"\n\0" as *const u8 as *const libc::c_char,
     );
-    extc::fflush((*session).transfer.transcript);
+    extc::fflush(session.transfer.transcript);
 }

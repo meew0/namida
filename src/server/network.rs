@@ -27,7 +27,7 @@ pub unsafe fn create_tcp_socket_server(parameter: &Parameter) -> anyhow::Result<
         ::core::mem::size_of::<extc::addrinfo>() as libc::c_ulong,
     );
     hints.ai_flags = 0x1 as libc::c_int;
-    hints.ai_family = if (*parameter).ipv6_yn as libc::c_int != 0 {
+    hints.ai_family = if parameter.ipv6_yn as libc::c_int != 0 {
         10 as libc::c_int
     } else {
         2 as libc::c_int
@@ -36,7 +36,7 @@ pub unsafe fn create_tcp_socket_server(parameter: &Parameter) -> anyhow::Result<
     extc::sprintf(
         buffer.as_mut_ptr(),
         b"%d\0" as *const u8 as *const libc::c_char,
-        (*parameter).tcp_port as libc::c_int,
+        parameter.tcp_port as libc::c_int,
     );
     status = extc::getaddrinfo(
         std::ptr::null::<libc::c_char>(),
@@ -91,7 +91,7 @@ pub unsafe fn create_udp_socket_server(parameter: &Parameter) -> anyhow::Result<
     let mut status: libc::c_int = 0;
     let mut yes: libc::c_int = 1 as libc::c_int;
     socket_fd = extc::socket(
-        if (*parameter).ipv6_yn as libc::c_int != 0 {
+        if parameter.ipv6_yn as libc::c_int != 0 {
             10 as libc::c_int
         } else {
             2 as libc::c_int
@@ -117,7 +117,7 @@ pub unsafe fn create_udp_socket_server(parameter: &Parameter) -> anyhow::Result<
         socket_fd,
         1 as libc::c_int,
         7 as libc::c_int,
-        &(*parameter).udp_buffer as *const u32 as *const libc::c_void,
+        &parameter.udp_buffer as *const u32 as *const libc::c_void,
         ::core::mem::size_of::<u32>() as libc::c_ulong as extc::socklen_t,
     );
     if status < 0 as libc::c_int {
