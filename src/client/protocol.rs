@@ -22,8 +22,7 @@ pub unsafe fn ttp_authenticate_client(
     if status < 64 as libc::c_int {
         bail!("Could not read authentication challenge from server");
     }
-    let mut digest: [u8; 16] =
-        crate::common::common::prepare_proof(&mut random, secret.as_bytes()).into();
+    let mut digest: [u8; 16] = crate::common::prepare_proof(&mut random, secret.as_bytes()).into();
 
     status = extc::fwrite(
         digest.as_mut_ptr() as *const libc::c_void,
@@ -51,7 +50,7 @@ pub unsafe fn ttp_authenticate_client(
 
 pub unsafe fn ttp_negotiate_client(session: &mut Session) -> anyhow::Result<()> {
     let mut server_revision: u32 = 0;
-    let mut client_revision: u32 = extc::__bswap_32(crate::common::common::PROTOCOL_REVISION);
+    let mut client_revision: u32 = extc::__bswap_32(crate::common::PROTOCOL_REVISION);
     let mut status: libc::c_int = 0;
     status = extc::fwrite(
         &mut client_revision as *mut u32 as *const libc::c_void,
@@ -198,7 +197,7 @@ pub unsafe fn ttp_open_transfer_client(
     {
         bail!("Could not read file size");
     }
-    session.transfer.file_size = crate::common::common::ntohll(session.transfer.file_size);
+    session.transfer.file_size = crate::common::ntohll(session.transfer.file_size);
     if extc::fread(
         &mut temp as *mut u32 as *mut libc::c_void,
         4 as libc::c_int as libc::c_ulong,
@@ -322,7 +321,7 @@ pub unsafe fn ttp_repeat_retransmit(session: &mut Session) -> anyhow::Result<()>
         if block != 0 && super::command::got_block(session, block as u32) == 0 {
             *(session.transfer.retransmit.table).offset(count as isize) = block as u32;
             retransmission[count as usize].request_type =
-                extc::__bswap_16(crate::common::common::REQUEST_RETRANSMIT);
+                extc::__bswap_16(crate::common::REQUEST_RETRANSMIT);
             retransmission[count as usize].block = extc::__bswap_32(block as u32);
             count += 1;
         }
@@ -337,7 +336,7 @@ pub unsafe fn ttp_repeat_retransmit(session: &mut Session) -> anyhow::Result<()>
             (session.transfer.gapless_to_block).wrapping_add(1 as libc::c_int as u32)
         }) as libc::c_int;
         retransmission[0 as libc::c_int as usize].request_type =
-            extc::__bswap_16(crate::common::common::REQUEST_RESTART);
+            extc::__bswap_16(crate::common::REQUEST_RESTART);
         retransmission[0 as libc::c_int as usize].block = extc::__bswap_32(block as u32);
         status = extc::fwrite(
             &mut *retransmission
@@ -431,7 +430,7 @@ pub unsafe fn ttp_request_stop(session: &mut Session) -> anyhow::Result<()> {
         error_rate: 0,
     };
     let mut status: libc::c_int = 0;
-    retransmission.request_type = extc::__bswap_16(crate::common::common::REQUEST_STOP);
+    retransmission.request_type = extc::__bswap_16(crate::common::REQUEST_STOP);
     status = extc::fwrite(
         &mut retransmission as *mut Retransmission as *const libc::c_void,
         ::core::mem::size_of::<Retransmission>() as libc::c_ulong,
@@ -476,8 +475,8 @@ pub unsafe fn ttp_update_stats(session: &mut Session, parameter: &Parameter) -> 
     let u_mega: libc::c_double = (1024 as libc::c_int * 1024 as libc::c_int) as libc::c_double;
     let u_giga: libc::c_double =
         (1024 as libc::c_int * 1024 as libc::c_int * 1024 as libc::c_int) as libc::c_double;
-    delta = crate::common::common::get_usec_since(&mut session.transfer.stats.this_time);
-    temp = crate::common::common::get_usec_since(&mut session.transfer.stats.start_time);
+    delta = crate::common::get_usec_since(&mut session.transfer.stats.this_time);
+    temp = crate::common::get_usec_since(&mut session.transfer.stats.start_time);
     delta_total = temp;
     milliseconds =
         (temp % 1000000 as libc::c_int as u64 / 1000 as libc::c_int as u64) as libc::c_int;
@@ -498,7 +497,7 @@ pub unsafe fn ttp_update_stats(session: &mut Session, parameter: &Parameter) -> 
         * session.transfer.stats.this_flow_retransmitteds as libc::c_double;
     data_this_goodpt = parameter.block_size as libc::c_double
         * session.transfer.stats.this_flow_originals as libc::c_double;
-    session.transfer.stats.this_udp_errors = crate::common::common::get_udp_in_errors();
+    session.transfer.stats.this_udp_errors = crate::common::get_udp_in_errors();
     retransmits_fraction = session.transfer.stats.this_retransmits as libc::c_double
         / (1.0f64
             + session.transfer.stats.this_retransmits as libc::c_double
@@ -525,7 +524,7 @@ pub unsafe fn ttp_update_stats(session: &mut Session, parameter: &Parameter) -> 
         + ff * 500 as libc::c_int as libc::c_double
             * 100 as libc::c_int as libc::c_double
             * (retransmits_fraction + ringfill_fraction);
-    retransmission.request_type = extc::__bswap_16(crate::common::common::REQUEST_ERROR_RATE);
+    retransmission.request_type = extc::__bswap_16(crate::common::REQUEST_ERROR_RATE);
     retransmission.error_rate = extc::__bswap_32(session.transfer.stats.error_rate as u64 as u32);
     status = extc::fwrite(
         &mut retransmission as *mut Retransmission as *const libc::c_void,

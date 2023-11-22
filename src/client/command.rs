@@ -98,7 +98,7 @@ pub unsafe fn command_dir(_command: &mut Command, session: &mut Session) -> anyh
         bail!("Server does no support listing of shared files");
     }
     read_str[0 as libc::c_int as usize] = result as libc::c_char;
-    crate::common::common::fread_line(
+    crate::common::fread_line(
         session.server,
         &mut *read_str.as_mut_ptr().offset(1 as libc::c_int as isize),
         (::core::mem::size_of::<[libc::c_char; 2048]>() as libc::c_ulong)
@@ -111,7 +111,7 @@ pub unsafe fn command_dir(_command: &mut Command, session: &mut Session) -> anyh
     );
     i = 0 as libc::c_int as u16;
     while (i as libc::c_int) < num_files as libc::c_int {
-        crate::common::common::fread_line(
+        crate::common::fread_line(
             session.server,
             read_str.as_mut_ptr(),
             (::core::mem::size_of::<[libc::c_char; 2048]>() as libc::c_ulong)
@@ -123,7 +123,7 @@ pub unsafe fn command_dir(_command: &mut Command, session: &mut Session) -> anyh
             i as libc::c_int + 1 as libc::c_int,
             read_str.as_mut_ptr(),
         );
-        crate::common::common::fread_line(
+        crate::common::fread_line(
             session.server,
             read_str.as_mut_ptr(),
             (::core::mem::size_of::<[libc::c_char; 2048]>() as libc::c_ulong)
@@ -265,7 +265,7 @@ pub unsafe fn command_get(
             f_counter = 0 as libc::c_int as u32;
             while f_counter < f_total {
                 let mut tmpname: [libc::c_char; 1024] = [0; 1024];
-                crate::common::common::fread_line(
+                crate::common::fread_line(
                     session.server,
                     tmpname.as_mut_ptr(),
                     1024 as libc::c_int as u64,
@@ -363,7 +363,7 @@ pub unsafe fn command_get(
 
         session.transfer.stats = Statistics::default();
 
-        session.transfer.stats.start_udp_errors = crate::common::common::get_udp_in_errors();
+        session.transfer.stats.start_udp_errors = crate::common::get_udp_in_errors();
         session.transfer.stats.this_udp_errors = session.transfer.stats.start_udp_errors;
         extc::gettimeofday(
             &mut session.transfer.stats.start_time,
@@ -590,7 +590,7 @@ pub unsafe fn command_get(
             if session.transfer.stats.total_blocks % 50 as libc::c_int as u32 != 0 {
                 continue;
             }
-            if crate::common::common::get_usec_since(&mut session.transfer.stats.this_time)
+            if crate::common::get_usec_since(&mut session.transfer.stats.this_time)
                 as libc::c_ulonglong
                 <= 350000 as libc::c_longlong as libc::c_ulonglong
             {
@@ -645,7 +645,7 @@ pub unsafe fn command_get(
                 &mut session.transfer.stats.stop_time,
                 std::ptr::null_mut::<libc::c_void>(),
             );
-            delta = crate::common::common::get_usec_since(&mut session.transfer.stats.start_time);
+            delta = crate::common::get_usec_since(&mut session.transfer.stats.start_time);
             session.transfer.stats.total_lost = 0 as libc::c_int as u32;
             block = 1 as libc::c_int as u32;
             while block <= session.transfer.block_count {

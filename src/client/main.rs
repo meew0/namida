@@ -19,7 +19,7 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *const libc::c_char) 
         extc::stderr,
         b"Tsunami Client for protocol rev %X\nRevision: %s\nCompiled: %s %s\n\0" as *const u8
             as *const libc::c_char,
-        crate::common::common::PROTOCOL_REVISION,
+        crate::common::PROTOCOL_REVISION,
         b"v1.1 devel cvsbuild 43\0" as *const u8 as *const libc::c_char,
         b"Nov 16 2023\0" as *const u8 as *const libc::c_char,
         b"21:24:18\0" as *const u8 as *const libc::c_char,

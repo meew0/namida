@@ -33,7 +33,7 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) ->
         extc::stderr,
         b"Tsunami Server for protocol rev %X\nRevision: %s\nCompiled: %s %s\nWaiting for clients to connect.\n\0"
             as *const u8 as *const libc::c_char,
-        crate::common::common::PROTOCOL_REVISION,
+        crate::common::PROTOCOL_REVISION,
         b"v1.1 devel cvsbuild 43\0" as *const u8 as *const libc::c_char,
         b"Nov 16 2023\0" as *const u8 as *const libc::c_char,
         b"21:24:19\0" as *const u8 as *const libc::c_char,
@@ -202,7 +202,7 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                         lasthblostreport = currpacketT;
                         deadconnection_counter = 0 as libc::c_int as u32;
                         if extc::__bswap_16(retransmission.request_type) as libc::c_int
-                            == crate::common::common::REQUEST_STOP as libc::c_int
+                            == crate::common::REQUEST_STOP as libc::c_int
                         {
                             extc::fprintf(
                                 extc::stderr,
@@ -305,15 +305,14 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                 if fresh0 > 2048 as libc::c_int as u32 {
                     let mut stats_line: [libc::c_char; 160] = [0; 160];
                     deadconnection_counter = 0 as libc::c_int as u32;
-                    if (crate::common::common::get_usec_since(&mut lasthblostreport)
-                        as libc::c_double)
+                    if (crate::common::get_usec_since(&mut lasthblostreport) as libc::c_double)
                         < 500000.0f64
                     {
                         continue;
                     }
                     extc::gettimeofday(&mut lasthblostreport, std::ptr::null_mut::<libc::c_void>());
                     retransmission.request_type =
-                        extc::__bswap_16(crate::common::common::REQUEST_ERROR_RATE);
+                        extc::__bswap_16(crate::common::REQUEST_ERROR_RATE);
                     retransmission.error_rate = extc::__bswap_32(100000 as libc::c_int as u32);
                     retransmission.block = 0 as libc::c_int as u32;
                     if let Err(err) = super::protocol::ttp_accept_retransmit(
@@ -324,7 +323,7 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                     ) {
                         println!("Error in accept_retransmit: {:?}", err);
                     }
-                    delta = crate::common::common::get_usec_since(&mut lastfeedback);
+                    delta = crate::common::get_usec_since(&mut lastfeedback);
                     extc::snprintf(
                         stats_line.as_mut_ptr(),
                         (::core::mem::size_of::<[libc::c_char; 160]>() as libc::c_ulong)
@@ -361,12 +360,12 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                     }
                 }
                 if block_type as libc::c_int == 'X' as i32 {
-                    crate::common::common::usleep_that_works(
+                    crate::common::usleep_that_works(
                         (10 as libc::c_int as i64 * ipd_time_max) as u64,
                     );
                 }
                 if ipd_time > 0 as libc::c_int as i64 {
-                    crate::common::common::usleep_that_works(ipd_time as u64);
+                    crate::common::usleep_that_works(ipd_time as u64);
                 }
             }
             extc::gettimeofday(&mut stop, std::ptr::null_mut::<libc::c_void>());

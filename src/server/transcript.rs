@@ -53,7 +53,7 @@ pub unsafe fn xscript_data_stop_server(session: &mut Session, mut epoch: *const 
 }
 pub unsafe fn xscript_open_server(session: &mut Session, parameter: &Parameter) {
     let mut filename: [libc::c_char; 64] = [0; 64];
-    crate::common::common::make_transcript_filename(
+    crate::common::make_transcript_filename(
         filename.as_mut_ptr(),
         parameter.epoch,
         b"tsus\0" as *const u8 as *const libc::c_char,
@@ -134,7 +134,7 @@ pub unsafe fn xscript_open_server(session: &mut Session, parameter: &Parameter) 
     extc::fprintf(
         session.transfer.transcript,
         b"protocol_version = 0x%x\n\0" as *const u8 as *const libc::c_char,
-        crate::common::common::PROTOCOL_REVISION,
+        crate::common::PROTOCOL_REVISION,
     );
     extc::fprintf(
         session.transfer.transcript,
