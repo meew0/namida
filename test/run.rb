@@ -3,14 +3,15 @@ require 'digest/md5'
 
 TSUNAMI_PATH = "tsunami"
 TSUNAMID_PATH = "tsunamid"
-NAMIDA_PATH = "../target/debug/namida"
+NAMIDA_PATH = ["../target/debug/namida"]
+#NAMIDA_PATH = ["cargo", "miri", "run"]
 
 puts "namida client, namida server"
 puts "----------------------------"
 puts
 
-sin, sout, swait = Open3.popen2e(NAMIDA_PATH, "server")
-cin, cout, cwait = Open3.popen2e(NAMIDA_PATH, "client")
+sin, sout, swait = Open3.popen2e(*NAMIDA_PATH, "server")
+cin, cout, cwait = Open3.popen2e(*NAMIDA_PATH, "client")
 
 sleep 0.1
 cin.puts "connect 127.0.0.1"
