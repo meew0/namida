@@ -4,11 +4,11 @@ use std::{
     path::Path,
 };
 
-use crate::extc;
+use crate::{extc, types::Retransmission};
 use ::libc;
 use anyhow::bail;
 
-use super::{Parameter, Retransmission, Session, Transfer};
+use super::{Parameter, Session, Transfer};
 
 pub unsafe fn ttp_accept_retransmit(
     session: &mut Session,

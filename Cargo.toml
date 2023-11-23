@@ -10,7 +10,9 @@ edition = "2021"
 
 [dependencies]
 anyhow = { version = "1.0.75", features = ["backtrace"] }
+bincode = "2.0.0-rc.3"
 clap = { version = "4.4.8", features = ["derive"] }
-libc= "0.2"
+libc = "0.2"
 md5 = "0.7.0"
 rand = "0.8.5"
+to-socket-addrs = "0.2.1"

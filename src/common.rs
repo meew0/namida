@@ -3,11 +3,14 @@ use ::libc;
 use anyhow::bail;
 
 pub const NAMIDA_VERSION: &str = "devel";
-pub const PROTOCOL_REVISION: u32 = 0x20061025 as libc::c_int as u32;
-pub const REQUEST_RETRANSMIT: u16 = 0 as libc::c_int as u16;
-pub const REQUEST_RESTART: u16 = 1 as libc::c_int as u16;
-pub const REQUEST_STOP: u16 = 2 as libc::c_int as u16;
-pub const REQUEST_ERROR_RATE: u16 = 3 as libc::c_int as u16;
+pub const PROTOCOL_REVISION: u32 = 0x20061025;
+
+pub static BINCODE_CONFIG: bincode::config::Configuration<
+    bincode::config::BigEndian,
+    bincode::config::Fixint,
+> = bincode::config::standard()
+    .with_big_endian()
+    .with_fixed_int_encoding();
 
 pub fn transcript_warn_error(result: anyhow::Result<()>) {
     if let Err(err) = result {

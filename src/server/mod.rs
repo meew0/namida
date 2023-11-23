@@ -9,13 +9,6 @@ pub mod network;
 pub mod protocol;
 pub mod transcript;
 
-#[derive(Copy, Clone)]
-pub struct Retransmission {
-    pub request_type: u16,
-    pub block: u32,
-    pub error_rate: u32,
-}
-
 #[derive(Clone, clap::Args)]
 pub struct Parameter {
     #[arg(skip)]

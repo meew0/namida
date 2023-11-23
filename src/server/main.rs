@@ -3,9 +3,9 @@ use std::{
     ffi::{CStr, CString},
 };
 
-use super::{Parameter, Retransmission, Session, Transfer};
+use super::{Parameter, Session, Transfer};
 
-use crate::extc;
+use crate::{extc, types::Retransmission};
 use ::libc;
 
 pub unsafe fn serve(mut parameter: Parameter) -> libc::c_int {
@@ -78,7 +78,6 @@ pub unsafe fn serve(mut parameter: Parameter) -> libc::c_int {
 
 pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
     let mut retransmission: Retransmission = Retransmission {
-        request_type: 0,
         block: 0,
         error_rate: 0,
     };

@@ -3,8 +3,11 @@ use std::{ffi::CString, io::Write, path::Path, sync::Arc};
 use ::libc;
 use anyhow::bail;
 
-use super::{ring, Fraction, OutputMode, Parameter, Session, Statistics, Transfer};
-use crate::{datagram, extc};
+use super::{ring, OutputMode, Parameter, Session, Statistics, Transfer};
+use crate::{
+    datagram, extc,
+    types::{BlockIndex, Fraction},
+};
 
 pub unsafe fn command_close(parameter: &Parameter, session: &mut Session) -> anyhow::Result<()> {
     if (session.server).is_null() {
@@ -34,8 +37,6 @@ pub unsafe fn command_connect(
     let mut session = Session {
         transfer: Default::default(),
         server: std::ptr::null_mut(),
-        server_address: std::ptr::null_mut(),
-        server_address_length: 0,
     };
     server_fd = super::network::create_tcp_socket_client(&mut session, parameter)?;
     if server_fd < 0 as libc::c_int {
@@ -1133,12 +1134,12 @@ pub fn parse_fraction(fraction: &str) -> anyhow::Result<Fraction> {
     }
 }
 
-pub fn got_block(session: &Session, blocknr: u32) -> bool {
+pub fn got_block(session: &Session, blocknr: BlockIndex) -> bool {
     if blocknr > session.transfer.block_count {
         return true;
     }
 
-    session.transfer.received[(blocknr / 8) as usize] & (1 << (blocknr % 8)) != 0
+    session.transfer.received[(blocknr.0 / 8) as usize] & (1 << (blocknr.0 % 8)) != 0
 }
 
 pub fn dump_blockmap(postfix: &str, xfer: &Transfer) -> anyhow::Result<()> {
@@ -1148,9 +1149,9 @@ pub fn dump_blockmap(postfix: &str, xfer: &Transfer) -> anyhow::Result<()> {
         .create(true)
         .open(Path::new(&fname))?;
 
-    fbits.write_all(&xfer.block_count.to_le_bytes())?;
+    fbits.write_all(&xfer.block_count.0.to_le_bytes())?;
 
-    let block_data = &xfer.received[0..((xfer.block_count / 8).wrapping_add(1) as usize)];
+    let block_data = &xfer.received[0..((xfer.block_count.0 / 8).wrapping_add(1) as usize)];
     fbits.write_all(block_data)?;
 
     Ok(())

@@ -6,238 +6,104 @@ use std::{
 use ::libc;
 use anyhow::bail;
 
-use super::{Parameter, Retransmission, Session, Transfer};
-use crate::extc;
+use super::{Parameter, Session, Transfer};
+use crate::{
+    extc,
+    message::{ClientToServer, ServerToClient},
+    types::{BlockIndex, ErrorRate, Retransmission},
+};
 
-pub unsafe fn ttp_authenticate_client(
-    session: &mut Session,
-    mut secret: String,
-) -> anyhow::Result<()> {
-    let mut random: [u8; 64] = [0; 64];
-    let mut result: u8 = 0;
-    let mut status: libc::c_int = 0;
-    status = extc::fread(
-        random.as_mut_ptr() as *mut libc::c_void,
-        1 as libc::c_int as libc::c_ulong,
-        64 as libc::c_int as libc::c_ulong,
-        session.server,
-    ) as libc::c_int;
-    if status < 64 as libc::c_int {
-        bail!("Could not read authentication challenge from server");
-    }
-    let mut digest: [u8; 16] = crate::common::prepare_proof(&mut random, secret.as_bytes()).into();
+pub fn ttp_authenticate_client(session: &mut Session, mut secret: String) -> anyhow::Result<()> {
+    let ServerToClient::AuthenticationChallenge(mut random) = session.read()? else {
+        bail!("Expected authentication challenge");
+    };
 
-    status = extc::fwrite(
-        digest.as_mut_ptr() as *const libc::c_void,
-        1 as libc::c_int as libc::c_ulong,
-        16 as libc::c_int as libc::c_ulong,
-        session.server,
-    ) as libc::c_int;
-    if status < 16 as libc::c_int || extc::fflush(session.server) != 0 {
-        bail!("Could not send authentication response");
-    }
-    status = extc::fread(
-        &mut result as *mut u8 as *mut libc::c_void,
-        1 as libc::c_int as libc::c_ulong,
-        1 as libc::c_int as libc::c_ulong,
-        session.server,
-    ) as libc::c_int;
-    if status < 1 as libc::c_int {
-        bail!("Could not read authentication status");
-    }
-    if result as libc::c_int != 0 as libc::c_int {
+    let digest: [u8; 16] = crate::common::prepare_proof(&mut random, secret.as_bytes()).into();
+
+    session.write(ClientToServer::AuthenticationResponse(digest))?;
+
+    let ServerToClient::AuthenticationStatus(success) = session.read()? else {
+        bail!("Expected authentication status");
+    };
+
+    if !success {
         bail!("Authentication failed");
     }
+
     Ok(())
 }
 
-pub unsafe fn ttp_negotiate_client(session: &mut Session) -> anyhow::Result<()> {
-    let mut server_revision: u32 = 0;
-    let mut client_revision: u32 = extc::__bswap_32(crate::common::PROTOCOL_REVISION);
-    let mut status: libc::c_int = 0;
-    status = extc::fwrite(
-        &mut client_revision as *mut u32 as *const libc::c_void,
-        4 as libc::c_int as libc::c_ulong,
-        1 as libc::c_int as libc::c_ulong,
-        session.server,
-    ) as libc::c_int;
-    if status < 1 as libc::c_int || extc::fflush(session.server) != 0 {
-        bail!("Could not send protocol revision number");
-    }
-    status = extc::fread(
-        &mut server_revision as *mut u32 as *mut libc::c_void,
-        4 as libc::c_int as libc::c_ulong,
-        1 as libc::c_int as libc::c_ulong,
-        session.server,
-    ) as libc::c_int;
-    if status < 1 as libc::c_int {
-        bail!("Could not read protocol revision number");
-    }
+pub fn ttp_negotiate_client(session: &mut Session) -> anyhow::Result<()> {
+    let client_revision = crate::common::PROTOCOL_REVISION;
+    session.write(client_revision)?;
+    let server_revision: u32 = session.read()?;
+
     if client_revision != server_revision {
-        bail!("Protocol negotiation failed");
+        bail!(
+            "Protocol negotiation failed: client_revision = {}, server_revision = {}",
+            client_revision,
+            server_revision
+        );
     }
 
     Ok(())
 }
-pub unsafe fn ttp_open_transfer_client(
+
+pub fn ttp_open_transfer_client(
     session: &mut Session,
     parameter: &Parameter,
     remote_filename: String,
     local_filename: String,
 ) -> anyhow::Result<()> {
-    dbg!();
-    let mut result: u8 = 0;
-    let mut temp: u32 = 0;
-    let mut temp16: u16 = 0;
-    let mut status: libc::c_int = 0;
+    session.write(ClientToServer::FileRequest(remote_filename))?;
+    let ServerToClient::FileResponseOne(result) = session.read()?;
 
-    let remote_c = CString::new(remote_filename.as_str()).unwrap();
-    status = extc::fprintf(
-        session.server,
-        b"%s\n\0" as *const u8 as *const libc::c_char,
-        remote_c.as_ptr(),
-    );
-    if status <= 0 as libc::c_int || extc::fflush(session.server) != 0 {
-        bail!("Could not request file");
-    }
-    status = extc::fread(
-        &mut result as *mut u8 as *mut libc::c_void,
-        1 as libc::c_int as libc::c_ulong,
-        1 as libc::c_int as libc::c_ulong,
-        session.server,
-    ) as libc::c_int;
-    if status < 1 as libc::c_int {
-        bail!("Could not read response to file request");
-    }
-    if result as libc::c_int != 0 as libc::c_int {
-        bail!("Server: File does not exist or cannot be transmitted");
-    }
-    temp = extc::__bswap_32(parameter.block_size);
-    if extc::fwrite(
-        &mut temp as *mut u32 as *const libc::c_void,
-        4 as libc::c_int as libc::c_ulong,
-        1 as libc::c_int as libc::c_ulong,
-        session.server,
-    ) < 1 as libc::c_int as libc::c_ulong
-    {
-        bail!("Could not submit block size");
+    if let Err(err) = result {
+        bail!(
+            "Server: File does not exist or cannot be transmitted: {:?}",
+            err
+        );
     }
 
-    let target_rate_32: u32 = parameter.target_rate.try_into()?;
+    // Send our desired parameters...
 
-    temp = extc::__bswap_32(target_rate_32);
-    if extc::fwrite(
-        &mut temp as *mut u32 as *const libc::c_void,
-        4 as libc::c_int as libc::c_ulong,
-        1 as libc::c_int as libc::c_ulong,
-        session.server,
-    ) < 1 as libc::c_int as libc::c_ulong
-    {
-        bail!("Could not submit target rate");
-    }
-    temp = extc::__bswap_32(parameter.error_rate);
-    if extc::fwrite(
-        &mut temp as *mut u32 as *const libc::c_void,
-        4 as libc::c_int as libc::c_ulong,
-        1 as libc::c_int as libc::c_ulong,
-        session.server,
-    ) < 1 as libc::c_int as libc::c_ulong
-    {
-        bail!("Could not submit error rate");
-    }
-    if extc::fflush(session.server) != 0 {
-        bail!("Could not flush control channel");
-    }
-    temp16 = extc::__bswap_16(parameter.slower.numerator);
-    if extc::fwrite(
-        &mut temp16 as *mut u16 as *const libc::c_void,
-        2 as libc::c_int as libc::c_ulong,
-        1 as libc::c_int as libc::c_ulong,
-        session.server,
-    ) < 1 as libc::c_int as libc::c_ulong
-    {
-        bail!("Could not submit slowdown numerator");
-    }
-    temp16 = extc::__bswap_16(parameter.slower.denominator);
-    if extc::fwrite(
-        &mut temp16 as *mut u16 as *const libc::c_void,
-        2 as libc::c_int as libc::c_ulong,
-        1 as libc::c_int as libc::c_ulong,
-        session.server,
-    ) < 1 as libc::c_int as libc::c_ulong
-    {
-        bail!("Could not submit slowdown denominator");
-    }
-    temp16 = extc::__bswap_16(parameter.faster.numerator);
-    if extc::fwrite(
-        &mut temp16 as *mut u16 as *const libc::c_void,
-        2 as libc::c_int as libc::c_ulong,
-        1 as libc::c_int as libc::c_ulong,
-        session.server,
-    ) < 1 as libc::c_int as libc::c_ulong
-    {
-        bail!("Could not submit speedup numerator");
-    }
-    temp16 = extc::__bswap_16(parameter.faster.denominator);
-    if extc::fwrite(
-        &mut temp16 as *mut u16 as *const libc::c_void,
-        2 as libc::c_int as libc::c_ulong,
-        1 as libc::c_int as libc::c_ulong,
-        session.server,
-    ) < 1 as libc::c_int as libc::c_ulong
-    {
-        bail!("Could not submit speedup denominator");
-    }
-    if extc::fflush(session.server) != 0 {
-        bail!("Could not flush control channel");
-    }
+    session.write(ClientToServer::BlockSize(parameter.block_size))?;
+    session.write(ClientToServer::TargetRate(parameter.target_rate))?;
+    session.write(ClientToServer::ErrorRate(parameter.error_rate))?;
+    session.flush()?;
+
+    session.write(ClientToServer::Slowdown(parameter.slower))?;
+    session.write(ClientToServer::Speedup(parameter.faster))?;
+    session.flush()?;
+
+    // and get the server's parameters
 
     session.transfer = Transfer::default();
-
     session.transfer.remote_filename = Some(remote_filename);
     let local_filename = session.transfer.local_filename.insert(local_filename);
-    if extc::fread(
-        &mut session.transfer.file_size as *mut u64 as *mut libc::c_void,
-        8 as libc::c_int as libc::c_ulong,
-        1 as libc::c_int as libc::c_ulong,
-        session.server,
-    ) < 1 as libc::c_int as libc::c_ulong
-    {
-        bail!("Could not read file size");
-    }
-    session.transfer.file_size = crate::common::ntohll(session.transfer.file_size);
-    if extc::fread(
-        &mut temp as *mut u32 as *mut libc::c_void,
-        4 as libc::c_int as libc::c_ulong,
-        1 as libc::c_int as libc::c_ulong,
-        session.server,
-    ) < 1 as libc::c_int as libc::c_ulong
-    {
-        bail!("Could not read block size");
-    }
-    if extc::__bswap_32(temp) != parameter.block_size {
+
+    let ServerToClient::FileSize(file_size) = session.read()? else {
+        bail!("Expected file size");
+    };
+    session.transfer.file_size = file_size;
+
+    let ServerToClient::BlockSize(block_size) = session.read()? else {
+        bail!("Expected block size");
+    };
+    if block_size != parameter.block_size {
         bail!("Block size disagreement");
     }
-    if extc::fread(
-        &mut session.transfer.block_count as *mut u32 as *mut libc::c_void,
-        4 as libc::c_int as libc::c_ulong,
-        1 as libc::c_int as libc::c_ulong,
-        session.server,
-    ) < 1 as libc::c_int as libc::c_ulong
-    {
-        bail!("Could not read number of blocks");
-    }
-    session.transfer.block_count = extc::__bswap_32(session.transfer.block_count);
-    if extc::fread(
-        &mut session.transfer.epoch as *mut extc::time_t as *mut libc::c_void,
-        4 as libc::c_int as libc::c_ulong,
-        1 as libc::c_int as libc::c_ulong,
-        session.server,
-    ) < 1 as libc::c_int as libc::c_ulong
-    {
-        bail!("Could not read run epoch");
-    }
-    session.transfer.epoch = extc::__bswap_32(session.transfer.epoch as u32) as extc::time_t;
+
+    let ServerToClient::BlockCount(block_count) = session.read()? else {
+        bail!("Expected block count");
+    };
+    session.transfer.block_count = block_count;
+
+    let ServerToClient::Epoch(epoch) = session.read()? else {
+        bail!("Expected epoch");
+    };
+    session.transfer.epoch = epoch;
+
     session.transfer.blocks_left = session.transfer.block_count;
 
     let local_path = Path::new(local_filename);
@@ -247,7 +113,6 @@ pub unsafe fn ttp_open_transfer_client(
             local_path.display()
         );
     }
-
     session.transfer.file = Some(
         std::fs::File::options()
             .write(true)
@@ -255,15 +120,16 @@ pub unsafe fn ttp_open_transfer_client(
             .open(local_path)?,
     );
 
-    session.transfer.on_wire_estimate = (0.5f64 * parameter.target_rate as libc::c_double
-        / (8 as libc::c_int as u32 * parameter.block_size) as libc::c_double)
-        as u32;
+    session.transfer.on_wire_estimate = BlockIndex(
+        (0.5f64 * parameter.target_rate.0 as f64 / (parameter.block_size.0 * 8) as f64) as u32,
+    );
     session.transfer.on_wire_estimate =
         if session.transfer.block_count < session.transfer.on_wire_estimate {
             session.transfer.block_count
         } else {
             session.transfer.on_wire_estimate
         };
+
     if parameter.transcript_yn {
         crate::common::transcript_warn_error(super::transcript::xscript_open_client(
             session, parameter,
@@ -272,6 +138,7 @@ pub unsafe fn ttp_open_transfer_client(
 
     Ok(())
 }
+
 pub unsafe fn ttp_open_port_client(
     session: &mut Session,
     parameter: &mut Parameter,
@@ -302,79 +169,59 @@ pub unsafe fn ttp_open_port_client(
     } else {
         &mut (*(&mut udp_address as *mut extc::sockaddr as *mut extc::sockaddr_in)).sin_port
     };
-    status = extc::fwrite(
-        port as *const libc::c_void,
-        2 as libc::c_int as libc::c_ulong,
-        1 as libc::c_int as libc::c_ulong,
-        session.server,
-    ) as libc::c_int;
-    if status < 1 as libc::c_int || extc::fflush(session.server) != 0 {
-        extc::close(session.transfer.udp_fd);
-        bail!("Could not send UDP port number");
-    }
+
+    session.write(ClientToServer::UdpPort(port))?;
+    session.flush()?;
+
     Ok(())
 }
 pub unsafe fn ttp_repeat_retransmit(session: &mut Session) -> anyhow::Result<()> {
-    let mut retransmission: [Retransmission; 2048] = [Retransmission {
-        request_type: 0,
-        block: 0,
-        error_rate: 0,
-    }; 2048];
-    let mut entry: libc::c_int = 0;
     let mut status: libc::c_int = 0;
-    let mut block: libc::c_int = 0;
     let mut count: libc::c_int = 0 as libc::c_int;
     session.transfer.stats.this_retransmits = 0 as libc::c_int as u32;
-    count = 0 as libc::c_int;
-    entry = 0 as libc::c_int;
-    while (entry as u32) < session.transfer.retransmit.index_max && count < 2048 as libc::c_int {
-        block = *(session.transfer.retransmit.table).offset(entry as isize) as libc::c_int;
-        if block != 0 && !super::command::got_block(session, block as u32) {
-            *(session.transfer.retransmit.table).offset(count as isize) = block as u32;
-            retransmission[count as usize].request_type =
-                extc::__bswap_16(crate::common::REQUEST_RETRANSMIT);
-            retransmission[count as usize].block = extc::__bswap_32(block as u32);
-            count += 1;
+
+    session.transfer.retransmit.next_table.clear();
+    for block in &session.transfer.retransmit.previous_table {
+        if session.transfer.retransmit.next_table.len() >= 2048 {
+            break;
         }
-        entry += 1;
+
+        if !block.is_zero() && !super::command::got_block(session, *block) {
+            session.transfer.retransmit.next_table.push(*block);
+        }
     }
-    if count >= 2048 as libc::c_int {
-        block = (if session.transfer.block_count
-            < (session.transfer.gapless_to_block).wrapping_add(1 as libc::c_int as u32)
-        {
-            session.transfer.block_count
-        } else {
-            (session.transfer.gapless_to_block).wrapping_add(1 as libc::c_int as u32)
-        }) as libc::c_int;
-        retransmission[0 as libc::c_int as usize].request_type =
-            extc::__bswap_16(crate::common::REQUEST_RESTART);
-        retransmission[0 as libc::c_int as usize].block = extc::__bswap_32(block as u32);
-        status = extc::fwrite(
-            &mut *retransmission
-                .as_mut_ptr()
-                .offset(0 as libc::c_int as isize) as *mut Retransmission
-                as *const libc::c_void,
-            ::core::mem::size_of::<Retransmission>() as libc::c_ulong,
-            1 as libc::c_int as libc::c_ulong,
-            session.server,
-        ) as libc::c_int;
-        if status <= 0 as libc::c_int {
-            bail!("Could not send restart-at request");
-        }
+
+    if count >= 2048 {
+        let block =
+            if session.transfer.block_count < session.transfer.gapless_to_block + BlockIndex(1) {
+                session.transfer.block_count
+            } else {
+                session.transfer.gapless_to_block + BlockIndex(1)
+            };
+
+        session.write(ClientToServer::RestartAt(block))?;
+
         session.transfer.restart_pending = 1 as libc::c_int as u8;
-        session.transfer.restart_lastidx = *(session.transfer.retransmit.table).offset(
-            (session.transfer.retransmit.index_max).wrapping_sub(1 as libc::c_int as u32) as isize,
-        );
+        session.transfer.restart_lastidx = session
+            .transfer
+            .retransmit
+            .previous_table
+            .last()
+            .copied()
+            .unwrap_or(BlockIndex(0));
         session.transfer.restart_wireclearidx = if session.transfer.block_count
-            < (session.transfer.restart_lastidx).wrapping_add(session.transfer.on_wire_estimate)
+            < (session.transfer.restart_lastidx + session.transfer.on_wire_estimate)
         {
             session.transfer.block_count
         } else {
-            (session.transfer.restart_lastidx).wrapping_add(session.transfer.on_wire_estimate)
+            session.transfer.restart_lastidx + session.transfer.on_wire_estimate
         };
-        session.transfer.retransmit.index_max = 0 as libc::c_int as u32;
-        session.transfer.next_block = block as u32;
-        session.transfer.stats.this_retransmits = 2048 as libc::c_int as u32;
+
+        session.transfer.retransmit.previous_table.clear();
+        session.transfer.retransmit.swap_tables();
+
+        session.transfer.next_block = block;
+        session.transfer.stats.this_retransmits = 2048;
     } else {
         session.transfer.retransmit.index_max = count as u32;
         session.transfer.stats.this_retransmits = count as u32;
