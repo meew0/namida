@@ -324,14 +324,7 @@ pub unsafe fn command_get(
         if (session.transfer.retransmit.table).is_null() {
             panic!("Could not allocate retransmission table");
         }
-        session.transfer.received = extc::calloc(
-            (session.transfer.block_count / 8 as libc::c_int as u32)
-                .wrapping_add(2 as libc::c_int as u32) as libc::c_ulong,
-            ::core::mem::size_of::<u8>() as libc::c_ulong,
-        ) as *mut u8;
-        if (session.transfer.received).is_null() {
-            panic!("Could not allocate received-data bitfield");
-        }
+        session.transfer.received = vec![0; (session.transfer.block_count / 8 + 2) as usize];
         session.transfer.ring_buffer = Some(Arc::new(super::ring::RingBuffer::create(
             parameter.block_size,
         )));
@@ -419,11 +412,11 @@ pub unsafe fn command_get(
             }
 
             if !session.transfer.ring_buffer.as_mut().unwrap().is_full()
-                && (got_block(session, this_block) == 0
+                && (!got_block(session, this_block)
                     || this_type as libc::c_int == 'X' as i32
                     || session.transfer.restart_pending as libc::c_int != 0)
             {
-                if got_block(session, this_block) == 0 {
+                if !got_block(session, this_block) {
                     session
                         .transfer
                         .ring_buffer
@@ -432,8 +425,7 @@ pub unsafe fn command_get(
                         .reserve(local_datagram_view);
                     session.transfer.ring_buffer.as_mut().unwrap().confirm();
 
-                    let fresh1 = &mut (*(session.transfer.received)
-                        .offset((this_block / 8 as libc::c_int as u32) as isize));
+                    let fresh1 = &mut (session.transfer.received[(this_block / 8) as usize]);
                     *fresh1 = (*fresh1 as libc::c_int
                         | (1 as libc::c_int) << (this_block % 8 as libc::c_int as u32))
                         as u8;
@@ -539,8 +531,7 @@ pub unsafe fn command_get(
                             session,
                             (session.transfer.gapless_to_block)
                                 .wrapping_add(1 as libc::c_int as u32),
-                        ) != 0
-                            && session.transfer.gapless_to_block < session.transfer.block_count
+                        ) && session.transfer.gapless_to_block < session.transfer.block_count
                         {
                             session.transfer.gapless_to_block =
                                 (session.transfer.gapless_to_block).wrapping_add(1);
@@ -639,7 +630,7 @@ pub unsafe fn command_get(
             session.transfer.stats.total_lost = 0 as libc::c_int as u32;
             block = 1 as libc::c_int as u32;
             while block <= session.transfer.block_count {
-                if got_block(session, block) == 0 {
+                if !got_block(session, block) {
                     session.transfer.stats.total_lost =
                         (session.transfer.stats.total_lost).wrapping_add(1);
                 }
@@ -739,10 +730,6 @@ pub unsafe fn command_get(
                 extc::free(session.transfer.retransmit.table as *mut libc::c_void);
                 session.transfer.retransmit.table = std::ptr::null_mut::<u32>();
             }
-            if !(session.transfer.received).is_null() {
-                extc::free(session.transfer.received as *mut libc::c_void);
-                session.transfer.received = std::ptr::null_mut::<u8>();
-            }
             if parameter.rate_adjust {
                 parameter.target_rate = (1.15f64 * 1e6f64 * (mbit_file / time_secs)) as u64;
                 extc::printf(
@@ -769,10 +756,6 @@ pub unsafe fn command_get(
             if !(session.transfer.retransmit.table).is_null() {
                 extc::free(session.transfer.retransmit.table as *mut libc::c_void);
                 session.transfer.retransmit.table = std::ptr::null_mut::<u32>();
-            }
-            if !(session.transfer.received).is_null() {
-                extc::free(session.transfer.received as *mut libc::c_void);
-                session.transfer.received = std::ptr::null_mut::<u8>();
             }
             bail!("Transfer unsuccessful");
         }
@@ -1150,14 +1133,15 @@ pub fn parse_fraction(fraction: &str) -> anyhow::Result<Fraction> {
     }
 }
 
-pub unsafe fn got_block(session: &mut Session, mut blocknr: u32) -> libc::c_int {
+pub fn got_block(session: &Session, blocknr: u32) -> bool {
     if blocknr > session.transfer.block_count {
-        return 1 as libc::c_int;
+        return true;
     }
-    *(session.transfer.received).offset((blocknr / 8 as libc::c_int as u32) as isize) as libc::c_int
-        & (1 as libc::c_int) << (blocknr % 8 as libc::c_int as u32)
+
+    session.transfer.received[(blocknr / 8) as usize] & (1 << (blocknr % 8)) != 0
 }
-pub unsafe fn dump_blockmap(postfix: &str, xfer: &Transfer) -> anyhow::Result<()> {
+
+pub fn dump_blockmap(postfix: &str, xfer: &Transfer) -> anyhow::Result<()> {
     let fname = format!("{}{}", xfer.local_filename.as_ref().unwrap(), postfix);
     let mut fbits = std::fs::File::options()
         .write(true)
@@ -1166,10 +1150,7 @@ pub unsafe fn dump_blockmap(postfix: &str, xfer: &Transfer) -> anyhow::Result<()
 
     fbits.write_all(&xfer.block_count.to_le_bytes())?;
 
-    let block_data = std::slice::from_raw_parts(
-        xfer.received,
-        (xfer.block_count / 8).wrapping_add(1) as usize,
-    );
+    let block_data = &xfer.received[0..((xfer.block_count / 8).wrapping_add(1) as usize)];
     fbits.write_all(block_data)?;
 
     Ok(())

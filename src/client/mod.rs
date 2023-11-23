@@ -133,6 +133,7 @@ pub struct Parameter {
     pub passphrase: Option<String>,
 }
 
+#[derive(Default)]
 pub struct Transfer {
     pub epoch: i64,
     pub remote_filename: Option<String>,
@@ -147,38 +148,12 @@ pub struct Transfer {
     pub retransmit: Retransmit,
     pub stats: Statistics,
     pub ring_buffer: Option<Arc<ring::RingBuffer>>,
-    pub received: *mut u8,
+    pub received: Vec<u8>,
     pub blocks_left: u32,
     pub restart_pending: u8,
     pub restart_lastidx: u32,
     pub restart_wireclearidx: u32,
     pub on_wire_estimate: u32,
-}
-
-impl Default for Transfer {
-    fn default() -> Self {
-        Self {
-            epoch: Default::default(),
-            remote_filename: None,
-            local_filename: None,
-            file: None,
-            transcript: None,
-            udp_fd: Default::default(),
-            file_size: Default::default(),
-            block_count: Default::default(),
-            next_block: Default::default(),
-            gapless_to_block: Default::default(),
-            retransmit: Default::default(),
-            stats: Default::default(),
-            ring_buffer: Default::default(),
-            received: std::ptr::null_mut(),
-            blocks_left: Default::default(),
-            restart_pending: Default::default(),
-            restart_lastidx: Default::default(),
-            restart_wireclearidx: Default::default(),
-            on_wire_estimate: Default::default(),
-        }
-    }
 }
 
 pub struct Session {

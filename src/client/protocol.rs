@@ -329,7 +329,7 @@ pub unsafe fn ttp_repeat_retransmit(session: &mut Session) -> anyhow::Result<()>
     entry = 0 as libc::c_int;
     while (entry as u32) < session.transfer.retransmit.index_max && count < 2048 as libc::c_int {
         block = *(session.transfer.retransmit.table).offset(entry as isize) as libc::c_int;
-        if block != 0 && super::command::got_block(session, block as u32) == 0 {
+        if block != 0 && !super::command::got_block(session, block as u32) {
             *(session.transfer.retransmit.table).offset(count as isize) = block as u32;
             retransmission[count as usize].request_type =
                 extc::__bswap_16(crate::common::REQUEST_RETRANSMIT);
@@ -400,7 +400,7 @@ pub unsafe fn ttp_repeat_retransmit(session: &mut Session) -> anyhow::Result<()>
 
 pub unsafe fn ttp_request_retransmit(session: &mut Session, mut block: u32) -> anyhow::Result<()> {
     let mut ptr: *mut u32 = std::ptr::null_mut::<u32>();
-    if super::command::got_block(session, block) != 0 {
+    if !super::command::got_block(session, block) {
         return Ok(());
     }
     if session.transfer.retransmit.index_max >= session.transfer.retransmit.table_size {
