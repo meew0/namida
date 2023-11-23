@@ -1,7 +1,6 @@
 use std::{
     cmp::Ordering,
     ffi::{CStr, CString},
-    path::Path,
 };
 
 use super::{Parameter, Retransmission, Session, Transfer};
@@ -9,7 +8,7 @@ use super::{Parameter, Retransmission, Session, Transfer};
 use crate::extc;
 use ::libc;
 
-pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) -> libc::c_int {
+pub unsafe fn serve(mut parameter: Parameter) -> libc::c_int {
     let mut server_fd: libc::c_int = 0;
     let mut client_fd: libc::c_int = 0;
     let mut remote_address: extc::sockaddr_in = extc::sockaddr_in {
@@ -20,14 +19,13 @@ pub unsafe fn main_0(mut argc: libc::c_int, mut argv: *mut *mut libc::c_char) ->
     };
     let mut remote_length: extc::socklen_t =
         ::core::mem::size_of::<extc::sockaddr_in>() as libc::c_ulong as extc::socklen_t;
-    let mut parameter: Parameter = Parameter::default();
     let mut session: Session = Session {
         transfer: Transfer::default(),
         client_fd: 0,
         session_id: 0,
     };
     let mut child_pid: extc::pid_t = 0;
-    process_options(argc, argv, &mut parameter);
+    process_options(&mut parameter);
     server_fd = super::network::create_tcp_socket_server(&parameter).unwrap();
     extc::signal(
         17 as libc::c_int,
@@ -159,7 +157,7 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                 panic!("Could not make client socket non-blocking");
             }
             extc::gettimeofday(&mut start, std::ptr::null_mut::<libc::c_void>());
-            if parameter.transcript_yn != 0 {
+            if parameter.transcript_yn {
                 crate::common::transcript_warn_error(super::transcript::xscript_data_start_server(
                     session, start,
                 ));
@@ -217,21 +215,23 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                                 "Transmission of {} complete.",
                                 session.transfer.filename.as_ref().unwrap()
                             );
-                            if !(parameter.finishhook).is_null() {
+                            if let Some(finishhook) = &parameter.finishhook {
                                 let MaxCommandLength: libc::c_int = 1024 as libc::c_int;
                                 let vla = MaxCommandLength as usize;
                                 let mut cmd: Vec<libc::c_char> = ::std::vec::from_elem(0, vla);
                                 let mut v: libc::c_int = 0;
 
+                                let finishhook_c = CString::new(finishhook.as_str()).unwrap();
                                 let filename_c = CString::new(
                                     session.transfer.filename.as_ref().unwrap().as_str(),
                                 )
                                 .unwrap();
+
                                 v = extc::snprintf(
                                     cmd.as_mut_ptr(),
                                     MaxCommandLength as libc::c_ulong,
                                     b"%s %s\0" as *const u8 as *const libc::c_char,
-                                    parameter.finishhook,
+                                    finishhook_c.as_ptr(),
                                     filename_c.as_ptr(),
                                 );
                                 if v >= MaxCommandLength {
@@ -352,7 +352,7 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                         session.session_id,
                         1e-6f64 * delta as libc::c_double,
                     );
-                    if parameter.transcript_yn != 0 {
+                    if parameter.transcript_yn {
                         crate::common::transcript_warn_error(
                             super::transcript::xscript_data_log_server(
                                 session,
@@ -387,7 +387,7 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                 }
             }
             extc::gettimeofday(&mut stop, std::ptr::null_mut::<libc::c_void>());
-            if parameter.transcript_yn != 0 {
+            if parameter.transcript_yn {
                 crate::common::transcript_warn_error(super::transcript::xscript_data_stop_server(
                     session, stop,
                 ));
@@ -395,7 +395,7 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
             delta = (1000000 as libc::c_longlong * (stop.tv_sec - start.tv_sec) as libc::c_longlong
                 + stop.tv_usec as libc::c_longlong
                 - start.tv_usec as libc::c_longlong) as u64;
-            if parameter.verbose_yn != 0 {
+            if parameter.verbose_yn {
                 extc::fprintf(
                     extc::stderr,
                     b"Server %d transferred %llu bytes in %0.2f seconds (%0.1f Mbps)\n\0"
@@ -410,7 +410,7 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
                             * 1024 as libc::c_int as libc::c_double),
                 );
             }
-            if parameter.transcript_yn != 0 {
+            if parameter.transcript_yn {
                 crate::common::transcript_warn_error(super::transcript::xscript_close_server(
                     session, parameter, delta,
                 ));
@@ -421,283 +421,20 @@ pub unsafe fn client_handler(session: &mut Session, parameter: &mut Parameter) {
     }
 }
 
-pub unsafe fn process_options(
-    mut argc: libc::c_int,
-    mut argv: *mut *mut libc::c_char,
-    parameter: &mut Parameter,
-) {
-    let mut long_options: [extc::option; 12] = [
-        {
-            extc::option {
-                name: b"verbose\0" as *const u8 as *const libc::c_char,
-                has_arg: 0 as libc::c_int,
-                flag: std::ptr::null_mut::<libc::c_int>(),
-                val: 'v' as i32,
-            }
-        },
-        {
-            extc::option {
-                name: b"transcript\0" as *const u8 as *const libc::c_char,
-                has_arg: 0 as libc::c_int,
-                flag: std::ptr::null_mut::<libc::c_int>(),
-                val: 't' as i32,
-            }
-        },
-        {
-            extc::option {
-                name: b"v6\0" as *const u8 as *const libc::c_char,
-                has_arg: 0 as libc::c_int,
-                flag: std::ptr::null_mut::<libc::c_int>(),
-                val: '6' as i32,
-            }
-        },
-        {
-            extc::option {
-                name: b"port\0" as *const u8 as *const libc::c_char,
-                has_arg: 1 as libc::c_int,
-                flag: std::ptr::null_mut::<libc::c_int>(),
-                val: 'p' as i32,
-            }
-        },
-        {
-            extc::option {
-                name: b"secret\0" as *const u8 as *const libc::c_char,
-                has_arg: 1 as libc::c_int,
-                flag: std::ptr::null_mut::<libc::c_int>(),
-                val: 's' as i32,
-            }
-        },
-        {
-            extc::option {
-                name: b"buffer\0" as *const u8 as *const libc::c_char,
-                has_arg: 1 as libc::c_int,
-                flag: std::ptr::null_mut::<libc::c_int>(),
-                val: 'b' as i32,
-            }
-        },
-        {
-            extc::option {
-                name: b"hbtimeout\0" as *const u8 as *const libc::c_char,
-                has_arg: 1 as libc::c_int,
-                flag: std::ptr::null_mut::<libc::c_int>(),
-                val: 'h' as i32,
-            }
-        },
-        {
-            extc::option {
-                name: b"v\0" as *const u8 as *const libc::c_char,
-                has_arg: 0 as libc::c_int,
-                flag: std::ptr::null_mut::<libc::c_int>(),
-                val: 'v' as i32,
-            }
-        },
-        {
-            extc::option {
-                name: b"client\0" as *const u8 as *const libc::c_char,
-                has_arg: 1 as libc::c_int,
-                flag: std::ptr::null_mut::<libc::c_int>(),
-                val: 'c' as i32,
-            }
-        },
-        {
-            extc::option {
-                name: b"finishhook\0" as *const u8 as *const libc::c_char,
-                has_arg: 1 as libc::c_int,
-                flag: std::ptr::null_mut::<libc::c_int>(),
-                val: 'f' as i32,
-            }
-        },
-        {
-            extc::option {
-                name: b"allhook\0" as *const u8 as *const libc::c_char,
-                has_arg: 1 as libc::c_int,
-                flag: std::ptr::null_mut::<libc::c_int>(),
-                val: 'a' as i32,
-            }
-        },
-        {
-            extc::option {
-                name: std::ptr::null::<libc::c_char>(),
-                has_arg: 0 as libc::c_int,
-                flag: std::ptr::null_mut::<libc::c_int>(),
-                val: 0 as libc::c_int,
-            }
-        },
-    ];
-
-    let mut which: libc::c_int = 0;
-    loop {
-        which = extc::getopt_long(
-            argc,
-            argv as *const *mut libc::c_char,
-            b"+\0" as *const u8 as *const libc::c_char,
-            long_options.as_mut_ptr(),
-            std::ptr::null_mut::<libc::c_int>(),
-        );
-        if which <= 0 as libc::c_int {
-            break;
-        }
-        match which {
-            118 => {
-                parameter.verbose_yn = 1 as libc::c_int as u8;
-            }
-            116 => {
-                parameter.transcript_yn = 1 as libc::c_int as u8;
-            }
-            54 => {
-                parameter.ipv6_yn = 1 as libc::c_int as u8;
-            }
-            112 => {
-                parameter.tcp_port = extc::atoi(extc::optarg) as u16;
-            }
-            115 => {
-                parameter.secret = CStr::from_ptr(extc::optarg).to_str().unwrap().to_owned();
-            }
-            99 => {
-                parameter.client = extc::optarg;
-            }
-            102 => {
-                parameter.finishhook = extc::optarg as *mut libc::c_uchar;
-            }
-            97 => {
-                parameter.allhook = extc::optarg as *mut libc::c_uchar;
-            }
-            98 => {
-                parameter.udp_buffer = extc::atoi(extc::optarg) as u32;
-            }
-            104 => {
-                parameter.hb_timeout = extc::atoi(extc::optarg) as u16;
-            }
-            _ => {
-                extc::fprintf(
-                    extc::stderr,
-                    b"Usage: tsunamid [--verbose] [--transcript] [--v6] [--port=n] [--buffer=bytes]\n\0"
-                        as *const u8 as *const libc::c_char,
-                );
-                extc::fprintf(
-                    extc::stderr,
-                    b"                [--hbtimeout=seconds] [--allhook=cmd] [--finishhook=cmd]\n\0"
-                        as *const u8 as *const libc::c_char,
-                );
-                extc::fprintf(
-                    extc::stderr,
-                    b"                \0" as *const u8 as *const libc::c_char,
-                );
-                extc::fprintf(
-                    extc::stderr,
-                    b"[filename1 filename2 ...]\n\n\0" as *const u8 as *const libc::c_char,
-                );
-                extc::fprintf(
-                    extc::stderr,
-                    b"verbose or v : turns on verbose output mode\n\0" as *const u8
-                        as *const libc::c_char,
-                );
-                extc::fprintf(
-                    extc::stderr,
-                    b"transcript   : turns on transcript mode for statistics recording\n\0"
-                        as *const u8 as *const libc::c_char,
-                );
-                extc::fprintf(
-                    extc::stderr,
-                    b"v6           : operates using IPv6 instead of (not in addition to!) IPv4\n\0"
-                        as *const u8 as *const libc::c_char,
-                );
-                extc::fprintf(
-                    extc::stderr,
-                    b"port         : specifies which TCP port on which to listen to incoming connections\n\0"
-                        as *const u8 as *const libc::c_char,
-                );
-                extc::fprintf(
-                    extc::stderr,
-                    b"secret       : specifies the shared secret for the client and server\n\0"
-                        as *const u8 as *const libc::c_char,
-                );
-                extc::fprintf(
-                    extc::stderr,
-                    b"client       : specifies an alternate client IP or host where to send data\n\0"
-                        as *const u8 as *const libc::c_char,
-                );
-                extc::fprintf(
-                    extc::stderr,
-                    b"buffer       : specifies the desired size for UDP socket send buffer (in bytes)\n\0"
-                        as *const u8 as *const libc::c_char,
-                );
-                extc::fprintf(
-                    extc::stderr,
-                    b"hbtimeout    : specifies the timeout in seconds for disconnect after client heartbeat lost\n\0"
-                        as *const u8 as *const libc::c_char,
-                );
-                extc::fprintf(
-                    extc::stderr,
-                    b"finishhook   : run command on transfer completion, file name is appended automatically\n\0"
-                        as *const u8 as *const libc::c_char,
-                );
-                extc::fprintf(
-                    extc::stderr,
-                    b"allhook      : run command on 'get *' to produce a custom file list for client downloads\n\0"
-                        as *const u8 as *const libc::c_char,
-                );
-                extc::fprintf(
-                    extc::stderr,
-                    b"filenames    : list of files to share for downloaded via a client 'GET *'\n\0"
-                        as *const u8 as *const libc::c_char,
-                );
-                extc::fprintf(extc::stderr, b"\n\0" as *const u8 as *const libc::c_char);
-                extc::fprintf(
-                    extc::stderr,
-                    b"Defaults: verbose    = %d\n\0" as *const u8 as *const libc::c_char,
-                    super::config::DEFAULT_VERBOSE_YN as libc::c_int,
-                );
-                extc::fprintf(
-                    extc::stderr,
-                    b"          transcript = %d\n\0" as *const u8 as *const libc::c_char,
-                    super::config::DEFAULT_TRANSCRIPT_YN as libc::c_int,
-                );
-                extc::fprintf(
-                    extc::stderr,
-                    b"          v6         = %d\n\0" as *const u8 as *const libc::c_char,
-                    super::config::DEFAULT_IPV6_YN as libc::c_int,
-                );
-                extc::fprintf(
-                    extc::stderr,
-                    b"          port       = %d\n\0" as *const u8 as *const libc::c_char,
-                    super::config::DEFAULT_TCP_PORT as libc::c_int,
-                );
-                extc::fprintf(
-                    extc::stderr,
-                    b"          buffer     = %d bytes\n\0" as *const u8 as *const libc::c_char,
-                    super::config::DEFAULT_UDP_BUFFER,
-                );
-                extc::fprintf(
-                    extc::stderr,
-                    b"          hbtimeout  = %d seconds\n\0" as *const u8 as *const libc::c_char,
-                    super::config::DEFAULT_HEARTBEAT_TIMEOUT as libc::c_int,
-                );
-                extc::fprintf(extc::stderr, b"\n\0" as *const u8 as *const libc::c_char);
-                extc::exit(1 as libc::c_int);
-            }
-        }
-    }
-    if argc > extc::optind {
-        let file_names_c = argv.offset(extc::optind as isize);
-        parameter.file_name_size = 0;
-
-        let total_files = argc - extc::optind;
-
+pub fn process_options(parameter: &mut Parameter) {
+    if !parameter.file_names.is_empty() {
+        let total_files = parameter.file_names.len();
         eprintln!(
             "\nThe specified {} files will be listed on GET *:",
             total_files
         );
-        for counter in 0..total_files {
-            let file_name_c = *(file_names_c.offset(counter as isize));
-            let file_name_rust = CStr::from_ptr(file_name_c).to_str().unwrap();
-            let path = Path::new(file_name_rust);
+
+        for (counter, path) in parameter.file_names.iter().enumerate() {
             match std::fs::metadata(path) {
                 Ok(metadata) => {
-                    parameter.file_names.push(path.to_owned());
-                    parameter.file_sizes.push(metadata.len());
+                    parameter.files.push((path.clone(), metadata.len()));
 
-                    parameter.file_name_size += file_name_rust.len();
+                    parameter.file_name_size += path.as_os_str().len();
                     eprintln!(
                         " {:3}   {:<20}  {} bytes\n",
                         counter + 1,
@@ -718,21 +455,9 @@ pub unsafe fn process_options(
         eprintln!("total characters {}", parameter.file_name_size);
     }
     if 1 as libc::c_int == parameter.verbose_yn as libc::c_int {
-        extc::fprintf(
-            extc::stderr,
-            b"Block size: %d\n\0" as *const u8 as *const libc::c_char,
-            parameter.block_size,
-        );
-        extc::fprintf(
-            extc::stderr,
-            b"Buffer size: %d\n\0" as *const u8 as *const libc::c_char,
-            parameter.udp_buffer,
-        );
-        extc::fprintf(
-            extc::stderr,
-            b"Port: %d\n\0" as *const u8 as *const libc::c_char,
-            parameter.tcp_port as libc::c_int,
-        );
+        eprintln!("Block size: {}", parameter.block_size);
+        eprintln!("Buffer size: {}", parameter.udp_buffer);
+        eprintln!("Port: {}", parameter.tcp_port as libc::c_int);
     }
 }
 
@@ -750,18 +475,4 @@ pub unsafe extern "C" fn reap(mut _signum: libc::c_int) {
         17 as libc::c_int,
         Some(reap as unsafe extern "C" fn(libc::c_int) -> ()),
     );
-}
-pub fn main() {
-    let mut args: Vec<*mut libc::c_char> = Vec::new();
-    for arg in ::std::env::args() {
-        args.push(
-            (::std::ffi::CString::new(arg))
-                .expect("Failed to convert argument into CString.")
-                .into_raw(),
-        );
-    }
-    args.push(::core::ptr::null_mut());
-    unsafe {
-        ::std::process::exit(main_0((args.len() - 1) as libc::c_int, args.as_mut_ptr()) as i32)
-    }
 }

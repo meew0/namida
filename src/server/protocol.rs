@@ -1,5 +1,5 @@
 use std::{
-    ffi::CStr,
+    ffi::{CStr, CString},
     io::{Seek, SeekFrom},
     path::Path,
 };
@@ -76,7 +76,7 @@ pub unsafe fn ttp_accept_retransmit(
             b"%s\0" as *const u8 as *const libc::c_char,
             stats_line.as_mut_ptr(),
         );
-        if parameter.transcript_yn != 0 {
+        if parameter.transcript_yn {
             crate::common::transcript_warn_error(super::transcript::xscript_data_log_server(
                 session,
                 CStr::from_ptr(stats_line.as_mut_ptr()).to_str().unwrap(),
@@ -209,29 +209,13 @@ pub unsafe fn ttp_open_port_server(
     let mut address: *mut extc::sockaddr = std::ptr::null_mut::<extc::sockaddr>();
     let mut status: libc::c_int = 0;
     let mut port: u16 = 0;
-    let mut ipv6_yn: u8 = parameter.ipv6_yn;
-    if (parameter.client).is_null() {
-        session.transfer.udp_length = (if ipv6_yn as libc::c_int != 0 {
-            ::core::mem::size_of::<extc::sockaddr_in6>() as libc::c_ulong
-        } else {
-            ::core::mem::size_of::<extc::sockaddr_in>() as libc::c_ulong
-        }) as extc::socklen_t;
-        address = extc::malloc(session.transfer.udp_length as libc::c_ulong) as *mut extc::sockaddr;
-        if address.is_null() {
-            panic!("Could not allocate space for UDP socket address");
-        }
-        extc::getpeername(
-            session.client_fd,
-            extc::__SOCKADDR_ARG {
-                __sockaddr__: address,
-            },
-            &mut session.transfer.udp_length,
-        );
-    } else {
+    let mut ipv6_yn: bool = parameter.ipv6_yn;
+    if let Some(client) = &parameter.client {
         let mut result: *mut extc::addrinfo = std::ptr::null_mut::<extc::addrinfo>();
         let mut _errmsg: [libc::c_char; 256] = [0; 256];
+        let client_c = CString::new(client.as_str()).unwrap();
         let mut status_0: libc::c_int = extc::getaddrinfo(
-            parameter.client,
+            client_c.as_ptr(),
             std::ptr::null::<libc::c_char>(),
             std::ptr::null::<extc::addrinfo>(),
             &mut result,
@@ -242,11 +226,7 @@ pub unsafe fn ttp_open_port_server(
                 extc::gai_strerror_wrap(status_0),
             );
         }
-        if (*result).ai_family == 10 as libc::c_int {
-            ipv6_yn = 1 as libc::c_int as u8;
-        } else {
-            ipv6_yn = 0 as libc::c_int as u8;
-        }
+        ipv6_yn = (*result).ai_family == 10 as libc::c_int;
         parameter.ipv6_yn = ipv6_yn;
         session.transfer.udp_length = (*result).ai_addrlen;
         address = extc::malloc((*result).ai_addrlen as libc::c_ulong) as *mut extc::sockaddr;
@@ -265,7 +245,25 @@ pub unsafe fn ttp_open_port_server(
             );
         }
         extc::freeaddrinfo(result);
+    } else {
+        session.transfer.udp_length = (if ipv6_yn as libc::c_int != 0 {
+            ::core::mem::size_of::<extc::sockaddr_in6>() as libc::c_ulong
+        } else {
+            ::core::mem::size_of::<extc::sockaddr_in>() as libc::c_ulong
+        }) as extc::socklen_t;
+        address = extc::malloc(session.transfer.udp_length as libc::c_ulong) as *mut extc::sockaddr;
+        if address.is_null() {
+            panic!("Could not allocate space for UDP socket address");
+        }
+        extc::getpeername(
+            session.client_fd,
+            extc::__SOCKADDR_ARG {
+                __sockaddr__: address,
+            },
+            &mut session.transfer.udp_length,
+        );
     }
+
     status = crate::common::full_read(
         session.client_fd,
         &mut port as *mut u16 as *mut libc::c_void,
@@ -274,12 +272,12 @@ pub unsafe fn ttp_open_port_server(
     if status < 0 as libc::c_int {
         bail!("Could not read UDP port number");
     }
-    if ipv6_yn != 0 {
+    if ipv6_yn {
         (*(address as *mut extc::sockaddr_in6)).sin6_port = port;
     } else {
         (*(address as *mut extc::sockaddr_in)).sin_port = port;
     }
-    if parameter.verbose_yn != 0 {
+    if parameter.verbose_yn {
         extc::printf(
             b"Sending to client port %d\n\0" as *const u8 as *const libc::c_char,
             extc::__bswap_16(port) as libc::c_int,
@@ -328,14 +326,14 @@ pub unsafe fn ttp_open_transfer_server(
             file_no.as_mut_ptr(),
             ::core::mem::size_of::<[libc::c_char; 10]>() as libc::c_ulong,
             b"%u\0" as *const u8 as *const libc::c_char,
-            parameter.file_names.len() as libc::c_int,
+            parameter.files.len() as libc::c_int,
         );
         crate::common::full_write(
             session.client_fd,
             file_no.as_mut_ptr() as *const libc::c_void,
             (extc::strlen(file_no.as_mut_ptr())).wrapping_add(1 as libc::c_int as libc::c_ulong),
         );
-        for (file_index, file_name) in parameter.file_names.iter().enumerate() {
+        for (file_name, file_size) in &parameter.files {
             let bytes = file_name.as_os_str().as_encoded_bytes();
             let mut null_terminated = vec![0; bytes.len() + 1];
             null_terminated[0..(bytes.len())].copy_from_slice(bytes);
@@ -349,7 +347,7 @@ pub unsafe fn ttp_open_transfer_server(
                 message.as_mut_ptr(),
                 ::core::mem::size_of::<[libc::c_char; 20]>() as libc::c_ulong,
                 b"%Lu\0" as *const u8 as *const libc::c_char,
-                parameter.file_sizes[file_index],
+                file_size,
             );
             crate::common::full_write(
                 session.client_fd,
@@ -369,7 +367,7 @@ pub unsafe fn ttp_open_transfer_server(
         b"*\0" as *const u8 as *const libc::c_char,
     ) == 0
     {
-        if !(parameter.allhook).is_null() {
+        if let Some(allhook) = &parameter.allhook {
             let MaxFileListLength: libc::c_int = 32768 as libc::c_int;
             let vla = MaxFileListLength as usize;
             let mut fileList: Vec<libc::c_char> = ::std::vec::from_elem(0, vla);
@@ -378,13 +376,10 @@ pub unsafe fn ttp_open_transfer_server(
             let mut length: libc::c_int = 0 as libc::c_int;
             let mut l: libc::c_int = 0;
             let mut p: *mut extc::FILE = std::ptr::null_mut::<extc::FILE>();
-            extc::fprintf(
-                extc::stderr,
-                b"Using allhook program: %s\n\0" as *const u8 as *const libc::c_char,
-                parameter.allhook,
-            );
+            eprintln!("Using allhook program: {}", allhook);
+            let allhook_c = CString::new(allhook.as_str()).unwrap();
             p = extc::popen(
-                parameter.allhook as *mut libc::c_char,
+                allhook_c.as_ptr(),
                 b"r\0" as *const u8 as *const libc::c_char,
             );
             if !p.is_null() {
@@ -596,7 +591,7 @@ pub unsafe fn ttp_open_transfer_server(
         .transfer
         .filename
         .insert(extc::c_to_string(filename.as_mut_ptr()));
-    if parameter.verbose_yn != 0 {
+    if parameter.verbose_yn {
         extc::printf(
             b"Request for file: '%s'\n\0" as *const u8 as *const libc::c_char,
             filename.as_mut_ptr(),
@@ -751,7 +746,7 @@ pub unsafe fn ttp_open_transfer_server(
         * parameter.block_size as libc::c_longlong
         / parameter.target_rate as libc::c_longlong) as u32;
     session.transfer.ipd_current = (parameter.ipd_time * 3 as libc::c_int as u32) as libc::c_double;
-    if parameter.transcript_yn != 0 {
+    if parameter.transcript_yn {
         crate::common::transcript_warn_error(super::transcript::xscript_open_server(
             session, parameter,
         ));

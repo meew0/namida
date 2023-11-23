@@ -7,15 +7,10 @@ pub mod protocol;
 pub mod ring;
 pub mod transcript;
 
-use std::sync::Arc;
+use std::{fmt::Display, sync::Arc};
 
 use crate::extc;
 
-#[derive(Copy, Clone)]
-pub struct Command {
-    pub count: u8,
-    pub text: [*const libc::c_char; 10],
-}
 #[derive(Copy, Clone)]
 pub struct Retransmission {
     pub request_type: u16,
@@ -60,57 +55,82 @@ impl Default for Retransmit {
     }
 }
 
-#[derive(Clone)]
-pub struct Parameter {
-    pub server_name: String,
-    pub server_port: u16,
-    pub client_port: u16,
-    pub udp_buffer: u32,
-    pub verbose_yn: u8,
-    pub transcript_yn: u8,
-    pub ipv6_yn: u8,
-    pub output_mode: u8,
-    pub block_size: u32,
-    pub target_rate: u32,
-    pub rate_adjust: u8,
-    pub error_rate: u32,
-    pub slower_num: u16,
-    pub slower_den: u16,
-    pub faster_num: u16,
-    pub faster_den: u16,
-    pub history: u16,
-    pub lossless: u8,
-    pub losswindow_ms: u32,
-    pub blockdump: u8,
-    pub passphrase: Option<String>,
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ValueEnum)]
+pub enum OutputMode {
+    Default,
+    Screen,
 }
 
-impl Default for Parameter {
-    fn default() -> Self {
-        Self {
-            block_size: config::DEFAULT_BLOCK_SIZE,
-            server_name: config::DEFAULT_SERVER_NAME.to_owned(),
-            server_port: config::DEFAULT_SERVER_PORT,
-            client_port: config::DEFAULT_CLIENT_PORT,
-            udp_buffer: config::DEFAULT_UDP_BUFFER,
-            verbose_yn: config::DEFAULT_VERBOSE_YN,
-            transcript_yn: config::DEFAULT_TRANSCRIPT_YN,
-            ipv6_yn: config::DEFAULT_IPV6_YN,
-            output_mode: config::DEFAULT_OUTPUT_MODE,
-            target_rate: config::DEFAULT_TARGET_RATE,
-            rate_adjust: config::DEFAULT_RATE_ADJUST,
-            error_rate: config::DEFAULT_ERROR_RATE,
-            slower_num: config::DEFAULT_SLOWER_NUM,
-            slower_den: config::DEFAULT_SLOWER_DEN,
-            faster_num: config::DEFAULT_FASTER_NUM,
-            faster_den: config::DEFAULT_FASTER_DEN,
-            history: config::DEFAULT_HISTORY,
-            lossless: config::DEFAULT_LOSSLESS,
-            losswindow_ms: config::DEFAULT_LOSSWINDOW_MS,
-            blockdump: config::DEFAULT_BLOCKDUMP,
-            passphrase: None,
-        }
+#[derive(Clone)]
+pub struct Fraction {
+    numerator: u16,
+    denominator: u16,
+}
+
+impl Display for Fraction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{}", self.numerator, self.denominator)
     }
+}
+
+#[derive(Clone, clap::Args)]
+pub struct Parameter {
+    #[arg(long = "server", default_value_t = config::DEFAULT_SERVER_NAME.to_owned())]
+    pub server_name: String,
+
+    #[arg(long = "port", default_value_t = config::DEFAULT_SERVER_PORT)]
+    pub server_port: u16,
+
+    #[arg(long = "udpport", default_value_t = config::DEFAULT_CLIENT_PORT)]
+    pub client_port: u16,
+
+    #[arg(long = "buffer", default_value_t = config::DEFAULT_UDP_BUFFER)]
+    pub udp_buffer: u32,
+
+    #[arg(long = "quiet", action = clap::ArgAction::SetFalse)]
+    pub verbose_yn: bool,
+
+    #[arg(long = "transcript")]
+    pub transcript_yn: bool,
+
+    #[arg(long = "ipv6")]
+    pub ipv6_yn: bool,
+
+    #[arg(long = "output", value_enum, default_value_t = OutputMode::Default)]
+    pub output_mode: OutputMode,
+
+    #[arg(long = "blocksize", default_value_t = config::DEFAULT_BLOCK_SIZE)]
+    pub block_size: u32,
+
+    #[arg(long = "rate", default_value_t = config::DEFAULT_TARGET_RATE)]
+    pub target_rate: u64,
+
+    #[arg(long = "rateadjust")]
+    pub rate_adjust: bool,
+
+    #[arg(long = "error", default_value_t = config::DEFAULT_ERROR_RATE)]
+    pub error_rate: u32,
+
+    #[arg(long = "slower", value_parser = clap::builder::ValueParser::new(command::parse_fraction), default_value_t = config::DEFAULT_SLOWER)]
+    pub slower: Fraction,
+
+    #[arg(long = "faster", value_parser = clap::builder::ValueParser::new(command::parse_fraction), default_value_t = config::DEFAULT_FASTER)]
+    pub faster: Fraction,
+
+    #[arg(long = "history", default_value_t = config::DEFAULT_HISTORY)]
+    pub history: u16,
+
+    #[arg(long = "lossy", action = clap::ArgAction::SetFalse)]
+    pub lossless: bool,
+
+    #[arg(long = "losswindow", default_value_t = config::DEFAULT_LOSSWINDOW_MS)]
+    pub losswindow_ms: u32,
+
+    #[arg(long = "blockdump")]
+    pub blockdump: bool,
+
+    #[arg(long = "passphrase")]
+    pub passphrase: Option<String>,
 }
 
 pub struct Transfer {

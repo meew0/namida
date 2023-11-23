@@ -10,8 +10,7 @@ puts "namida client, namida server"
 puts "----------------------------"
 puts
 
-# TODO "--transcript", "source/fish.jpg"
-sin, sout, swait = Open3.popen2e(*NAMIDA_PATH, "server")
+sin, sout, swait = Open3.popen2e(*NAMIDA_PATH, "server", "--transcript", "source/fish.jpg")
 cin, cout, cwait = Open3.popen2e(*NAMIDA_PATH, "client")
 
 sleep 0.1
@@ -46,9 +45,11 @@ if File.exist?("fish.jpg")
   if digest == "17f6d0c96590ad1c933314c0cbdb0aa0"
     if Dir["*.namc"].empty?
       puts "not ok, missing client transcript"
+    elsif Dir["*.nams"].empty?
+        puts "not ok, missing client transcript"
     else
       puts "ok"
-      Dir["*.namc"].each do |file|
+      (Dir["*.namc"] + Dir["*.nams"]).each do |file|
         File.delete(file)
       end
     end

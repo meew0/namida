@@ -96,10 +96,10 @@ pub fn xscript_open_client(session: &mut Session, parameter: &Parameter) -> anyh
     writeln!(transcript, "block_size = {}", parameter.block_size)?;
     writeln!(transcript, "target_rate = {}", parameter.target_rate)?;
     writeln!(transcript, "error_rate = {}", parameter.error_rate)?;
-    writeln!(transcript, "slower_num = {}", parameter.slower_num)?;
-    writeln!(transcript, "slower_den = {}", parameter.slower_den)?;
-    writeln!(transcript, "faster_num = {}", parameter.faster_num)?;
-    writeln!(transcript, "faster_den = {}", parameter.faster_den)?;
+    writeln!(transcript, "slower_num = {}", parameter.slower.numerator)?;
+    writeln!(transcript, "slower_den = {}", parameter.slower.denominator)?;
+    writeln!(transcript, "faster_num = {}", parameter.faster.numerator)?;
+    writeln!(transcript, "faster_den = {}", parameter.faster.denominator)?;
     writeln!(transcript, "history = {}", parameter.history)?;
     writeln!(transcript, "lossless = {}", parameter.lossless)?;
     writeln!(transcript, "losswindow = {}", parameter.losswindow_ms)?;

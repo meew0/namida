@@ -16,73 +16,106 @@ pub struct Retransmission {
     pub error_rate: u32,
 }
 
-#[derive(Clone)]
+#[derive(Clone, clap::Args)]
 pub struct Parameter {
+    #[arg(skip)]
     pub epoch: extc::time_t,
-    pub verbose_yn: u8,
-    pub transcript_yn: u8,
-    pub ipv6_yn: u8,
-    pub tcp_port: u16,
-    pub udp_buffer: u32,
-    pub hb_timeout: u16,
-    pub secret: String,
-    pub client: *const libc::c_char,
-    pub finishhook: *const u8,
-    pub allhook: *const u8,
-    pub block_size: u32,
-    pub file_size: u64,
-    pub block_count: u32,
-    pub target_rate: u32,
-    pub error_rate: u32,
-    pub ipd_time: u32,
-    pub slower_num: u16,
-    pub slower_den: u16,
-    pub faster_num: u16,
-    pub faster_den: u16,
-    pub fileout: u16,
-    pub slotnumber: libc::c_int,
-    pub totalslots: libc::c_int,
-    pub samplerate: libc::c_int,
-    pub file_names: Vec<PathBuf>,
-    pub file_sizes: Vec<u64>,
-    pub file_name_size: usize,
-    pub wait_u_sec: libc::c_long,
-}
 
-impl Default for Parameter {
-    fn default() -> Self {
-        Self {
-            epoch: 0,
-            verbose_yn: config::DEFAULT_VERBOSE_YN,
-            transcript_yn: config::DEFAULT_TRANSCRIPT_YN,
-            ipv6_yn: config::DEFAULT_IPV6_YN,
-            tcp_port: config::DEFAULT_TCP_PORT,
-            udp_buffer: config::DEFAULT_UDP_BUFFER,
-            hb_timeout: config::DEFAULT_HEARTBEAT_TIMEOUT,
-            secret: config::DEFAULT_SECRET.to_owned(),
-            client: std::ptr::null::<libc::c_char>(),
-            finishhook: std::ptr::null::<u8>(),
-            allhook: std::ptr::null::<u8>(),
-            block_size: config::DEFAULT_BLOCK_SIZE,
-            file_size: 0,
-            block_count: 0,
-            target_rate: 0,
-            error_rate: 0,
-            ipd_time: 0,
-            slower_num: 0,
-            slower_den: 0,
-            faster_num: 0,
-            faster_den: 0,
-            fileout: 0,
-            slotnumber: 0,
-            totalslots: 0,
-            samplerate: 0,
-            file_names: vec![],
-            file_sizes: vec![],
-            file_name_size: 0,
-            wait_u_sec: 0,
-        }
-    }
+    /// turns on verbose output mode
+    #[arg(long = "verbose", short = 'v')]
+    pub verbose_yn: bool,
+
+    /// turns on transcript mode for statistics recording
+    #[arg(long = "transcript", short = 't')]
+    pub transcript_yn: bool,
+
+    /// operates using IPv6 instead of (not in addition to!) IPv4
+    #[arg(long = "v6", short = '6')]
+    pub ipv6_yn: bool,
+
+    /// specifies which TCP port on which to listen to incoming connections
+    #[arg(long = "port", short = 'p', default_value_t = config::DEFAULT_TCP_PORT)]
+    pub tcp_port: u16,
+
+    /// specifies the desired size for UDP socket send buffer (in bytes)
+    #[arg(long = "buffer", short = 'b', default_value_t = config::DEFAULT_UDP_BUFFER)]
+    pub udp_buffer: u32,
+
+    /// specifies the timeout in seconds for disconnect after client heartbeat lost
+    #[arg(long = "hbtimeout", default_value_t = config::DEFAULT_HEARTBEAT_TIMEOUT)]
+    pub hb_timeout: u16,
+
+    /// specifies the shared secret for the client and server
+    #[arg(long = "secret", short = 's', default_value_t = config::DEFAULT_SECRET.to_owned())]
+    pub secret: String,
+
+    /// specifies an alternate client IP or host where to send data
+    #[arg(long = "client", short = 'c')]
+    pub client: Option<String>,
+
+    /// run command on transfer completion, file name is appended automatically
+    #[arg(long = "finishhook", short = 'f')]
+    pub finishhook: Option<String>,
+
+    /// run command on 'get *' to produce a custom file list for client downloads
+    #[arg(long = "allhook", short = 'a')]
+    pub allhook: Option<String>,
+
+    #[arg(skip = config::DEFAULT_BLOCK_SIZE)]
+    pub block_size: u32,
+
+    #[arg(skip)]
+    pub file_size: u64,
+
+    #[arg(skip)]
+    pub block_count: u32,
+
+    #[arg(skip)]
+    pub target_rate: u32,
+
+    #[arg(skip)]
+    pub error_rate: u32,
+
+    #[arg(skip)]
+    pub ipd_time: u32,
+
+    #[arg(skip)]
+    pub slower_num: u16,
+
+    #[arg(skip)]
+    pub slower_den: u16,
+
+    #[arg(skip)]
+    pub faster_num: u16,
+
+    #[arg(skip)]
+    pub faster_den: u16,
+
+    #[arg(skip)]
+    pub fileout: u16,
+
+    #[arg(skip)]
+    pub slotnumber: libc::c_int,
+
+    #[arg(skip)]
+    pub totalslots: libc::c_int,
+
+    #[arg(skip)]
+    pub samplerate: libc::c_int,
+
+    /// list of files to share for downloaded via a client 'GET *'
+    #[arg()]
+    pub file_names: Vec<PathBuf>,
+
+    /// Files with associated size
+    #[arg(skip)]
+    pub files: Vec<(PathBuf, u64)>,
+
+    #[arg(skip)]
+    pub file_name_size: usize,
+
+    #[arg(skip)]
+    pub wait_u_sec: libc::c_long,
 }
 
 pub struct Transfer {

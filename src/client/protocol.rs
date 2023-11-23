@@ -122,7 +122,10 @@ pub unsafe fn ttp_open_transfer_client(
     {
         bail!("Could not submit block size");
     }
-    temp = extc::__bswap_32(parameter.target_rate);
+
+    let target_rate_32: u32 = parameter.target_rate.try_into()?;
+
+    temp = extc::__bswap_32(target_rate_32);
     if extc::fwrite(
         &mut temp as *mut u32 as *const libc::c_void,
         4 as libc::c_int as libc::c_ulong,
@@ -145,7 +148,7 @@ pub unsafe fn ttp_open_transfer_client(
     if extc::fflush(session.server) != 0 {
         bail!("Could not flush control channel");
     }
-    temp16 = extc::__bswap_16(parameter.slower_num);
+    temp16 = extc::__bswap_16(parameter.slower.numerator);
     if extc::fwrite(
         &mut temp16 as *mut u16 as *const libc::c_void,
         2 as libc::c_int as libc::c_ulong,
@@ -155,7 +158,7 @@ pub unsafe fn ttp_open_transfer_client(
     {
         bail!("Could not submit slowdown numerator");
     }
-    temp16 = extc::__bswap_16(parameter.slower_den);
+    temp16 = extc::__bswap_16(parameter.slower.denominator);
     if extc::fwrite(
         &mut temp16 as *mut u16 as *const libc::c_void,
         2 as libc::c_int as libc::c_ulong,
@@ -165,7 +168,7 @@ pub unsafe fn ttp_open_transfer_client(
     {
         bail!("Could not submit slowdown denominator");
     }
-    temp16 = extc::__bswap_16(parameter.faster_num);
+    temp16 = extc::__bswap_16(parameter.faster.numerator);
     if extc::fwrite(
         &mut temp16 as *mut u16 as *const libc::c_void,
         2 as libc::c_int as libc::c_ulong,
@@ -175,7 +178,7 @@ pub unsafe fn ttp_open_transfer_client(
     {
         bail!("Could not submit speedup numerator");
     }
-    temp16 = extc::__bswap_16(parameter.faster_den);
+    temp16 = extc::__bswap_16(parameter.faster.denominator);
     if extc::fwrite(
         &mut temp16 as *mut u16 as *const libc::c_void,
         2 as libc::c_int as libc::c_ulong,
@@ -261,7 +264,7 @@ pub unsafe fn ttp_open_transfer_client(
         } else {
             session.transfer.on_wire_estimate
         };
-    if parameter.transcript_yn != 0 {
+    if parameter.transcript_yn {
         crate::common::transcript_warn_error(super::transcript::xscript_open_client(
             session, parameter,
         ));
@@ -586,7 +589,7 @@ pub unsafe fn ttp_update_stats(session: &mut Session, parameter: &Parameter) -> 
         (session.transfer.stats.this_udp_errors).wrapping_sub(session.transfer.stats.start_udp_errors),
         stats_flags.as_mut_ptr(),
     );
-    if parameter.verbose_yn != 0 {
+    if parameter.verbose_yn {
         if parameter.output_mode as libc::c_int == 0 as libc::c_int {
             extc::printf(b"\x1B[2J\x1B[H\0" as *const u8 as *const libc::c_char);
             extc::printf(
@@ -672,7 +675,7 @@ pub unsafe fn ttp_update_stats(session: &mut Session, parameter: &Parameter) -> 
         }
         extc::fflush(extc::stdout);
     }
-    if parameter.transcript_yn != 0 {
+    if parameter.transcript_yn {
         crate::common::transcript_warn_error(super::transcript::xscript_data_log_client(
             session,
             parameter,

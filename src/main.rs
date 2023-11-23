@@ -9,6 +9,8 @@
 #![feature(c_variadic)]
 #![feature(extern_types)]
 
+use clap::{Parser, Subcommand};
+
 extern crate libc;
 pub mod client;
 pub mod common;
@@ -17,18 +19,29 @@ pub mod extc;
 pub mod server;
 pub mod util;
 
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+#[command(propagate_version = true)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    Client(client::Parameter),
+    Server(server::Parameter),
+}
+
 pub fn main() {
-    unsafe {
-        match std::env::args().nth(1).as_deref() {
-            Some("client") => {
-                client::main::main_0(0, std::ptr::null_mut());
-            }
-            Some("server") => {
-                server::main::main_0(0, std::ptr::null_mut());
-            }
-            Some(_) | None => {
-                println!("For now, run either `namida client` or `namida server`.");
-            }
+    let cli = Cli::parse();
+
+    match cli.command {
+        Commands::Client(parameter) => {
+            client::main::interactive(parameter);
         }
+        Commands::Server(parameter) => unsafe {
+            server::main::serve(parameter);
+        },
     }
 }
