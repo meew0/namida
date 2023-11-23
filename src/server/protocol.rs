@@ -347,7 +347,7 @@ pub unsafe fn ttp_open_transfer_server(
                 message.as_mut_ptr(),
                 ::core::mem::size_of::<[libc::c_char; 20]>() as libc::c_ulong,
                 b"%Lu\0" as *const u8 as *const libc::c_char,
-                file_size,
+                *file_size,
             );
             crate::common::full_write(
                 session.client_fd,
