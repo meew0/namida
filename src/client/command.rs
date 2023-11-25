@@ -1,58 +1,40 @@
-use std::{ffi::CString, io::Write, path::Path, sync::Arc};
+use std::{io::Write, path::PathBuf, sync::Arc, time::Instant};
 
 use ::libc;
 use anyhow::bail;
 
 use super::{ring, OutputMode, Parameter, Session, Statistics, Transfer};
 use crate::{
-    datagram, extc,
-    types::{BlockIndex, Fraction},
+    datagram::{self, BlockType},
+    extc,
+    message::{ClientToServer, DirListStatus, ServerToClient},
+    types::{BlockIndex, BlockSize, ErrorRate, FileMetadata, FileSize, Fraction, TargetRate},
 };
 
-pub unsafe fn command_close(parameter: &Parameter, session: &mut Session) -> anyhow::Result<()> {
-    if (session.server).is_null() {
-        bail!("Tsunami session was not active");
+pub fn command_close(parameter: &Parameter, session: Option<Session>) -> anyhow::Result<()> {
+    if parameter.verbose_yn {
+        if session.is_some() {
+            println!("Connection closed.");
+        } else {
+            println!("No connection currently active.")
+        }
+        println!();
     }
 
-    extc::fclose(session.server);
-    session.server = std::ptr::null_mut::<extc::FILE>();
-    if parameter.verbose_yn {
-        extc::printf(b"Connection closed.\n\n\0" as *const u8 as *const libc::c_char);
-    }
     Ok(())
 }
-pub unsafe fn command_connect(
-    command: &[&str],
-    parameter: &mut Parameter,
-) -> anyhow::Result<Session> {
-    let mut server_fd: libc::c_int = 0;
 
+pub fn command_connect(command: &[&str], parameter: &mut Parameter) -> anyhow::Result<Session> {
     if command.len() > 1 {
-        parameter.server_name = command[1].to_owned();
-    }
-    if command.len() > 2 {
-        parameter.server_port = command[2].parse()?;
+        parameter.server = command[1].to_owned();
     }
 
     let mut session = Session {
         transfer: Default::default(),
-        server: std::ptr::null_mut(),
+        server: super::network::create_tcp_socket_client(parameter)?,
     };
-    server_fd = super::network::create_tcp_socket_client(&mut session, parameter)?;
-    if server_fd < 0 as libc::c_int {
-        bail!(
-            "Could not connect to {}:{}.",
-            parameter.server_name,
-            parameter.server_port
-        );
-    }
-    session.server = extc::fdopen(server_fd, b"w+\0" as *const u8 as *const libc::c_char);
-    if (session.server).is_null() {
-        extc::close(server_fd);
-        bail!("Could not convert control channel into a stream");
-    }
+
     if let Err(err) = super::protocol::ttp_negotiate_client(&mut session) {
-        extc::fclose(session.server);
         bail!("Protocol negotiation failed: {:?}", err);
     }
 
@@ -61,253 +43,114 @@ pub unsafe fn command_connect(
         None => "kitten".to_owned(),
     };
     if let Err(err) = super::protocol::ttp_authenticate_client(&mut session, secret) {
-        extc::fclose(session.server);
         bail!("Authentication failure: {:?}", err);
     }
+
     if parameter.verbose_yn {
-        extc::printf(b"Connected.\n\n\0" as *const u8 as *const libc::c_char);
+        println!("Connected.\n");
     }
+
     Ok(session)
 }
-pub unsafe fn command_dir(_command: &[&str], session: &mut Session) -> anyhow::Result<()> {
-    let mut result: u8 = 0;
-    let mut read_str: [libc::c_char; 2048] = [0; 2048];
-    let mut num_files: u16 = 0;
-    let mut i: u16 = 0;
-    let mut filelen: usize = 0;
-    let mut status: u16 = 0 as libc::c_int as u16;
-    if (session.server).is_null() {
-        bail!("Not connected to a Tsunami server");
-    }
-    extc::fprintf(
-        session.server,
-        b"%s\n\0" as *const u8 as *const libc::c_char,
-        b"!#DIR??\0" as *const u8 as *const libc::c_char,
-    );
-    status = extc::fread(
-        &mut result as *mut u8 as *mut libc::c_void,
-        1 as libc::c_int as libc::c_ulong,
-        1 as libc::c_int as libc::c_ulong,
-        session.server,
-    ) as u16;
-    if (status as libc::c_int) < 1 as libc::c_int {
-        bail!("Could not read response to directory request");
-    }
-    if result as libc::c_int == 8 as libc::c_int {
-        bail!("Server does no support listing of shared files");
-    }
-    read_str[0 as libc::c_int as usize] = result as libc::c_char;
-    crate::common::fread_line(
-        session.server,
-        &mut *read_str.as_mut_ptr().offset(1 as libc::c_int as isize),
-        (::core::mem::size_of::<[libc::c_char; 2048]>() as libc::c_ulong)
-            .wrapping_sub(2 as libc::c_int as libc::c_ulong),
-    )?;
-    num_files = extc::atoi(read_str.as_mut_ptr()) as u16;
-    extc::fprintf(
-        extc::stderr,
-        b"Remote file list:\n\0" as *const u8 as *const libc::c_char,
-    );
-    i = 0 as libc::c_int as u16;
-    while (i as libc::c_int) < num_files as libc::c_int {
-        crate::common::fread_line(
-            session.server,
-            read_str.as_mut_ptr(),
-            (::core::mem::size_of::<[libc::c_char; 2048]>() as libc::c_ulong)
-                .wrapping_sub(1 as libc::c_int as libc::c_ulong),
-        )?;
-        extc::fprintf(
-            extc::stderr,
-            b" %2d) %-64s\0" as *const u8 as *const libc::c_char,
-            i as libc::c_int + 1 as libc::c_int,
-            read_str.as_mut_ptr(),
+
+pub fn command_dir(_command: &[&str], session: &mut Session) -> anyhow::Result<()> {
+    session.write(ClientToServer::DirList)?;
+
+    let ServerToClient::DirListHeader { status, num_files } = session.read()? else {
+        bail!("Expected dir list status");
+    };
+    if !matches!(status, DirListStatus::Ok) {
+        bail!(
+            "Server does not support listing of shared files: {:?}",
+            status
         );
-        crate::common::fread_line(
-            session.server,
-            read_str.as_mut_ptr(),
-            (::core::mem::size_of::<[libc::c_char; 2048]>() as libc::c_ulong)
-                .wrapping_sub(1 as libc::c_int as libc::c_ulong),
-        )?;
-        filelen = extc::atol(read_str.as_mut_ptr()) as usize;
-        extc::fprintf(
-            extc::stderr,
-            b"%8Lu bytes\n\0" as *const u8 as *const libc::c_char,
-            filelen as u64,
-        );
-        i = i.wrapping_add(1);
     }
-    extc::fprintf(extc::stderr, b"\n\0" as *const u8 as *const libc::c_char);
-    extc::fwrite(
-        b"\0\0" as *const u8 as *const libc::c_char as *const libc::c_void,
-        1 as libc::c_int as libc::c_ulong,
-        1 as libc::c_int as libc::c_ulong,
-        session.server,
-    );
+
+    eprintln!("Remote file list:");
+    for i in 0..num_files {
+        let ServerToClient::DirListFile(file_metadata) = session.read()? else {
+            bail!("Expected dir list file");
+        };
+
+        eprintln!(
+            " {:2}) {:<64} {:10}",
+            i,
+            file_metadata.path.display(),
+            file_metadata.size.0
+        );
+    }
+    eprintln!();
+
+    session.write(ClientToServer::DirListEnd)?;
+
     Ok(())
 }
-pub unsafe fn command_get(
+
+pub fn command_get(
     command: &[&str],
     parameter: &mut Parameter,
     session: &mut Session,
 ) -> anyhow::Result<()> {
-    let mut current_block: u64;
-    let mut this_block: u32 = 0 as libc::c_int as u32;
-    let mut this_type: u16 = 0 as libc::c_int as u16;
-    let mut delta: u64 = 0 as libc::c_int as u64;
-    let mut block: u32 = 0 as libc::c_int as u32;
-    let mut dumpcount: u32 = 0 as libc::c_int as u32;
-    let mut mbit_thru: libc::c_double = 0.;
-    let mut mbit_good: libc::c_double = 0.;
-    let mut mbit_file: libc::c_double = 0.;
-    let mut time_secs: libc::c_double = 0.;
-    let mut status: libc::c_int = 0 as libc::c_int;
-    let mut multimode: libc::c_int = 0 as libc::c_int;
-    let mut file_names: *mut *mut libc::c_char = std::ptr::null_mut::<*mut libc::c_char>();
-    let mut f_counter: u32 = 0 as libc::c_int as u32;
-    let mut f_total: u32 = 0 as libc::c_int as u32;
-    let mut f_arrsize: u32 = 0 as libc::c_int as u32;
-    let mut ping_s: extc::timeval = extc::timeval {
-        tv_sec: 0,
-        tv_usec: 0,
-    };
-    let mut ping_e: extc::timeval = extc::timeval {
-        tv_sec: 0,
-        tv_usec: 0,
-    };
-    let mut wait_u_sec: libc::c_long = 1 as libc::c_int as libc::c_long;
     if (command.len() as libc::c_int) < 2 as libc::c_int {
         bail!("Invalid command syntax (use 'help get' for details)");
     }
-    if (session.server).is_null() {
-        bail!("Not connected to a Tsunami server");
-    }
 
     session.transfer = Transfer::default();
+    let mut multimode = false;
+    let mut file_names: Vec<PathBuf> = vec![];
 
     if command[1] == "*" {
-        let mut filearray_size: [libc::c_char; 10] = [0; 10];
-        let mut file_count: [libc::c_char; 10] = [0; 10];
-        multimode = 1 as libc::c_int;
-        extc::printf(b"Requesting all available files\n\0" as *const u8 as *const libc::c_char);
-        extc::gettimeofday(&mut ping_s, std::ptr::null_mut::<libc::c_void>());
-        let command_1_c = CString::new(command[1]).unwrap();
-        status = extc::fprintf(
-            session.server,
-            b"%s\n\0" as *const u8 as *const libc::c_char,
-            command_1_c.as_ptr(),
-        );
-        status = extc::fread(
-            filearray_size.as_mut_ptr() as *mut libc::c_void,
-            ::core::mem::size_of::<libc::c_char>() as libc::c_ulong,
-            10 as libc::c_int as libc::c_ulong,
-            session.server,
-        ) as libc::c_int;
-        extc::gettimeofday(&mut ping_e, std::ptr::null_mut::<libc::c_void>());
-        status = extc::fread(
-            file_count.as_mut_ptr() as *mut libc::c_void,
-            ::core::mem::size_of::<libc::c_char>() as libc::c_ulong,
-            10 as libc::c_int as libc::c_ulong,
-            session.server,
-        ) as libc::c_int;
-        extc::fprintf(
-            session.server,
-            b"got size\0" as *const u8 as *const libc::c_char,
-        );
-        if status <= 0 as libc::c_int || extc::fflush(session.server) != 0 {
-            bail!("Could not request file");
-        }
-        if status < 1 as libc::c_int {
-            bail!("Could not read response to file request");
-        }
-        wait_u_sec = (ping_e.tv_sec - ping_s.tv_sec) * 1000000 as libc::c_int as extc::__time_t
-            + (ping_e.tv_usec - ping_s.tv_usec);
-        wait_u_sec =
-            wait_u_sec + (wait_u_sec as libc::c_double * 0.1f64) as libc::c_int as libc::c_long;
-        extc::sscanf(
-            filearray_size.as_mut_ptr(),
-            b"%u\0" as *const u8 as *const libc::c_char,
-            &mut f_arrsize as *mut u32,
-        );
-        extc::sscanf(
-            file_count.as_mut_ptr(),
-            b"%u\0" as *const u8 as *const libc::c_char,
-            &mut f_total as *mut u32,
-        );
-        if f_total <= 0 as libc::c_int as u32 {
-            let mut dummy: [libc::c_char; 1] = [0; 1];
-            status = extc::fread(
-                dummy.as_mut_ptr() as *mut libc::c_void,
-                ::core::mem::size_of::<libc::c_char>() as libc::c_ulong,
-                1 as libc::c_int as libc::c_ulong,
-                session.server,
-            ) as libc::c_int;
-            bail!("Server advertised no files to get");
-        } else {
-            extc::printf(
-                b"\nServer is sharing %u files\n\0" as *const u8 as *const libc::c_char,
-                f_total,
-            );
-            file_names = extc::malloc(
-                (f_total as libc::c_ulong)
-                    .wrapping_mul(::core::mem::size_of::<*mut libc::c_char>() as libc::c_ulong),
-            ) as *mut *mut libc::c_char;
-            if file_names.is_null() {
-                panic!("Could not allocate memory");
-            }
-            extc::printf(
-                b"Multi-GET of %d files:\n\0" as *const u8 as *const libc::c_char,
-                f_total,
-            );
-            f_counter = 0 as libc::c_int as u32;
-            while f_counter < f_total {
-                let mut tmpname: [libc::c_char; 1024] = [0; 1024];
-                crate::common::fread_line(
-                    session.server,
-                    tmpname.as_mut_ptr(),
-                    1024 as libc::c_int as u64,
-                )?;
-                let fresh0 = &mut (*file_names.offset(f_counter as isize));
-                *fresh0 = extc::strdup(tmpname.as_mut_ptr());
-                extc::printf(
-                    b"%s \0" as *const u8 as *const libc::c_char,
-                    *file_names.offset(f_counter as isize),
-                );
-                f_counter = f_counter.wrapping_add(1);
-            }
-            extc::fprintf(
-                session.server,
-                b"got list\0" as *const u8 as *const libc::c_char,
-            );
-            extc::printf(b"\n\0" as *const u8 as *const libc::c_char);
-        }
-    } else {
-        f_total = 1 as libc::c_int as u32;
-    }
-    f_counter = 0 as libc::c_int as u32;
+        multimode = true;
+        println!("Requesting all available files");
 
-    's_202: loop {
-        let remote_filename = if multimode == 0 {
-            command[1].to_owned()
-        } else {
-            extc::c_to_string(*file_names.offset(f_counter as isize))
+        session.write(ClientToServer::MultiRequest)?;
+        let ServerToClient::MultiFileCount(count) = session.read()? else {
+            bail!("Expected file count");
         };
 
-        let local_filename = if multimode == 0 {
-            if command.len() as libc::c_int >= 3 as libc::c_int {
-                // Local filename was specified
-                command[2].to_owned()
-            } else if let Some(last_slash) = remote_filename.rfind('/') {
-                // Remote filename contains slash, use only the last part as the local filename
-                remote_filename[(last_slash + 1)..].to_owned()
-            } else {
-                // Remote filename does not contain slash, use it as the local filename in its
-                // entirety
-                remote_filename.clone()
-            }
+        session.write(ClientToServer::MultiAcknowledgeCount)?;
+
+        if count == 0 {
+            bail!("Server advertised no files to get");
         } else {
-            let local_filename = extc::c_to_string(*file_names.offset(f_counter as isize));
-            println!("GET *: now requesting file '{}'", local_filename);
-            local_filename
+            println!();
+            println!("Server is sharing {} files", count);
+            println!("Multi-GET of {} files:", count);
+
+            for _i in 0..count {
+                let ServerToClient::MultiFile(file_metadata) = session.read()? else {
+                    bail!("Expected file");
+                };
+                let FileMetadata { path, size } = file_metadata;
+
+                println!(" {} ({} bytes)", path.display(), size.0);
+                file_names.push(path);
+            }
+
+            session.write(ClientToServer::MultiEnd)?;
+            session.flush()?;
+        }
+    } else {
+        file_names.push(PathBuf::from(command[1].to_owned()));
+    }
+
+    let mut stats_iteration = 0;
+    let mut successful = true;
+
+    'outer: for remote_filename in file_names {
+        let local_filename = if multimode {
+            println!("GET *: now requesting file '{}'", remote_filename.display());
+            remote_filename.clone()
+        } else if command.len() >= 3 {
+            // Local filename was specified
+            PathBuf::from(command[2])
+        } else if let Some(file_name_part) = remote_filename.file_name() {
+            // Remote filename contains slash, use only the last part as the local filename
+            PathBuf::from(file_name_part)
+        } else {
+            // Remote filename does not contain slash, use it as the local filename in its
+            // entirety
+            remote_filename.clone()
         };
 
         super::protocol::ttp_open_transfer_client(
@@ -317,21 +160,18 @@ pub unsafe fn command_get(
             local_filename,
         )?;
 
-        super::protocol::ttp_open_port_client(session, parameter)?;
-        session.transfer.retransmit.table = extc::calloc(
-            super::config::DEFAULT_TABLE_SIZE as libc::c_ulong,
-            ::core::mem::size_of::<u32>() as libc::c_ulong,
-        ) as *mut u32;
-        if (session.transfer.retransmit.table).is_null() {
-            panic!("Could not allocate retransmission table");
+        unsafe {
+            super::protocol::ttp_open_port_client(session, parameter)?;
         }
-        session.transfer.received = vec![0; (session.transfer.block_count / 8 + 2) as usize];
+
+        session.transfer.retransmit.previous_table = vec![];
+        session.transfer.received = vec![0; (session.transfer.block_count.0 / 8 + 2) as usize];
         session.transfer.ring_buffer = Some(Arc::new(super::ring::RingBuffer::create(
             parameter.block_size,
         )));
 
         let mut local_datagram_buffer =
-            ring::allocate_zeroed_boxed_slice(6 + parameter.block_size as usize);
+            ring::allocate_zeroed_boxed_slice(6 + parameter.block_size.0 as usize);
 
         let cloned_ring_buffer = Arc::clone(session.transfer.ring_buffer.as_mut().unwrap());
         let block_count = session.transfer.block_count;
@@ -345,79 +185,82 @@ pub unsafe fn command_get(
             disk_thread(cloned_ring_buffer, block_count, file_size, file)
         });
 
-        session.transfer.retransmit.table_size = super::config::DEFAULT_TABLE_SIZE as u32;
-        session.transfer.retransmit.index_max = 0 as libc::c_int as u32;
-        session.transfer.next_block = 1 as libc::c_int as u32;
-        session.transfer.gapless_to_block = 0 as libc::c_int as u32;
+        session.transfer.next_block = BlockIndex(1);
+        session.transfer.gapless_to_block = BlockIndex(0);
 
         session.transfer.stats = Statistics::default();
 
-        session.transfer.stats.start_udp_errors = crate::common::get_udp_in_errors();
+        session.transfer.stats.start_udp_errors = unsafe { crate::common::get_udp_in_errors() };
         session.transfer.stats.this_udp_errors = session.transfer.stats.start_udp_errors;
-        extc::gettimeofday(
-            &mut session.transfer.stats.start_time,
-            std::ptr::null_mut::<libc::c_void>(),
-        );
-        extc::gettimeofday(
-            &mut session.transfer.stats.this_time,
-            std::ptr::null_mut::<libc::c_void>(),
-        );
+
+        session.transfer.stats.start_time = Some(Instant::now());
+        session.transfer.stats.this_time = Some(Instant::now());
         if parameter.transcript_yn {
             crate::common::transcript_warn_error(super::transcript::xscript_data_start_client(
                 session,
-                parameter,
-                session.transfer.stats.start_time,
             ));
         }
+
+        let mut dumpcount = 0_u32;
+
         loop {
-            status = extc::recvfrom(
-                session.transfer.udp_fd,
-                local_datagram_buffer.as_mut_ptr() as *mut libc::c_void,
-                (6 as libc::c_int as u32).wrapping_add(parameter.block_size) as usize,
-                0 as libc::c_int,
-                extc::__SOCKADDR_ARG {
-                    __sockaddr__: std::ptr::null_mut::<libc::c_void>() as *mut extc::sockaddr,
-                },
-                std::ptr::null_mut::<extc::socklen_t>(),
-            ) as libc::c_int;
-            if status < 0 as libc::c_int {
-                println!("WARNING: UDP data transmission error");
-                extc::printf(
-                    b"Apparently frozen transfer, trying to do retransmit request\n\0" as *const u8
-                        as *const libc::c_char,
-                );
-                if let Err(err) = super::protocol::ttp_repeat_retransmit(session) {
-                    println!(
-                        "WARNING: Repeat of retransmission requests failed: {:?}",
-                        err
+            let status;
+
+            unsafe {
+                status = extc::recvfrom(
+                    session.transfer.udp_fd,
+                    local_datagram_buffer.as_mut_ptr() as *mut libc::c_void,
+                    (6 as libc::c_int as u32).wrapping_add(parameter.block_size.0) as usize,
+                    0 as libc::c_int,
+                    extc::__SOCKADDR_ARG {
+                        __sockaddr__: std::ptr::null_mut::<libc::c_void>() as *mut extc::sockaddr,
+                    },
+                    std::ptr::null_mut::<extc::socklen_t>(),
+                ) as libc::c_int;
+                if status < 0 as libc::c_int {
+                    println!("WARNING: UDP data transmission error");
+                    extc::printf(
+                        b"Apparently frozen transfer, trying to do retransmit request\n\0"
+                            as *const u8 as *const libc::c_char,
                     );
-                    current_block = 78252603380123710;
-                    break 's_202;
+                    if let Err(err) = super::protocol::ttp_repeat_retransmit(session) {
+                        println!(
+                            "WARNING: Repeat of retransmission requests failed: {:?}",
+                            err
+                        );
+                        successful = false;
+                        break 'outer;
+                    }
                 }
             }
 
+            // retrieve the block number and block type
             let local_datagram_view = datagram::View::parse(&local_datagram_buffer);
+            let this_block = local_datagram_view.header.block_index; // 1-based
+            let this_type = local_datagram_view.header.block_type;
 
-            this_block = local_datagram_view.header.block_index;
-            this_type = local_datagram_view.header.block_type;
+            // keep statistics on received blocks
             session.transfer.stats.total_blocks =
-                (session.transfer.stats.total_blocks).wrapping_add(1);
-            if this_type as libc::c_int != 'R' as i32 {
+                session.transfer.stats.total_blocks + BlockIndex(1);
+            if !matches!(this_type, BlockType::Retransmission) {
                 session.transfer.stats.this_flow_originals =
-                    (session.transfer.stats.this_flow_originals).wrapping_add(1);
+                    session.transfer.stats.this_flow_originals + BlockIndex(1);
             } else {
                 session.transfer.stats.this_flow_retransmitteds =
-                    (session.transfer.stats.this_flow_retransmitteds).wrapping_add(1);
+                    session.transfer.stats.this_flow_retransmitteds + BlockIndex(1);
                 session.transfer.stats.total_recvd_retransmits =
-                    (session.transfer.stats.total_recvd_retransmits).wrapping_add(1);
+                    session.transfer.stats.total_recvd_retransmits + BlockIndex(1);
             }
 
-            if !session.transfer.ring_buffer.as_mut().unwrap().is_full()
+            // main transfer control logic
+            if !session.transfer.ring_buffer.as_mut().unwrap().is_full() // don't let disk-I/O freeze stop feedback of stats to server
                 && (!got_block(session, this_block)
-                    || this_type as libc::c_int == 'X' as i32
-                    || session.transfer.restart_pending as libc::c_int != 0)
+                    || matches!(this_type, BlockType::Final)
+                    || session.transfer.restart_pending)
             {
+                // insert new blocks into disk write ringbuffer
                 if !got_block(session, this_block) {
+                    // reserve ring space, copy the data in, confirm the reservation
                     session
                         .transfer
                         .ring_buffer
@@ -426,189 +269,137 @@ pub unsafe fn command_get(
                         .reserve(local_datagram_view);
                     session.transfer.ring_buffer.as_mut().unwrap().confirm();
 
-                    let fresh1 = &mut (session.transfer.received[(this_block / 8) as usize]);
-                    *fresh1 = (*fresh1 as libc::c_int
-                        | (1 as libc::c_int) << (this_block % 8 as libc::c_int as u32))
-                        as u8;
-                    if session.transfer.blocks_left > 0 as libc::c_int as u32 {
-                        session.transfer.blocks_left =
-                            (session.transfer.blocks_left).wrapping_sub(1);
-                    } else {
-                        extc::printf(
-                                b"Oops! Negative-going blocks_left count at block: type=%c this=%u final=%u left=%u\n\0"
-                                    as *const u8 as *const libc::c_char,
-                                this_type as libc::c_int,
-                                this_block,
-                                session.transfer.block_count,
-                                session.transfer.blocks_left,
+                    // mark the block as received
+                    let fresh1 = &mut session.transfer.received[(this_block.0 / 8) as usize];
+                    *fresh1 = (*fresh1 | 1 << (this_block.0 % 8)) as u8;
+
+                    if session.transfer.blocks_left.is_zero() {
+                        println!("Oops! Negative-going blocks_left count at block: type={:?} this={} final={} left={}",
+                                this_type,
+                                this_block.0,
+                                session.transfer.block_count.0,
+                                session.transfer.blocks_left.0,
                             );
-                    }
-                }
-                if session.transfer.restart_pending as libc::c_int != 0
-                    && this_type as libc::c_int != 'X' as i32
-                {
-                    if this_block > session.transfer.restart_lastidx
-                        && this_block <= session.transfer.restart_wireclearidx
-                    {
-                        current_block = 13361531435213260772;
                     } else {
-                        current_block = 8937240710477387595;
+                        session.transfer.blocks_left = session.transfer.blocks_left - BlockIndex(1);
                     }
-                } else {
-                    current_block = 8937240710477387595;
                 }
-                match current_block {
-                    13361531435213260772 => {}
-                    _ => {
-                        if this_block > session.transfer.next_block {
-                            if !parameter.lossless {
-                                if parameter.losswindow_ms == 0 as libc::c_int as u32 {
-                                    session.transfer.gapless_to_block = this_block;
-                                } else {
-                                    let mut path_capability: libc::c_double = 0.;
-                                    path_capability = 0.8f64
-                                        * (session.transfer.stats.this_transmit_rate
-                                            + session.transfer.stats.this_retransmit_rate);
-                                    path_capability *=
-                                        0.001f64 * parameter.losswindow_ms as libc::c_double;
-                                    let mut earliest_block: u32 = (this_block as libc::c_double
-                                        - (if ((1024 as libc::c_int * 1024 as libc::c_int)
-                                            as libc::c_double
-                                            * path_capability
-                                            / (8 as libc::c_int as u32 * parameter.block_size)
-                                                as libc::c_double)
-                                            < this_block
-                                                .wrapping_sub(session.transfer.gapless_to_block)
-                                                as libc::c_double
-                                        {
-                                            (1024 as libc::c_int * 1024 as libc::c_int)
-                                                as libc::c_double
-                                                * path_capability
-                                                / (8 as libc::c_int as u32 * parameter.block_size)
-                                                    as libc::c_double
-                                        } else {
-                                            this_block
-                                                .wrapping_sub(session.transfer.gapless_to_block)
-                                                as libc::c_double
-                                        }))
-                                        as u32;
-                                    block = earliest_block;
-                                    while block < this_block {
-                                        if let Err(err) =
-                                            super::protocol::ttp_request_retransmit(session, block)
-                                        {
-                                            println!(
-                                                "WARNING: Retransmission request failed: {:?}",
-                                                err
-                                            );
-                                            current_block = 78252603380123710;
-                                            break 's_202;
-                                        } else {
-                                            block = block.wrapping_add(1);
-                                        }
-                                    }
-                                    session.transfer.next_block = earliest_block;
-                                    session.transfer.gapless_to_block = earliest_block;
-                                }
+
+                // transmit restart: avoid re-triggering on blocks still down the wire before
+                // server reacts
+                let mut should_continue = true;
+                if session.transfer.restart_pending
+                    && !matches!(this_type, BlockType::Final)
+                    && this_block > session.transfer.restart_lastidx
+                    && this_block <= session.transfer.restart_wireclearidx
+                {
+                    should_continue = false;
+                }
+
+                if should_continue {
+                    // queue any retransmits we need
+                    if this_block > session.transfer.next_block {
+                        if parameter.lossless {
+                            // lossless transfer mode, request all missing data to be resent
+                            let mut block = session.transfer.next_block;
+                            while block < this_block {
+                                super::protocol::ttp_request_retransmit(session, block);
+                                block = block + BlockIndex(1);
+                            }
+                        } else {
+                            // lossy transfer mode
+                            if parameter.losswindow_ms == 0 {
+                                session.transfer.gapless_to_block = this_block;
                             } else {
-                                block = session.transfer.next_block;
+                                let mut path_capability: f64 = 0.8f64
+                                    * (session.transfer.stats.this_transmit_rate
+                                        + session.transfer.stats.this_retransmit_rate);
+                                path_capability *= 0.001f64 * parameter.losswindow_ms as f64;
+
+                                let first = 1_000_000.0 * path_capability
+                                    / (8 * parameter.block_size.0) as f64;
+                                let second =
+                                    (this_block - session.transfer.gapless_to_block).0 as f64;
+                                let block_diff = if first < second { first } else { second };
+
+                                let earliest_block =
+                                    BlockIndex((this_block.0 as f64 - block_diff) as u32);
+                                let mut block = earliest_block;
                                 while block < this_block {
-                                    if let Err(err) =
-                                        super::protocol::ttp_request_retransmit(session, block)
-                                    {
-                                        println!(
-                                            "WARNING: Retransmission request failed: {:?}",
-                                            err
-                                        );
-                                        current_block = 78252603380123710;
-                                        break 's_202;
-                                    } else {
-                                        block = block.wrapping_add(1);
-                                    }
+                                    super::protocol::ttp_request_retransmit(session, block);
+                                    block = block + BlockIndex(1);
                                 }
+
+                                session.transfer.next_block = earliest_block;
+                                session.transfer.gapless_to_block = earliest_block;
                             }
                         }
-                        while got_block(
-                            session,
-                            (session.transfer.gapless_to_block)
-                                .wrapping_add(1 as libc::c_int as u32),
-                        ) && session.transfer.gapless_to_block < session.transfer.block_count
+                    }
+
+                    while got_block(session, session.transfer.gapless_to_block + BlockIndex(1))
+                        && session.transfer.gapless_to_block < session.transfer.block_count
+                    {
+                        session.transfer.gapless_to_block =
+                            session.transfer.gapless_to_block + BlockIndex(1);
+                    }
+
+                    if matches!(this_type, BlockType::Normal) {
+                        session.transfer.next_block = this_block + BlockIndex(1);
+                    }
+
+                    if session.transfer.restart_pending
+                        && session.transfer.next_block >= session.transfer.restart_lastidx
+                    {
+                        session.transfer.restart_pending = false;
+                    }
+
+                    if matches!(this_type, BlockType::Final) {
+                        if session.transfer.blocks_left == BlockIndex(0) {
+                            break;
+                        }
+                        if !parameter.lossless
+                            && session.transfer.retransmit.previous_table.is_empty()
+                            && !session.transfer.restart_pending
                         {
-                            session.transfer.gapless_to_block =
-                                (session.transfer.gapless_to_block).wrapping_add(1);
+                            break;
                         }
-                        if this_type as libc::c_int == 'O' as i32 {
-                            session.transfer.next_block =
-                                this_block.wrapping_add(1 as libc::c_int as u32);
+
+                        let mut block = session.transfer.gapless_to_block + BlockIndex(1);
+                        while block < session.transfer.block_count {
+                            super::protocol::ttp_request_retransmit(session, block);
+                            block = block + BlockIndex(1);
                         }
-                        if session.transfer.restart_pending as libc::c_int != 0
-                            && session.transfer.next_block >= session.transfer.restart_lastidx
-                        {
-                            session.transfer.restart_pending = 0 as libc::c_int as u8;
-                        }
-                        if this_type as libc::c_int == 'X' as i32 {
-                            if session.transfer.blocks_left == 0 as libc::c_int as u32 {
-                                break;
-                            }
-                            if !parameter.lossless
-                                && session.transfer.retransmit.index_max == 0 as libc::c_int as u32
-                                && session.transfer.restart_pending == 0
-                            {
-                                break;
-                            }
-                            block = (session.transfer.gapless_to_block)
-                                .wrapping_add(1 as libc::c_int as u32);
-                            while block < session.transfer.block_count {
-                                if let Err(err) =
-                                    super::protocol::ttp_request_retransmit(session, block)
-                                {
-                                    println!("WARNING: Retransmission request failed: {:?}", err);
-                                    current_block = 78252603380123710;
-                                    break 's_202;
-                                } else {
-                                    block = block.wrapping_add(1);
-                                }
-                            }
-                            super::protocol::ttp_repeat_retransmit(session)?;
-                        }
+                        super::protocol::ttp_repeat_retransmit(session)?;
                     }
                 }
             }
-            if session.transfer.stats.total_blocks % 50 as libc::c_int as u32 != 0 {
+            if session.transfer.stats.total_blocks.0 % 50 != 0 {
                 continue;
             }
-            if crate::common::get_usec_since(&mut session.transfer.stats.this_time)
-                as libc::c_ulonglong
-                <= 350000 as libc::c_longlong as libc::c_ulonglong
-            {
+            if crate::common::get_usec_since(session.transfer.stats.this_time.unwrap()) <= 350000 {
                 continue;
             }
-            if let Err(err) = super::protocol::ttp_repeat_retransmit(session) {
-                println!(
-                    "WARNING: Repeat of retransmission requests failed: {:?}",
-                    err
-                );
-                current_block = 78252603380123710;
-                break 's_202;
-            } else {
-                super::protocol::ttp_update_stats(session, parameter)?;
-                if parameter.blockdump {
-                    let mut postfix = format!(".bmap{}", dumpcount);
-                    if let Err(err) = dump_blockmap(&postfix, &session.transfer) {
-                        eprintln!("Failed to write blockmap dump: {:?}", err);
-                    }
-                    dumpcount = dumpcount.wrapping_add(1);
+
+            super::protocol::ttp_repeat_retransmit(session)?;
+            super::protocol::ttp_update_stats(session, parameter, &mut stats_iteration)?;
+
+            if parameter.blockdump {
+                let mut postfix = format!(".bmap{}", dumpcount);
+                if let Err(err) = dump_blockmap(&postfix, &session.transfer) {
+                    eprintln!("Failed to write blockmap dump: {:?}", err);
                 }
+                dumpcount = dumpcount.wrapping_add(1);
             }
         }
-        extc::printf(
-            b"Transfer complete. Flushing to disk and signaling server to stop...\n\0" as *const u8
-                as *const libc::c_char,
-        );
-        extc::close(session.transfer.udp_fd);
+
+        println!("Transfer complete. Flushing to disk and signaling server to stop...");
+        unsafe {
+            extc::close(session.transfer.udp_fd);
+        }
+
         if let Err(err) = super::protocol::ttp_request_stop(session) {
             println!("WARNING: Could not request end of transfer: {:?}", err);
-            current_block = 78252603380123710;
+            successful = false;
             break;
         } else {
             session
@@ -623,265 +414,171 @@ pub unsafe fn command_get(
                 println!("Error in disk thread: {:?}", err);
             }
 
-            extc::gettimeofday(
-                &mut session.transfer.stats.stop_time,
-                std::ptr::null_mut::<libc::c_void>(),
-            );
-            delta = crate::common::get_usec_since(&mut session.transfer.stats.start_time);
-            session.transfer.stats.total_lost = 0 as libc::c_int as u32;
-            block = 1 as libc::c_int as u32;
+            session.transfer.stats.stop_time = Some(Instant::now());
+            let delta = crate::common::get_usec_since(session.transfer.stats.start_time.unwrap());
+
+            session.transfer.stats.total_lost = BlockIndex(0);
+            let mut block = BlockIndex(1);
             while block <= session.transfer.block_count {
                 if !got_block(session, block) {
                     session.transfer.stats.total_lost =
-                        (session.transfer.stats.total_lost).wrapping_add(1);
+                        session.transfer.stats.total_lost + BlockIndex(1);
                 }
-                block = block.wrapping_add(1);
+                block = block + BlockIndex(1);
             }
-            mbit_thru = 8.0f64
-                * session.transfer.stats.total_blocks as libc::c_double
-                * parameter.block_size as libc::c_double;
-            mbit_good = mbit_thru
+
+            let bit_thru = 8.0f64
+                * session.transfer.stats.total_blocks.0 as f64
+                * parameter.block_size.0 as f64;
+            let bit_good = bit_thru
                 - 8.0f64
-                    * session.transfer.stats.total_recvd_retransmits as libc::c_double
-                    * parameter.block_size as libc::c_double;
-            mbit_file = 8.0f64 * session.transfer.file_size as libc::c_double;
-            mbit_thru /= 1024.0f64 * 1024.0f64;
-            mbit_good /= 1024.0f64 * 1024.0f64;
-            mbit_file /= 1024.0f64 * 1024.0f64;
-            time_secs = delta as libc::c_double / 1e6f64;
-            extc::printf(
-                b"PC performance figure : %llu packets dropped (if high this indicates receiving PC overload)\n\0"
-                    as *const u8 as *const libc::c_char,
-                (session.transfer.stats.this_udp_errors)
-                    .wrapping_sub(session.transfer.stats.start_udp_errors),
+                    * session.transfer.stats.total_recvd_retransmits.0 as f64
+                    * parameter.block_size.0 as f64;
+            let bit_file = 8.0f64 * session.transfer.file_size.0 as f64;
+
+            let mbit_thru = bit_thru / 1_000_000.0;
+            let mbit_good = bit_good / 1_000_000.0;
+            let mbit_file = bit_file / 1_000_000.0;
+
+            let time_secs = delta as f64 / 1e6f64;
+
+            println!("PC performance figure : {} packets dropped (if high this indicates receiving PC overload)",
+                session.transfer.stats.this_udp_errors
+                    .saturating_sub(session.transfer.stats.start_udp_errors),
             );
-            extc::printf(
-                b"Transfer duration     : %0.2f seconds\n\0" as *const u8 as *const libc::c_char,
-                time_secs,
+            println!("Transfer duration     : {:0>.2} seconds", time_secs);
+            println!("Total packet data     : {:0>.2} Mbit", mbit_thru);
+            println!("Goodput data          : {:0>.2} Mbit", mbit_good);
+            println!("File data             : {:0>.2} Mbit", mbit_file);
+            println!(
+                "Throughput            : {:0>.2} Mbps",
+                mbit_thru / time_secs
             );
-            extc::printf(
-                b"Total packet data     : %0.2f Mbit\n\0" as *const u8 as *const libc::c_char,
-                mbit_thru,
+            println!(
+                "Goodput w/ restarts   : {:0>.2} Mbps",
+                mbit_good / time_secs
             );
-            extc::printf(
-                b"Goodput data          : %0.2f Mbit\n\0" as *const u8 as *const libc::c_char,
-                mbit_good,
+            println!(
+                "Final file rate       : {:0>.2} Mbps",
+                mbit_file / time_secs
             );
-            extc::printf(
-                b"File data             : %0.2f Mbit\n\0" as *const u8 as *const libc::c_char,
-                mbit_file,
-            );
-            extc::printf(
-                b"Throughput            : %0.2f Mbps\n\0" as *const u8 as *const libc::c_char,
-                mbit_thru / time_secs,
-            );
-            extc::printf(
-                b"Goodput w/ restarts   : %0.2f Mbps\n\0" as *const u8 as *const libc::c_char,
-                mbit_good / time_secs,
-            );
-            extc::printf(
-                b"Final file rate       : %0.2f Mbps\n\0" as *const u8 as *const libc::c_char,
-                mbit_file / time_secs,
-            );
-            extc::printf(b"Transfer mode         : \0" as *const u8 as *const libc::c_char);
+            print!("Transfer mode         : ");
             if parameter.lossless {
-                if session.transfer.stats.total_lost == 0 as libc::c_int as u32 {
-                    extc::printf(b"lossless\n\0" as *const u8 as *const libc::c_char);
+                if session.transfer.stats.total_lost == BlockIndex(0) {
+                    println!("lossless");
                 } else {
-                    extc::printf(
-                        b"lossless mode - but lost count=%u > 0, please file a bug report!!\n\0"
-                            as *const u8 as *const libc::c_char,
-                        session.transfer.stats.total_lost,
+                    println!(
+                        "lossless mode - but lost count={} > 0, please file a bug report!!",
+                        session.transfer.stats.total_lost.0,
                     );
                 }
             } else {
-                if parameter.losswindow_ms == 0 as libc::c_int as u32 {
-                    extc::printf(b"lossy\n\0" as *const u8 as *const libc::c_char);
+                if parameter.losswindow_ms == 0 {
+                    println!("lossy");
                 } else {
-                    extc::printf(
-                        b"semi-lossy, time window %d ms\n\0" as *const u8 as *const libc::c_char,
-                        parameter.losswindow_ms,
-                    );
+                    println!("semi-lossy, time window {} ms", parameter.losswindow_ms);
                 }
-                extc::printf(
-                    b"Data blocks lost      : %llu (%.2f%% of data) per user-specified time window constraint\n\0"
-                        as *const u8 as *const libc::c_char,
-                    session.transfer.stats.total_lost as u64,
-                    100.0f64 * session.transfer.stats.total_lost as libc::c_double
-                        / session.transfer.block_count as libc::c_double,
+                println!(
+                    "Data blocks lost      : {} ({:.2}% of data) per user-specified time window constraint",
+                    session.transfer.stats.total_lost.0,
+                    100.0f64 * session.transfer.stats.total_lost.0 as f64
+                        / session.transfer.block_count.0 as f64,
                 );
             }
-            extc::printf(b"\n\0" as *const u8 as *const libc::c_char);
+            println!();
+
             if parameter.transcript_yn {
                 crate::common::transcript_warn_error(super::transcript::xscript_data_stop_client(
                     session,
-                    parameter,
-                    session.transfer.stats.stop_time,
                 ));
                 crate::common::transcript_warn_error(super::transcript::xscript_close_client(
                     session, parameter, delta,
                 ));
             }
+
             if parameter.blockdump {
                 if let Err(err) = dump_blockmap(".blockmap", &session.transfer) {
                     eprintln!("Failed to write blockmap: {}", err);
                 }
             }
-            if !(session.transfer.retransmit.table).is_null() {
-                extc::free(session.transfer.retransmit.table as *mut libc::c_void);
-                session.transfer.retransmit.table = std::ptr::null_mut::<u32>();
-            }
+
+            session.transfer.retransmit.previous_table = vec![];
+
             if parameter.rate_adjust {
-                parameter.target_rate = (1.15f64 * 1e6f64 * (mbit_file / time_secs)) as u64;
-                extc::printf(
-                    b"Adjusting target rate to %d Mbps for next transfer.\n\0" as *const u8
-                        as *const libc::c_char,
-                    (parameter.target_rate as libc::c_double / 1e6f64) as libc::c_int,
+                parameter.target_rate =
+                    TargetRate((1.15f64 * 1e6f64 * (mbit_file / time_secs)) as u64);
+                println!(
+                    "Adjusting target rate to {} Mbps for next transfer.",
+                    (parameter.target_rate.0 as f64 / 1e6f64),
                 );
             }
-            f_counter = f_counter.wrapping_add(1);
-            if f_counter >= f_total {
-                current_block = 6000599718051633247;
-                break;
-            }
         }
     }
-    match current_block {
-        78252603380123710 => {
-            extc::fprintf(
-                extc::stderr,
-                b"Transfer not successful.  (WARNING: You may need to reconnect.)\n\n\0"
-                    as *const u8 as *const libc::c_char,
-            );
+
+    if !successful {
+        eprintln!("Transfer not successful.  (WARNING: You may need to reconnect.)");
+        eprintln!();
+
+        unsafe {
             extc::close(session.transfer.udp_fd);
-            if !(session.transfer.retransmit.table).is_null() {
-                extc::free(session.transfer.retransmit.table as *mut libc::c_void);
-                session.transfer.retransmit.table = std::ptr::null_mut::<u32>();
-            }
-            bail!("Transfer unsuccessful");
         }
-        _ => {
-            if multimode != 0 {
-                f_counter = 0 as libc::c_int as u32;
-                while f_counter < f_total {
-                    extc::free(*file_names.offset(f_counter as isize) as *mut libc::c_void);
-                    f_counter = f_counter.wrapping_add(1);
-                }
-                extc::free(file_names as *mut libc::c_void);
-            }
-            Ok(())
-        }
+        session.transfer.retransmit.previous_table.clear();
+
+        bail!("Transfer unsuccessful");
     }
+
+    Ok(())
 }
-pub unsafe fn command_help(command: &[&str]) -> anyhow::Result<()> {
-    if (command.len() as libc::c_int) < 2 as libc::c_int {
-        extc::printf(
-            b"Help is available for the following commands:\n\n\0" as *const u8
-                as *const libc::c_char,
-        );
-        extc::printf(
-            b"    close    connect    get    dir    help    quit    set\n\n\0" as *const u8
-                as *const libc::c_char,
-        );
-        extc::printf(
-            b"Use 'help <command>' for help on an individual command.\n\n\0" as *const u8
-                as *const libc::c_char,
-        );
+
+pub fn command_help(command: &[&str]) -> anyhow::Result<()> {
+    if command.len() < 2 {
+        println!("Help is available for the following commands:\n");
+        println!("    close    connect    get    dir    help    quit    set\n");
+        println!("Use 'help <command>' for help on an individual command.\n");
     } else if command[1].eq_ignore_ascii_case("close") {
-        extc::printf(b"Usage: close\n\n\0" as *const u8 as *const libc::c_char);
-        extc::printf(
-            b"Closes the current connection to a remote Tsunami server.\n\n\0" as *const u8
-                as *const libc::c_char,
-        );
+        println!("Usage: close");
+        println!();
+        println!("Closes the current connection to a remote Tsunami server.\n");
     } else if command[1].eq_ignore_ascii_case("connect") {
-        extc::printf(b"Usage: connect\n\0" as *const u8 as *const libc::c_char);
-        extc::printf(b"       connect <remote-host>\n\0" as *const u8 as *const libc::c_char);
-        extc::printf(
-            b"       connect <remote-host> <remote-port>\n\n\0" as *const u8 as *const libc::c_char,
-        );
-        extc::printf(
-            b"Opens a connection to a remote Tsunami server.  If the host and port\n\0" as *const u8
-                as *const libc::c_char,
-        );
-        extc::printf(
-            b"are not specified, default values are used.  (Use the 'set' command to\n\0"
-                as *const u8 as *const libc::c_char,
-        );
-        extc::printf(b"modify these values.)\n\n\0" as *const u8 as *const libc::c_char);
-        extc::printf(
-            b"After connecting, you will be prompted to enter a shared secret for\n\0" as *const u8
-                as *const libc::c_char,
-        );
-        extc::printf(b"authentication.\n\n\0" as *const u8 as *const libc::c_char);
+        println!("Usage: connect");
+        println!("       connect <remote-host>");
+        println!("       connect <remote-host> <remote-port>\n");
+        println!("Opens a connection to a remote Tsunami server.  If the host and port");
+        println!("are not specified, default values are used.  (Use the 'set' command to");
+        println!("modify these values.)\n");
+        println!("After connecting, you will be prompted to enter a shared secret for");
+        println!("authentication.\n");
     } else if command[1].eq_ignore_ascii_case("get") {
-        extc::printf(b"Usage: get <remote-file>\n\0" as *const u8 as *const libc::c_char);
-        extc::printf(
-            b"       get <remote-file> <local-file>\n\n\0" as *const u8 as *const libc::c_char,
-        );
-        extc::printf(
-            b"Attempts to retrieve the remote file with the given name using the\n\0" as *const u8
-                as *const libc::c_char,
-        );
-        extc::printf(
-            b"Tsunami file transfer protocol.  If the local filename is not\n\0" as *const u8
-                as *const libc::c_char,
-        );
-        extc::printf(
-            b"specified, the final part of the remote filename (after the last path\n\0"
-                as *const u8 as *const libc::c_char,
-        );
-        extc::printf(b"separator) will be used.\n\n\0" as *const u8 as *const libc::c_char);
+        println!("Usage: get <remote-file>");
+        println!("       get <remote-file> <local-file>\n");
+        println!("Attempts to retrieve the remote file with the given name using the");
+        println!("Tsunami file transfer protocol.  If the local filename is not");
+        println!("specified, the final part of the remote filename (after the last path");
+        println!("separator) will be used.\n");
     } else if command[1].eq_ignore_ascii_case("dir") {
-        extc::printf(b"Usage: dir\n\n\0" as *const u8 as *const libc::c_char);
-        extc::printf(
-            b"Attempts to list the available remote files.\n\n\0" as *const u8
-                as *const libc::c_char,
-        );
+        println!("Usage: dir\n");
+        println!("Attempts to list the available remote files.\n");
     } else if command[1].eq_ignore_ascii_case("help") {
-        extc::printf(
-            b"Come on.  You know what that command does.\n\n\0" as *const u8 as *const libc::c_char,
-        );
+        println!("Come on.  You know what that command does.\n");
     } else if command[1].eq_ignore_ascii_case("quit") {
-        extc::printf(b"Usage: quit\n\n\0" as *const u8 as *const libc::c_char);
-        extc::printf(
-            b"Closes any open connection to a remote Tsunami server and exits the\n\0" as *const u8
-                as *const libc::c_char,
-        );
-        extc::printf(b"Tsunami client.\n\n\0" as *const u8 as *const libc::c_char);
+        println!("Usage: quit\n");
+        println!("Closes any open connection to a remote Tsunami server and exits the");
+        println!("Tsunami client.\n");
     } else if command[1].eq_ignore_ascii_case("set") {
-        extc::printf(b"Usage: set\n\0" as *const u8 as *const libc::c_char);
-        extc::printf(b"       set <field>\n\0" as *const u8 as *const libc::c_char);
-        extc::printf(b"       set <field> <value>\n\n\0" as *const u8 as *const libc::c_char);
-        extc::printf(
-            b"Sets one of the defaults to the given value.  If the value is omitted,\n\0"
-                as *const u8 as *const libc::c_char,
-        );
-        extc::printf(
-            b"the current value of the field is returned.  If the field is also\n\0" as *const u8
-                as *const libc::c_char,
-        );
-        extc::printf(
-            b"omitted, the current values of all defaults are returned.\n\n\0" as *const u8
-                as *const libc::c_char,
-        );
+        println!("Usage: set");
+        println!("       set <field>");
+        println!("       set <field> <value>\n");
+        println!("Sets one of the defaults to the given value.  If the value is omitted,");
+        println!("the current value of the field is returned.  If the field is also");
+        println!("omitted, the current values of all defaults are returned.\n");
     } else {
         println!("'{}' is not a recognized command.", command[1]);
-        extc::printf(
-            b"Use 'help' for a list of commands.\n\n\0" as *const u8 as *const libc::c_char,
-        );
+        println!("Use 'help' for a list of commands.\n");
     }
     Ok(())
 }
 
-pub fn command_quit(maybe_session: &mut Option<Session>) {
-    if let Some(session) = maybe_session {
-        if !(session.server).is_null() {
-            unsafe {
-                extc::fclose(session.server);
-            }
-        }
-    }
-
+pub fn command_quit() {
     println!("Thank you for using Tsunami.\n\0");
     println!("The ANML web site can be found at:    http://www.anml.iu.edu/");
     println!("The SourceForge site can be found at: http://tsunami-udp.sf.net/");
@@ -890,19 +587,18 @@ pub fn command_quit(maybe_session: &mut Option<Session>) {
     std::process::exit(0);
 }
 
-pub unsafe fn command_set(command: &[&str], parameter: &mut Parameter) -> anyhow::Result<()> {
-    let mut do_all: libc::c_int = (command.len() as libc::c_int == 1 as libc::c_int) as libc::c_int;
-    if command.len() as libc::c_int == 3 as libc::c_int {
+pub fn command_set(command: &[&str], parameter: &mut Parameter) -> anyhow::Result<()> {
+    let do_all = command.len() == 1;
+
+    if command.len() == 3 {
         if command[1].eq_ignore_ascii_case("server") {
-            parameter.server_name = command[2].to_owned();
-        } else if command[1].eq_ignore_ascii_case("port") {
-            parameter.server_port = command[2].parse()?;
+            parameter.server = command[2].to_owned();
         } else if command[1].eq_ignore_ascii_case("udpport") {
             parameter.client_port = command[2].parse()?;
         } else if command[1].eq_ignore_ascii_case("buffer") {
             parameter.udp_buffer = command[2].parse()?;
         } else if command[1].eq_ignore_ascii_case("blocksize") {
-            parameter.block_size = command[2].parse()?;
+            parameter.block_size = BlockSize(command[2].parse()?);
         } else if command[1].eq_ignore_ascii_case("verbose") {
             parameter.verbose_yn = command[2] == "yes";
         } else if command[1].eq_ignore_ascii_case("transcript") {
@@ -913,14 +609,14 @@ pub unsafe fn command_set(command: &[&str], parameter: &mut Parameter) -> anyhow
             parameter.output_mode = if command[2] == "screen" {
                 OutputMode::Screen
             } else {
-                OutputMode::Default
+                OutputMode::Line
             };
         } else if command[1].eq_ignore_ascii_case("rateadjust") {
             parameter.rate_adjust = command[2] == "yes";
         } else if command[1].eq_ignore_ascii_case("rate") {
             parameter.target_rate = parse_rate(command[2])?;
         } else if command[1].eq_ignore_ascii_case("error") {
-            parameter.error_rate = command[2].parse::<u32>()? * 1000;
+            parameter.error_rate = ErrorRate(command[2].parse::<u32>()? * 1000);
         } else if command[1].eq_ignore_ascii_case("slowdown") {
             parameter.slower = parse_fraction(command[2])?;
         } else if command[1].eq_ignore_ascii_case("speedup") {
@@ -937,164 +633,110 @@ pub unsafe fn command_set(command: &[&str], parameter: &mut Parameter) -> anyhow
             parameter.passphrase = Some(command[2].to_owned());
         }
     }
-    if do_all != 0 || command[1].eq_ignore_ascii_case("server") {
-        println!("server = {}", parameter.server_name);
+    if do_all || command[1].eq_ignore_ascii_case("server") {
+        println!("server = {}", parameter.server);
     }
-    if do_all != 0 || command[1].eq_ignore_ascii_case("port") {
-        extc::printf(
-            b"port = %u\n\0" as *const u8 as *const libc::c_char,
-            parameter.server_port as libc::c_int,
+    if do_all || command[1].eq_ignore_ascii_case("udpport") {
+        println!("udpport = {}", parameter.client_port as libc::c_int);
+    }
+    if do_all || command[1].eq_ignore_ascii_case("buffer") {
+        println!("buffer = {}", parameter.udp_buffer);
+    }
+    if do_all || command[1].eq_ignore_ascii_case("blocksize") {
+        println!("blocksize = {}", parameter.block_size);
+    }
+    if do_all || command[1].eq_ignore_ascii_case("verbose") {
+        println!(
+            "verbose = {}",
+            if parameter.verbose_yn { "yes" } else { "no" },
         );
     }
-    if do_all != 0 || command[1].eq_ignore_ascii_case("udpport") {
-        extc::printf(
-            b"udpport = %u\n\0" as *const u8 as *const libc::c_char,
-            parameter.client_port as libc::c_int,
+    if do_all || command[1].eq_ignore_ascii_case("transcript") {
+        println!(
+            "transcript = {}",
+            if parameter.transcript_yn { "yes" } else { "no" },
         );
     }
-    if do_all != 0 || command[1].eq_ignore_ascii_case("buffer") {
-        extc::printf(
-            b"buffer = %u\n\0" as *const u8 as *const libc::c_char,
-            parameter.udp_buffer,
-        );
+    if do_all || command[1].eq_ignore_ascii_case("ip") {
+        println!("ip = {}", if parameter.ipv6_yn { "v6" } else { "v4" });
     }
-    if do_all != 0 || command[1].eq_ignore_ascii_case("blocksize") {
-        extc::printf(
-            b"blocksize = %u\n\0" as *const u8 as *const libc::c_char,
-            parameter.block_size,
-        );
-    }
-    if do_all != 0 || command[1].eq_ignore_ascii_case("verbose") {
-        extc::printf(
-            b"verbose = %s\n\0" as *const u8 as *const libc::c_char,
-            if parameter.verbose_yn as libc::c_int != 0 {
-                b"yes\0" as *const u8 as *const libc::c_char
-            } else {
-                b"no\0" as *const u8 as *const libc::c_char
+    if do_all || command[1].eq_ignore_ascii_case("output") {
+        println!(
+            "output = {}",
+            match parameter.output_mode {
+                OutputMode::Screen => "screen",
+                OutputMode::Line => "line",
             },
         );
     }
-    if do_all != 0 || command[1].eq_ignore_ascii_case("transcript") {
-        extc::printf(
-            b"transcript = %s\n\0" as *const u8 as *const libc::c_char,
-            if parameter.transcript_yn as libc::c_int != 0 {
-                b"yes\0" as *const u8 as *const libc::c_char
-            } else {
-                b"no\0" as *const u8 as *const libc::c_char
-            },
+    if do_all || command[1].eq_ignore_ascii_case("rate") {
+        println!("rate = {}", parameter.target_rate);
+    }
+    if do_all || command[1].eq_ignore_ascii_case("rateadjust") {
+        println!(
+            "rateadjust = {}",
+            if parameter.rate_adjust { "yes" } else { "no" },
         );
     }
-    if do_all != 0 || command[1].eq_ignore_ascii_case("ip") {
-        extc::printf(
-            b"ip = %s\n\0" as *const u8 as *const libc::c_char,
-            if parameter.ipv6_yn as libc::c_int != 0 {
-                b"v6\0" as *const u8 as *const libc::c_char
-            } else {
-                b"v4\0" as *const u8 as *const libc::c_char
-            },
+    if do_all || command[1].eq_ignore_ascii_case("error") {
+        println!(
+            "error = {:0>.2}%",
+            parameter.error_rate.0 as f64 / 1000.0f64
         );
     }
-    if do_all != 0 || command[1].eq_ignore_ascii_case("output") {
-        extc::printf(
-            b"output = %s\n\0" as *const u8 as *const libc::c_char,
-            if parameter.output_mode as libc::c_int == 0 as libc::c_int {
-                b"screen\0" as *const u8 as *const libc::c_char
-            } else {
-                b"line\0" as *const u8 as *const libc::c_char
-            },
+    if do_all || command[1].eq_ignore_ascii_case("slowdown") {
+        println!(
+            "slowdown = {}/{}",
+            parameter.slower.numerator, parameter.slower.denominator,
         );
     }
-    if do_all != 0 || command[1].eq_ignore_ascii_case("rate") {
-        extc::printf(
-            b"rate = %u\n\0" as *const u8 as *const libc::c_char,
-            parameter.target_rate,
+    if do_all || command[1].eq_ignore_ascii_case("speedup") {
+        println!(
+            "speedup = {}/{}",
+            parameter.faster.numerator, parameter.faster.denominator,
         );
     }
-    if do_all != 0 || command[1].eq_ignore_ascii_case("rateadjust") {
-        extc::printf(
-            b"rateadjust = %s\n\0" as *const u8 as *const libc::c_char,
-            if parameter.rate_adjust as libc::c_int != 0 {
-                b"yes\0" as *const u8 as *const libc::c_char
-            } else {
-                b"no\0" as *const u8 as *const libc::c_char
-            },
+    if do_all || command[1].eq_ignore_ascii_case("history") {
+        println!("history = {}%", parameter.history);
+    }
+    if do_all || command[1].eq_ignore_ascii_case("lossless") {
+        println!(
+            "lossless = {}",
+            if parameter.lossless { "yes" } else { "no" },
         );
     }
-    if do_all != 0 || command[1].eq_ignore_ascii_case("error") {
-        extc::printf(
-            b"error = %0.2f%%\n\0" as *const u8 as *const libc::c_char,
-            parameter.error_rate as libc::c_double / 1000.0f64,
+    if do_all || command[1].eq_ignore_ascii_case("losswindow") {
+        println!("losswindow = {} msec", parameter.losswindow_ms);
+    }
+    if do_all || command[1].eq_ignore_ascii_case("blockdump") {
+        println!(
+            "blockdump = {}",
+            if parameter.blockdump { "yes" } else { "no" },
         );
     }
-    if do_all != 0 || command[1].eq_ignore_ascii_case("slowdown") {
-        extc::printf(
-            b"slowdown = %d/%d\n\0" as *const u8 as *const libc::c_char,
-            parameter.slower.numerator as libc::c_int,
-            parameter.slower.denominator as libc::c_int,
-        );
-    }
-    if do_all != 0 || command[1].eq_ignore_ascii_case("speedup") {
-        extc::printf(
-            b"speedup = %d/%d\n\0" as *const u8 as *const libc::c_char,
-            parameter.faster.numerator as libc::c_int,
-            parameter.faster.denominator as libc::c_int,
-        );
-    }
-    if do_all != 0 || command[1].eq_ignore_ascii_case("history") {
-        extc::printf(
-            b"history = %d%%\n\0" as *const u8 as *const libc::c_char,
-            parameter.history as libc::c_int,
-        );
-    }
-    if do_all != 0 || command[1].eq_ignore_ascii_case("lossless") {
-        extc::printf(
-            b"lossless = %s\n\0" as *const u8 as *const libc::c_char,
-            if parameter.lossless as libc::c_int != 0 {
-                b"yes\0" as *const u8 as *const libc::c_char
-            } else {
-                b"no\0" as *const u8 as *const libc::c_char
-            },
-        );
-    }
-    if do_all != 0 || command[1].eq_ignore_ascii_case("losswindow") {
-        extc::printf(
-            b"losswindow = %d msec\n\0" as *const u8 as *const libc::c_char,
-            parameter.losswindow_ms,
-        );
-    }
-    if do_all != 0 || command[1].eq_ignore_ascii_case("blockdump") {
-        extc::printf(
-            b"blockdump = %s\n\0" as *const u8 as *const libc::c_char,
-            if parameter.blockdump as libc::c_int != 0 {
-                b"yes\0" as *const u8 as *const libc::c_char
-            } else {
-                b"no\0" as *const u8 as *const libc::c_char
-            },
-        );
-    }
-    if do_all != 0 || command[1].eq_ignore_ascii_case("passphrase") {
-        extc::printf(
-            b"passphrase = %s\n\0" as *const u8 as *const libc::c_char,
+    if do_all || command[1].eq_ignore_ascii_case("passphrase") {
+        println!(
+            "passphrase = {}",
             if (parameter.passphrase).is_none() {
-                b"default\0" as *const u8 as *const libc::c_char
+                "default"
             } else {
-                b"<user-specified>\0" as *const u8 as *const libc::c_char
+                "<user-specified>"
             },
         );
     }
-    extc::printf(b"\n\0" as *const u8 as *const libc::c_char);
+    println!();
     Ok(())
 }
 
 pub fn disk_thread(
     ring_buffer: Arc<super::ring::RingBuffer>,
-    block_count: u32,
-    file_size: u64,
+    block_count: BlockIndex,
+    file_size: FileSize,
     mut file: std::fs::File,
 ) -> anyhow::Result<()> {
     loop {
         ring_buffer.peek(|datagram_view| {
-            if datagram_view.header.block_index == 0 {
+            if datagram_view.header.block_index == BlockIndex(0) {
                 bail!("!!!!");
             }
             super::io::accept_block(datagram_view, block_count, file_size, &mut file)?;
@@ -1104,21 +746,20 @@ pub fn disk_thread(
     }
 }
 
-pub fn parse_rate(rate: &str) -> anyhow::Result<u64> {
+pub fn parse_rate(rate: &str) -> anyhow::Result<TargetRate> {
     let (main_part, last_char) = rate.split_at(rate.len() - 1);
     let parsed: u64 = main_part.parse()?;
 
-    match last_char {
-        "k" | "K" => Ok(parsed * 1000),
-        "m" | "M" => Ok(parsed * 1000000),
-        "g" | "G" => Ok(parsed * 1000000000),
-        "t" | "T" => Ok(parsed * 1000000000000),
-        "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" => {
-            let full_parsed: u64 = rate.parse()?;
-            Ok(full_parsed)
-        }
+    let value = match last_char {
+        "k" | "K" => parsed * 1000,
+        "m" | "M" => parsed * 1000000,
+        "g" | "G" => parsed * 1000000000,
+        "t" | "T" => parsed * 1000000000000,
+        "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" => rate.parse()?,
         _ => bail!("Invalid unit specifier"),
-    }
+    };
+
+    Ok(TargetRate(value))
 }
 
 pub fn parse_fraction(fraction: &str) -> anyhow::Result<Fraction> {
@@ -1143,11 +784,15 @@ pub fn got_block(session: &Session, blocknr: BlockIndex) -> bool {
 }
 
 pub fn dump_blockmap(postfix: &str, xfer: &Transfer) -> anyhow::Result<()> {
-    let fname = format!("{}{}", xfer.local_filename.as_ref().unwrap(), postfix);
+    let mut fname = xfer.local_filename.as_ref().unwrap().clone();
+    let mut file_name_part = fname.file_name().unwrap().to_owned();
+    file_name_part.push(postfix);
+    fname.set_file_name(file_name_part);
+
     let mut fbits = std::fs::File::options()
         .write(true)
         .create(true)
-        .open(Path::new(&fname))?;
+        .open(fname)?;
 
     fbits.write_all(&xfer.block_count.0.to_le_bytes())?;
 

@@ -7,29 +7,29 @@ pub mod protocol;
 pub mod ring;
 pub mod transcript;
 
-use std::{fmt::Display, io::Write, net::TcpStream, sync::Arc};
-
-use anyhow::bail;
-
-use crate::{
-    extc,
-    message::ServerToClient,
-    types::{BlockIndex, BlockSize, Epoch, ErrorRate, FileSize, Fraction, TargetRate},
+use std::{
+    io::Write,
+    net::TcpStream,
+    path::PathBuf,
+    sync::Arc,
+    time::{Duration, Instant},
 };
+
+use crate::types::{BlockIndex, BlockSize, ErrorRate, FileSize, Fraction, TargetRate};
 
 #[derive(Copy, Clone, Default)]
 pub struct Statistics {
-    pub start_time: extc::timeval,
-    pub stop_time: extc::timeval,
-    pub this_time: extc::timeval,
-    pub this_blocks: u32,
-    pub this_retransmits: u32,
-    pub total_blocks: u32,
-    pub total_retransmits: u32,
-    pub total_recvd_retransmits: u32,
-    pub total_lost: u32,
-    pub this_flow_originals: u32,
-    pub this_flow_retransmitteds: u32,
+    pub start_time: Option<Instant>,
+    pub stop_time: Option<Instant>,
+    pub this_time: Option<Instant>,
+    pub this_blocks: BlockIndex,
+    pub this_retransmits: BlockIndex,
+    pub total_blocks: BlockIndex,
+    pub total_retransmits: BlockIndex,
+    pub total_recvd_retransmits: BlockIndex,
+    pub total_lost: BlockIndex,
+    pub this_flow_originals: BlockIndex,
+    pub this_flow_retransmitteds: BlockIndex,
     pub this_transmit_rate: f64,
     pub transmit_rate: f64,
     pub this_retransmit_rate: f64,
@@ -61,7 +61,7 @@ impl Default for Retransmit {
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ValueEnum)]
 pub enum OutputMode {
-    Default,
+    Line,
     Screen,
 }
 
@@ -85,7 +85,7 @@ pub struct Parameter {
     #[arg(long = "ipv6")]
     pub ipv6_yn: bool,
 
-    #[arg(long = "output", value_enum, default_value_t = OutputMode::Default)]
+    #[arg(long = "output", value_enum, default_value_t = OutputMode::Line)]
     pub output_mode: OutputMode,
 
     #[arg(long = "blocksize", default_value_t = config::DEFAULT_BLOCK_SIZE)]
@@ -124,9 +124,9 @@ pub struct Parameter {
 
 #[derive(Default)]
 pub struct Transfer {
-    pub epoch: Epoch,
-    pub remote_filename: Option<String>,
-    pub local_filename: Option<String>,
+    pub epoch: Duration,
+    pub remote_filename: Option<PathBuf>,
+    pub local_filename: Option<PathBuf>,
     pub file: Option<std::fs::File>,
     pub transcript: Option<std::fs::File>,
     pub udp_fd: libc::c_int,
@@ -139,7 +139,7 @@ pub struct Transfer {
     pub ring_buffer: Option<Arc<ring::RingBuffer>>,
     pub received: Vec<u8>,
     pub blocks_left: BlockIndex,
-    pub restart_pending: u8,
+    pub restart_pending: bool,
     pub restart_lastidx: BlockIndex,
     pub restart_wireclearidx: BlockIndex,
     pub on_wire_estimate: BlockIndex,
@@ -147,36 +147,27 @@ pub struct Transfer {
 
 pub struct Session {
     pub transfer: Transfer,
-    pub server: Option<TcpStream>,
+    pub server: TcpStream,
 }
 
 impl Session {
     pub fn read<T: bincode::Decode>(&mut self) -> anyhow::Result<T> {
-        let Some(server) = &mut self.server else {
-            bail!("Connection not open")
-        };
         Ok(bincode::decode_from_std_read(
-            server,
+            &mut self.server,
             crate::common::BINCODE_CONFIG,
         )?)
     }
 
     pub fn write<T: bincode::Encode>(&mut self, value: T) -> anyhow::Result<usize> {
-        let Some(server) = &mut self.server else {
-            bail!("Connection not open")
-        };
         Ok(bincode::encode_into_std_write(
             value,
-            server,
+            &mut self.server,
             crate::common::BINCODE_CONFIG,
         )?)
     }
 
     pub fn flush(&mut self) -> anyhow::Result<()> {
-        let Some(server) = &mut self.server else {
-            bail!("Connection not open")
-        };
-        server.flush()?;
+        self.server.flush()?;
         Ok(())
     }
 }

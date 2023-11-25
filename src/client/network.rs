@@ -5,12 +5,9 @@ use ::libc;
 use anyhow::bail;
 use to_socket_addrs::ToSocketAddrsWithDefaultPort;
 
-use super::{Parameter, Session};
+use super::Parameter;
 
-pub unsafe fn create_tcp_socket_client(
-    session: &mut Session,
-    parameter: &Parameter,
-) -> anyhow::Result<TcpStream> {
+pub fn create_tcp_socket_client(parameter: &Parameter) -> anyhow::Result<TcpStream> {
     let socket_addr = parameter
         .server
         .as_str()

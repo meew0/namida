@@ -1,7 +1,6 @@
 use std::io::Write;
 use std::path::Path;
-
-use crate::extc;
+use std::time::SystemTime;
 
 use super::{Parameter, Session};
 
@@ -11,11 +10,12 @@ pub fn xscript_close_client(
     delta: u64,
 ) -> anyhow::Result<()> {
     // File sizes in megabytes, not mibibytes as Tsunami used
-    let mb_thru = (session.transfer.stats.total_blocks * parameter.block_size) as f64 / 1000000.0;
+    let mb_thru =
+        (session.transfer.stats.total_blocks.0 * parameter.block_size.0) as f64 / 1000000.0;
     let mb_good = mb_thru
-        - (session.transfer.stats.total_recvd_retransmits * parameter.block_size) as f64
+        - (session.transfer.stats.total_recvd_retransmits.0 * parameter.block_size.0) as f64
             / 1000000.0;
-    let mb_file = session.transfer.file_size as f64 / 1000000.0;
+    let mb_file = session.transfer.file_size.0 as f64 / 1000000.0;
 
     // Microseconds to seconds
     let secs = delta as f64 / 1000000.0;
@@ -49,24 +49,34 @@ pub fn xscript_data_log_client(
     Ok(())
 }
 
-pub fn xscript_data_start_client(
-    session: &mut Session,
-    _parameter: &Parameter,
-    epoch: extc::timeval,
-) -> anyhow::Result<()> {
+pub fn xscript_data_start_client(session: &mut Session) -> anyhow::Result<()> {
+    let start_time = SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+
     let transcript = session.transfer.transcript.as_mut().unwrap();
-    writeln!(transcript, "START {}.{:06}", epoch.tv_sec, epoch.tv_usec)?;
+    writeln!(
+        transcript,
+        "START {}.{:06}",
+        start_time.as_secs(),
+        start_time.subsec_micros()
+    )?;
     transcript.flush()?;
     Ok(())
 }
 
-pub unsafe fn xscript_data_stop_client(
-    session: &mut Session,
-    _parameter: &Parameter,
-    epoch: extc::timeval,
-) -> anyhow::Result<()> {
+pub fn xscript_data_stop_client(session: &mut Session) -> anyhow::Result<()> {
+    let end_time = SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+
     let transcript = session.transfer.transcript.as_mut().unwrap();
-    writeln!(transcript, "STOP {}.{:06}", epoch.tv_sec, epoch.tv_usec)?;
+    writeln!(
+        transcript,
+        "STOP {}.{:06}",
+        end_time.as_secs(),
+        end_time.subsec_micros()
+    )?;
     transcript.flush()?;
     Ok(())
 }
@@ -83,15 +93,19 @@ pub fn xscript_open_client(session: &mut Session, parameter: &Parameter) -> anyh
     writeln!(
         transcript,
         "remote_filename = {}",
-        session.transfer.remote_filename.as_ref().unwrap().as_str()
+        session.transfer.remote_filename.as_ref().unwrap().display()
     )?;
     writeln!(
         transcript,
         "local_filename = {}",
-        session.transfer.local_filename.as_ref().unwrap().as_str()
+        session.transfer.local_filename.as_ref().unwrap().display()
     )?;
-    writeln!(transcript, "file_size = {}", session.transfer.file_size)?;
-    writeln!(transcript, "block_count = {}", session.transfer.block_count,)?;
+    writeln!(transcript, "file_size = {}", session.transfer.file_size.0)?;
+    writeln!(
+        transcript,
+        "block_count = {}",
+        session.transfer.block_count.0
+    )?;
     writeln!(transcript, "udp_buffer = {}", parameter.udp_buffer)?;
     writeln!(transcript, "block_size = {}", parameter.block_size)?;
     writeln!(transcript, "target_rate = {}", parameter.target_rate)?;

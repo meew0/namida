@@ -1,6 +1,9 @@
-use std::path::PathBuf;
+use std::{io::Write, net::TcpStream, path::PathBuf, time::Duration};
 
-use crate::extc;
+use crate::{
+    extc,
+    types::{BlockIndex, BlockSize, ErrorRate, FileMetadata, FileSize, Fraction, TargetRate},
+};
 
 pub mod config;
 pub mod io;
@@ -11,9 +14,6 @@ pub mod transcript;
 
 #[derive(Clone, clap::Args)]
 pub struct Parameter {
-    #[arg(skip)]
-    pub epoch: extc::time_t,
-
     /// turns on verbose output mode
     #[arg(long = "verbose", short = 'v')]
     pub verbose_yn: bool,
@@ -22,13 +22,10 @@ pub struct Parameter {
     #[arg(long = "transcript", short = 't')]
     pub transcript_yn: bool,
 
-    /// operates using IPv6 instead of (not in addition to!) IPv4
-    #[arg(long = "v6", short = '6')]
-    pub ipv6_yn: bool,
-
-    /// specifies which TCP port on which to listen to incoming connections
-    #[arg(long = "port", short = 'p', default_value_t = config::DEFAULT_TCP_PORT)]
-    pub tcp_port: u16,
+    /// Address at which to listen for incoming TCP connections. Determines port, bind host, and
+    /// IPv6 usage.
+    #[arg(long = "bind", short = 'B', default_value_t = config::DEFAULT_BIND.to_owned())]
+    pub bind: String,
 
     /// specifies the desired size for UDP socket send buffer (in bytes)
     #[arg(long = "buffer", short = 'b', default_value_t = config::DEFAULT_UDP_BUFFER)]
@@ -48,53 +45,7 @@ pub struct Parameter {
 
     /// run command on transfer completion, file name is appended automatically
     #[arg(long = "finishhook", short = 'f')]
-    pub finishhook: Option<String>,
-
-    /// run command on 'get *' to produce a custom file list for client downloads
-    #[arg(long = "allhook", short = 'a')]
-    pub allhook: Option<String>,
-
-    #[arg(skip = config::DEFAULT_BLOCK_SIZE)]
-    pub block_size: u32,
-
-    #[arg(skip)]
-    pub file_size: u64,
-
-    #[arg(skip)]
-    pub block_count: u32,
-
-    #[arg(skip)]
-    pub target_rate: u32,
-
-    #[arg(skip)]
-    pub error_rate: u32,
-
-    #[arg(skip)]
-    pub ipd_time: u32,
-
-    #[arg(skip)]
-    pub slower_num: u16,
-
-    #[arg(skip)]
-    pub slower_den: u16,
-
-    #[arg(skip)]
-    pub faster_num: u16,
-
-    #[arg(skip)]
-    pub faster_den: u16,
-
-    #[arg(skip)]
-    pub fileout: u16,
-
-    #[arg(skip)]
-    pub slotnumber: libc::c_int,
-
-    #[arg(skip)]
-    pub totalslots: libc::c_int,
-
-    #[arg(skip)]
-    pub samplerate: libc::c_int,
+    pub finishhook: Option<PathBuf>,
 
     /// list of files to share for downloaded via a client 'GET *'
     #[arg()]
@@ -102,24 +53,62 @@ pub struct Parameter {
 
     /// Files with associated size
     #[arg(skip)]
-    pub files: Vec<(PathBuf, u64)>,
+    pub files: Vec<FileMetadata>,
+}
 
-    #[arg(skip)]
-    pub file_name_size: usize,
+pub struct Properties {
+    pub epoch: Duration,
+    pub block_size: BlockSize,
+    pub file_size: FileSize,
+    pub block_count: BlockIndex,
+    pub target_rate: TargetRate,
+    pub error_rate: ErrorRate,
+    pub ipd_time: u32,
+    pub slower: Fraction,
+    pub faster: Fraction,
+    pub fileout: u16,
+    pub slotnumber: i32,
+    pub totalslots: i32,
+    pub samplerate: i32,
+    pub wait_u_sec: i64,
+}
 
-    #[arg(skip)]
-    pub wait_u_sec: libc::c_long,
+impl Default for Properties {
+    fn default() -> Self {
+        Self {
+            epoch: Duration::default(),
+            block_size: config::DEFAULT_BLOCK_SIZE,
+            file_size: Default::default(),
+            block_count: Default::default(),
+            target_rate: TargetRate(0),
+            error_rate: ErrorRate(0),
+            ipd_time: Default::default(),
+            slower: Fraction {
+                numerator: 0,
+                denominator: 0,
+            },
+            faster: Fraction {
+                numerator: 0,
+                denominator: 0,
+            },
+            fileout: Default::default(),
+            slotnumber: Default::default(),
+            totalslots: Default::default(),
+            samplerate: Default::default(),
+            wait_u_sec: 0,
+        }
+    }
 }
 
 pub struct Transfer {
-    pub filename: Option<String>,
+    pub filename: Option<PathBuf>,
     pub file: Option<std::fs::File>,
     pub transcript: Option<std::fs::File>,
     pub udp_fd: libc::c_int,
     pub udp_address: *mut extc::sockaddr,
     pub udp_length: extc::socklen_t,
     pub ipd_current: libc::c_double,
-    pub block: u32,
+    pub block: BlockIndex,
 }
 
 impl Default for Transfer {
@@ -132,13 +121,36 @@ impl Default for Transfer {
             udp_address: std::ptr::null_mut(),
             udp_length: 0,
             ipd_current: 0.0,
-            block: 0,
+            block: BlockIndex(0),
         }
     }
 }
 
 pub struct Session {
     pub transfer: Transfer,
-    pub client_fd: libc::c_int,
-    pub session_id: libc::c_int,
+    pub properties: Properties,
+    pub client: TcpStream,
+    pub session_id: usize,
+}
+
+impl Session {
+    pub fn read<T: bincode::Decode>(&mut self) -> anyhow::Result<T> {
+        Ok(bincode::decode_from_std_read(
+            &mut self.client,
+            crate::common::BINCODE_CONFIG,
+        )?)
+    }
+
+    pub fn write<T: bincode::Encode>(&mut self, value: T) -> anyhow::Result<usize> {
+        Ok(bincode::encode_into_std_write(
+            value,
+            &mut self.client,
+            crate::common::BINCODE_CONFIG,
+        )?)
+    }
+
+    pub fn flush(&mut self) -> anyhow::Result<()> {
+        self.client.flush()?;
+        Ok(())
+    }
 }

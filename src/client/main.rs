@@ -3,16 +3,12 @@ use std::io::Write;
 use super::{Parameter, Session};
 
 pub fn interactive(mut parameter: Parameter) {
-    // TODO: automatically generate these
-    let compile_date = "Nov 16 2023";
-    let compile_time = "21:24:18";
-
     eprintln!(
         "namida client for protocol rev {:X}\nRevision: {}\nCompiled: {} {}\n\0",
         crate::common::PROTOCOL_REVISION,
         crate::common::NAMIDA_VERSION,
-        compile_date,
-        compile_time
+        crate::COMPILE_DATE,
+        crate::COMPILE_TIME
     );
 
     let mut session: Option<Session> = None;
@@ -47,7 +43,7 @@ fn run_command(
     let mut found = true;
 
     if command[0].eq_ignore_ascii_case("connect") {
-        let connect_result = unsafe { super::command::command_connect(command, parameter) };
+        let connect_result = super::command::command_connect(command, parameter);
         match connect_result {
             Ok(new_session) => {
                 *session = Some(new_session);
@@ -55,31 +51,21 @@ fn run_command(
             Err(err) => println!("Error in command_connect: {:?}", err),
         }
     } else if command[0].eq_ignore_ascii_case("set") {
-        unsafe {
-            super::command::command_set(command, parameter)?;
-        }
+        super::command::command_set(command, parameter)?;
     } else if command[0].eq_ignore_ascii_case("help") {
-        unsafe {
-            super::command::command_help(command)?;
-        }
+        super::command::command_help(command)?;
     } else if command[0].eq_ignore_ascii_case("quit")
         || command[0].eq_ignore_ascii_case("exit")
         || command[0].eq_ignore_ascii_case("bye")
     {
-        super::command::command_quit(session);
+        super::command::command_quit();
+    } else if command[0].eq_ignore_ascii_case("close") {
+        super::command::command_close(parameter, session.take())?;
     } else if let Some(session) = session.as_mut() {
-        if command[0].eq_ignore_ascii_case("close") {
-            unsafe {
-                super::command::command_close(parameter, session)?;
-            }
-        } else if command[0].eq_ignore_ascii_case("get") {
-            unsafe {
-                super::command::command_get(command, parameter, session)?;
-            }
+        if command[0].eq_ignore_ascii_case("get") {
+            super::command::command_get(command, parameter, session)?;
         } else if command[0].eq_ignore_ascii_case("dir") {
-            unsafe {
-                super::command::command_dir(command, session)?;
-            }
+            super::command::command_dir(command, session)?;
         } else {
             found = false;
         }

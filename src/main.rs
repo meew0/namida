@@ -21,6 +21,10 @@ pub mod server;
 pub mod types;
 pub mod util;
 
+// TODO: automatically generate these
+pub const COMPILE_DATE: &str = "Nov 16 2023";
+pub const COMPILE_TIME: &str = "21:24:18";
+
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 #[command(propagate_version = true)]
@@ -35,15 +39,17 @@ enum Commands {
     Server(server::Parameter),
 }
 
-pub fn main() {
+pub fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
         Commands::Client(parameter) => {
             client::main::interactive(parameter);
         }
-        Commands::Server(parameter) => unsafe {
-            server::main::serve(parameter);
-        },
+        Commands::Server(parameter) => {
+            server::main::serve(parameter)?;
+        }
     }
+
+    Ok(())
 }

@@ -70,15 +70,12 @@ clapify!(BlockSize, u32, BlockSizeValueParser);
 pub struct TargetRate(pub u64);
 clapify!(TargetRate, u64, TargetRateValueParser);
 
-#[derive(Debug, Clone, Copy, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, bincode::Encode, bincode::Decode)]
 pub struct ErrorRate(pub u32);
 clapify!(ErrorRate, u32, ErrorRateValueParser);
 
 #[derive(Debug, Clone, Copy, Default, bincode::Encode, bincode::Decode)]
 pub struct FileSize(pub u64);
-
-#[derive(Debug, Clone, Copy, Default, bincode::Encode, bincode::Decode)]
-pub struct Epoch(pub i64);
 
 #[derive(Debug, Clone, Copy, bincode::Encode, bincode::Decode)]
 pub struct Fraction {

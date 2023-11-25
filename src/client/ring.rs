@@ -1,6 +1,9 @@
 use std::sync::{Condvar, Mutex};
 
-use crate::datagram;
+use crate::{
+    datagram,
+    types::{BlockIndex, BlockSize},
+};
 
 #[derive(Debug)]
 pub struct RingBuffer {
@@ -13,7 +16,7 @@ pub struct RingBuffer {
 struct Internal {
     headers: Box<[datagram::Header; 4096]>,
     blocks: Box<[u8]>,
-    block_size: u32,
+    block_size: BlockSize,
     base_data: u32,
     count_data: u32,
     count_reserved: u32,
@@ -54,12 +57,12 @@ impl RingBuffer {
         self.data_ready_cond.notify_all();
     }
 
-    pub fn create(block_size: u32) -> Self {
-        let blocks_len = block_size as usize * 4096;
+    pub fn create(block_size: BlockSize) -> Self {
+        let blocks_len = block_size.0 as usize * 4096;
 
         let zero_header = datagram::Header {
-            block_index: 0,
-            block_type: 0,
+            block_index: BlockIndex(0),
+            block_type: datagram::BlockType::Normal,
         };
 
         let internal = Internal {
@@ -86,8 +89,8 @@ impl RingBuffer {
             guard = self.data_ready_cond.wait(guard).unwrap();
         }
 
-        let first_index = (guard.block_size * guard.base_data) as usize;
-        let last_index = (guard.block_size * (guard.base_data + 1)) as usize;
+        let first_index = (guard.block_size.0 * guard.base_data) as usize;
+        let last_index = (guard.block_size.0 * (guard.base_data + 1)) as usize;
 
         callback(datagram::View {
             header: guard.headers[guard.base_data as usize],
@@ -120,7 +123,7 @@ impl RingBuffer {
 
     pub fn reserve_zero(&self) {
         self.reserve_internal(|header, _block| {
-            header.block_index = 0;
+            header.block_index = BlockIndex(0);
         });
     }
 
@@ -146,8 +149,8 @@ impl RingBuffer {
             guard.space_ready = false;
         }
 
-        let first_index = (guard.block_size * next) as usize;
-        let last_index = (guard.block_size * (next + 1)) as usize;
+        let first_index = (guard.block_size.0 * next) as usize;
+        let last_index = (guard.block_size.0 * (next + 1)) as usize;
         let internal = &mut *guard;
         callback(
             &mut internal.headers[next as usize],

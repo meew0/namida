@@ -1,21 +1,15 @@
 use std::io::Write;
 use std::path::Path;
 
-use crate::extc;
-
 use super::{Parameter, Session};
 
-pub fn xscript_close_server(
-    session: &mut Session,
-    parameter: &Parameter,
-    mut delta: u64,
-) -> anyhow::Result<()> {
+pub fn xscript_close_server(session: &mut Session, mut delta: u64) -> anyhow::Result<()> {
     let transcript = session.transfer.transcript.as_mut().unwrap();
 
     writeln!(
         transcript,
         "mb_transmitted = {:0>.2}",
-        parameter.file_size as f64 / 1000000.0,
+        session.properties.file_size.0 as f64 / 1000000.0,
     )?;
     writeln!(transcript, "duration = {:0>.2}", delta as f64 / 1000000.0)?;
 
@@ -23,7 +17,7 @@ pub fn xscript_close_server(
     writeln!(
         transcript,
         "throughput = {:0>.2}",
-        parameter.file_size as f64 * 8.0f64 / delta as f64,
+        session.properties.file_size.0 as f64 * 8.0f64 / delta as f64,
     )?;
 
     session.transfer.transcript.take();
@@ -37,19 +31,30 @@ pub fn xscript_data_log_server(session: &mut Session, mut logline: &str) -> anyh
     Ok(())
 }
 
-pub fn xscript_data_start_server(
-    session: &mut Session,
-    epoch: extc::timeval,
-) -> anyhow::Result<()> {
+pub fn xscript_data_start_server(session: &mut Session) -> anyhow::Result<()> {
+    let start_time = crate::common::epoch();
+
     let transcript = session.transfer.transcript.as_mut().unwrap();
-    writeln!(transcript, "START {}.{:06}", epoch.tv_sec, epoch.tv_usec)?;
+    writeln!(
+        transcript,
+        "START {}.{:06}",
+        start_time.as_secs(),
+        start_time.subsec_micros()
+    )?;
     transcript.flush()?;
     Ok(())
 }
 
-pub fn xscript_data_stop_server(session: &mut Session, epoch: extc::timeval) -> anyhow::Result<()> {
+pub fn xscript_data_stop_server(session: &mut Session) -> anyhow::Result<()> {
+    let end_time = crate::common::epoch();
+
     let transcript = session.transfer.transcript.as_mut().unwrap();
-    write!(transcript, "STOP {}.{:06}\n\n", epoch.tv_sec, epoch.tv_usec)?;
+    writeln!(
+        transcript,
+        "STOP {}.{:06}",
+        end_time.as_secs(),
+        end_time.subsec_micros()
+    )?;
     transcript.flush()?;
     Ok(())
 }
@@ -66,20 +71,34 @@ pub fn xscript_open_server(session: &mut Session, parameter: &Parameter) -> anyh
     writeln!(
         transcript,
         "filename = {}",
-        session.transfer.filename.as_ref().unwrap()
+        session.transfer.filename.as_ref().unwrap().display()
     )?;
-    writeln!(transcript, "file_size = {}", parameter.file_size)?;
-    writeln!(transcript, "block_count = {}", parameter.block_count)?;
+    writeln!(transcript, "file_size = {}", session.properties.file_size.0)?;
+    writeln!(
+        transcript,
+        "block_count = {}",
+        session.properties.block_count.0
+    )?;
     writeln!(transcript, "udp_buffer = {}", parameter.udp_buffer)?;
-    writeln!(transcript, "block_size = {}", parameter.block_size)?;
-    writeln!(transcript, "target_rate = {}", parameter.target_rate)?;
-    writeln!(transcript, "error_rate = {}", parameter.error_rate)?;
-    writeln!(transcript, "slower_num = {}", parameter.slower_num)?;
-    writeln!(transcript, "slower_den = {}", parameter.slower_den)?;
-    writeln!(transcript, "faster_num = {}", parameter.faster_num)?;
-    writeln!(transcript, "faster_den = {}", parameter.faster_den)?;
-    writeln!(transcript, "ipd_time = {}", parameter.ipd_time)?;
-    writeln!(transcript, "ipd_current = {}", session.transfer.ipd_current,)?;
+    writeln!(
+        transcript,
+        "block_size = {}",
+        session.properties.block_size.0
+    )?;
+    writeln!(
+        transcript,
+        "target_rate = {}",
+        session.properties.target_rate.0
+    )?;
+    writeln!(
+        transcript,
+        "error_rate = {}",
+        session.properties.error_rate.0
+    )?;
+    writeln!(transcript, "slower = {}", session.properties.slower)?;
+    writeln!(transcript, "faster = {}", session.properties.faster)?;
+    writeln!(transcript, "ipd_time = {}", session.properties.ipd_time)?;
+    writeln!(transcript, "ipd_current = {}", session.transfer.ipd_current)?;
     writeln!(
         transcript,
         "protocol_version = 0x{:x}",
@@ -90,7 +109,7 @@ pub fn xscript_open_server(session: &mut Session, parameter: &Parameter) -> anyh
         "software_version = {}",
         crate::common::NAMIDA_VERSION,
     )?;
-    writeln!(transcript, "ipv6 = {}", parameter.ipv6_yn)?;
+    writeln!(transcript, "bind = {}", parameter.bind)?;
     writeln!(transcript)?;
     transcript.flush()?;
     Ok(())

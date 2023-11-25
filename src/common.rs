@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use crate::extc;
 use ::libc;
 use anyhow::bail;
@@ -18,19 +20,20 @@ pub fn transcript_warn_error(result: anyhow::Result<()>) {
     }
 }
 
-pub unsafe fn get_usec_since(mut old_time: *mut extc::timeval) -> u64 {
-    let mut now: extc::timeval = extc::timeval {
-        tv_sec: 0,
-        tv_usec: 0,
-    };
-    let mut result: u64 = 0 as libc::c_int as u64;
-    extc::gettimeofday(&mut now, std::ptr::null_mut::<libc::c_void>());
-    while now.tv_sec > (*old_time).tv_sec {
-        result = result.wrapping_add(1000000 as libc::c_int as u64);
-        now.tv_sec -= 1;
-    }
-    result.wrapping_add((now.tv_usec - (*old_time).tv_usec) as u64)
+pub fn get_usec_since(old_time: Instant) -> u64 {
+    let now = Instant::now();
+    (now - old_time)
+        .as_micros()
+        .try_into()
+        .expect("microseconds 64 bit overflow")
 }
+
+pub fn epoch() -> Duration {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+}
+
 pub unsafe fn htonll(mut value: u64) -> u64 {
     static mut necessary: libc::c_int = -(1 as libc::c_int);
     if necessary == -(1 as libc::c_int) {
@@ -49,10 +52,7 @@ pub unsafe fn htonll(mut value: u64) -> u64 {
     }
 }
 pub fn make_transcript_filename(mut extension: &str) -> String {
-    let seconds = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
+    let seconds = crate::common::epoch().as_secs();
     format!("{}.{}", seconds, extension)
 }
 
@@ -124,30 +124,11 @@ pub unsafe fn fread_line(
     *buffer.offset((buffer_offset - 1 as libc::c_int) as isize) = '\0' as i32 as libc::c_char;
     Ok(())
 }
-pub unsafe fn usleep_that_works(mut usec: u64) {
-    let mut sleep_time: u64 = usec / 10000 as libc::c_int as u64 * 10000 as libc::c_int as u64;
-    let mut delay: extc::timeval = extc::timeval {
-        tv_sec: 0,
-        tv_usec: 0,
-    };
-    let mut now: extc::timeval = extc::timeval {
-        tv_sec: 0,
-        tv_usec: 0,
-    };
-    extc::gettimeofday(&mut now, std::ptr::null_mut::<libc::c_void>());
-    if sleep_time >= 10000 as libc::c_int as u64 {
-        delay.tv_sec = (sleep_time / 1000000 as libc::c_int as u64) as extc::__time_t;
-        delay.tv_usec = (sleep_time % 1000000 as libc::c_int as u64) as extc::__suseconds_t;
-        extc::select(
-            0 as libc::c_int,
-            std::ptr::null_mut::<extc::fd_set>(),
-            std::ptr::null_mut::<extc::fd_set>(),
-            std::ptr::null_mut::<extc::fd_set>(),
-            &mut delay,
-        );
-    }
-    while get_usec_since(&mut now) < usec {}
+
+pub fn usleep_that_works(usec: u64) {
+    std::thread::sleep(Duration::from_micros(dbg!(usec)));
 }
+
 pub unsafe fn get_udp_in_errors() -> u64 {
     let mut f: *mut extc::FILE = std::ptr::null_mut::<extc::FILE>();
     let mut errs: u64 = 0 as libc::c_int as u64;

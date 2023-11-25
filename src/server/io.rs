@@ -1,28 +1,35 @@
 use std::io::{Read, Seek, SeekFrom};
 
-use crate::datagram;
+use crate::{
+    datagram::{self, BlockType},
+    types::BlockIndex,
+};
 
-use super::{Parameter, Session};
+use super::Session;
 
 pub fn build_datagram<'a>(
     session: &mut Session,
-    parameter: &Parameter,
-    block_index: u32,
-    block_type: u16,
+    block_index: BlockIndex,
+    block_type: BlockType,
     block_buffer: &'a mut [u8],
 ) -> anyhow::Result<datagram::View<'a>> {
-    assert_eq!(block_buffer.len(), parameter.block_size as usize);
+    assert_eq!(block_buffer.len(), session.properties.block_size.0 as usize);
 
     let file = session.transfer.file.as_mut().unwrap();
     file.seek(SeekFrom::Start(
-        (parameter.block_size * block_index.checked_sub(1).unwrap()) as u64,
+        (session.properties.block_size.0 * (block_index - BlockIndex(1)).0) as u64,
     ))?;
 
     let read_amount = file.read(block_buffer)?;
-    if read_amount < parameter.block_size as usize && block_index < parameter.block_count {
+    if read_amount < session.properties.block_size.0 as usize
+        && block_index < session.properties.block_count
+    {
         println!(
             "WARNING: only read {} instead of {} bytes for block {} out of {}",
-            read_amount, parameter.block_size, block_index, parameter.block_count
+            read_amount,
+            session.properties.block_size,
+            block_index.0,
+            session.properties.block_count.0
         )
     }
 
