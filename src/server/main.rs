@@ -44,9 +44,8 @@ pub fn serve(mut parameter: Parameter) -> anyhow::Result<()> {
                 session_id,
             };
 
-            let result = std::panic::catch_unwind(move || unsafe {
-                client_handler(session, parameter_cloned)
-            });
+            let result =
+                std::panic::catch_unwind(move || client_handler(session, parameter_cloned));
 
             match result {
                 Ok(Ok(())) => eprintln!("Child server thread terminated succcessfully."),
@@ -59,7 +58,7 @@ pub fn serve(mut parameter: Parameter) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub unsafe fn client_handler(mut session: Session, parameter: Parameter) -> anyhow::Result<()> {
+pub fn client_handler(mut session: Session, parameter: Parameter) -> anyhow::Result<()> {
     let mut datagram_block_buffer: Vec<u8> = vec![0_u8; session.properties.block_size.0 as usize];
     let mut datagram_buffer: Vec<u8> = vec![0_u8; session.properties.block_size.0 as usize + 6];
 
@@ -94,12 +93,21 @@ pub unsafe fn client_handler(mut session: Session, parameter: Parameter) -> anyh
         // in a previous loop iteration)
         session.client.set_nonblocking(false)?;
 
-        if let Err(err) = super::protocol::ttp_open_transfer_server(&mut session, &parameter) {
-            println!("WARNING: Invalid file request, error: {:?}", err);
-            continue;
+        match super::protocol::ttp_open_transfer_server(&mut session, &parameter) {
+            Ok(true) => {}
+            Ok(false) => {
+                // No error was encountered, but we should not try to continue with file
+                // transmission now
+                continue;
+            }
+            Err(err) => {
+                println!("WARNING: Invalid file request, error: {:?}", err);
+                bail!("Closing connection to client.");
+            }
         }
 
-        if let Err(err) = super::protocol::ttp_open_port_server(&mut session, &parameter) {
+        if let Err(err) = unsafe { super::protocol::ttp_open_port_server(&mut session, &parameter) }
+        {
             println!("WARNING: UDP socket creation failed: {:?}", err);
             continue;
         }
@@ -126,9 +134,8 @@ pub unsafe fn client_handler(mut session: Session, parameter: Parameter) -> anyh
             let mut block_type = BlockType::Retransmission;
             let currpacketT = Instant::now();
 
-            let ipd_usleep_diff = (session.transfer.ipd_current
-                + (prevpacketT - currpacketT).as_micros() as f64)
-                as i64;
+            let micros_diff = (currpacketT - prevpacketT).as_micros() as f64;
+            let ipd_usleep_diff = (session.transfer.ipd_current - micros_diff) as i64;
             prevpacketT = currpacketT;
 
             if ipd_usleep_diff > 0 || ipd_time > 0 {
@@ -306,7 +313,7 @@ pub unsafe fn client_handler(mut session: Session, parameter: Parameter) -> anyh
             }
 
             if ipd_time > 0 {
-                crate::common::usleep_that_works(dbg!(ipd_time as u64));
+                crate::common::usleep_that_works(ipd_time as u64);
             }
         }
 

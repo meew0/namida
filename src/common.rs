@@ -126,7 +126,7 @@ pub unsafe fn fread_line(
 }
 
 pub fn usleep_that_works(usec: u64) {
-    std::thread::sleep(Duration::from_micros(dbg!(usec)));
+    std::thread::sleep(Duration::from_micros(usec));
 }
 
 pub unsafe fn get_udp_in_errors() -> u64 {

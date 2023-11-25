@@ -91,7 +91,7 @@ pub struct Parameter {
     #[arg(long = "blocksize", default_value_t = config::DEFAULT_BLOCK_SIZE)]
     pub block_size: BlockSize,
 
-    #[arg(long = "rate", default_value_t = config::DEFAULT_TARGET_RATE)]
+    #[arg(long = "rate", value_parser = clap::builder::ValueParser::new(command::parse_rate), default_value_t = config::DEFAULT_TARGET_RATE)]
     pub target_rate: TargetRate,
 
     #[arg(long = "rateadjust")]

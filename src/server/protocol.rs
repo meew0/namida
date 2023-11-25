@@ -47,8 +47,6 @@ pub fn ttp_accept_retransmit(
                 .ipd_current
                 .clamp(session.properties.ipd_time as f64, 10000.0);
 
-            dbg!(session.transfer.ipd_current);
-
             /*if (if session.transfer.ipd_current < 10000.0f64 {
                 session.transfer.ipd_current
             } else {
@@ -256,7 +254,7 @@ pub unsafe fn ttp_open_port_server(
 pub fn ttp_open_transfer_server(
     session: &mut Session,
     parameter: &Parameter,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<bool> {
     session.transfer = Transfer::default();
 
     let mut request: ClientToServer = session.read()?;
@@ -281,7 +279,8 @@ pub fn ttp_open_transfer_server(
                 bail!("Expected acknowledgment of file listing");
             };
 
-            bail!("File list sent!");
+            println!("File list sent!");
+            return Ok(false); // should not try to receive a file request
         }
         ClientToServer::MultiRequest => {
             session.write(ServerToClient::MultiFileCount(
@@ -396,5 +395,5 @@ pub fn ttp_open_transfer_server(
             session, parameter,
         ));
     }
-    Ok(())
+    Ok(true) // should try to receive a file request
 }

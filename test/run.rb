@@ -22,7 +22,7 @@ sleep 0.1
 cin.puts "dir"
 sleep 0.2
 cin.puts "get source/fish.jpg"
-sleep 5
+sleep 0.5
 
 Process.kill("KILL", cwait.pid) rescue puts "failed to kill client"
 Process.kill("KILL", swait.pid) rescue puts "failed to kill server"
