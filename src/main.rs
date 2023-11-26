@@ -19,7 +19,6 @@ pub mod extc;
 pub mod message;
 pub mod server;
 pub mod types;
-pub mod util;
 
 // TODO: automatically generate these
 pub const COMPILE_DATE: &str = "Nov 16 2023";
