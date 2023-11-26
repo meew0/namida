@@ -1,4 +1,7 @@
-use std::time::{Duration, Instant};
+use std::{
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    time::{Duration, Instant},
+};
 
 use crate::extc;
 use ::libc;
@@ -32,6 +35,14 @@ pub fn epoch() -> Duration {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
+}
+
+pub fn catch_all_host(ipv6: bool) -> IpAddr {
+    if ipv6 {
+        IpAddr::V6(Ipv6Addr::UNSPECIFIED)
+    } else {
+        IpAddr::V4(Ipv4Addr::UNSPECIFIED)
+    }
 }
 
 pub unsafe fn htonll(mut value: u64) -> u64 {

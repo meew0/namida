@@ -1,8 +1,11 @@
-use std::net::TcpStream;
+use std::{
+    io::ErrorKind,
+    net::{TcpStream, UdpSocket},
+    os::fd::AsRawFd,
+};
 
-use crate::extc;
 use ::libc;
-use anyhow::bail;
+use anyhow::{anyhow, bail};
 use to_socket_addrs::ToSocketAddrsWithDefaultPort;
 
 use super::Parameter;
@@ -20,103 +23,64 @@ pub fn create_tcp_socket_client(parameter: &Parameter) -> anyhow::Result<TcpStre
     Ok(socket)
 }
 
-pub unsafe fn create_udp_socket_client(parameter: &mut Parameter) -> anyhow::Result<i32> {
-    let mut hints: extc::addrinfo = extc::addrinfo {
-        ai_flags: 0,
-        ai_family: 0,
-        ai_socktype: 0,
-        ai_protocol: 0,
-        ai_addrlen: 0,
-        ai_addr: std::ptr::null_mut::<extc::sockaddr>(),
-        ai_canonname: std::ptr::null_mut::<libc::c_char>(),
-        ai_next: std::ptr::null_mut::<extc::addrinfo>(),
-    };
-    let mut info: *mut extc::addrinfo = std::ptr::null_mut::<extc::addrinfo>();
-    let mut info_save: *mut extc::addrinfo = std::ptr::null_mut::<extc::addrinfo>();
-    let mut buffer: [libc::c_char; 10] = [0; 10];
-    let mut socket_fd: libc::c_int = 0;
-    let mut status: libc::c_int = 0;
-    let mut higher_port_attempt: libc::c_int = 0 as libc::c_int;
-    extc::memset(
-        &mut hints as *mut extc::addrinfo as *mut libc::c_void,
-        0 as libc::c_int,
-        ::core::mem::size_of::<extc::addrinfo>() as libc::c_ulong,
-    );
-    hints.ai_flags = 0x1 as libc::c_int;
-    hints.ai_family = if parameter.ipv6_yn as libc::c_int != 0 {
-        10 as libc::c_int
-    } else {
-        2 as libc::c_int
-    };
-    hints.ai_socktype = extc::SOCK_DGRAM as libc::c_int;
-    loop {
-        extc::sprintf(
-            buffer.as_mut_ptr(),
-            b"%d\0" as *const u8 as *const libc::c_char,
-            parameter.client_port as libc::c_int + higher_port_attempt,
-        );
-        status = extc::getaddrinfo(
-            std::ptr::null::<libc::c_char>(),
-            buffer.as_mut_ptr(),
-            &hints,
-            &mut info,
-        );
-        if status != 0 {
-            bail!("Error in getting address information");
-        }
-        info_save = info;
-        loop {
-            socket_fd = extc::socket((*info).ai_family, (*info).ai_socktype, (*info).ai_protocol);
-            if socket_fd >= 0 as libc::c_int {
-                status = extc::setsockopt(
-                    socket_fd,
-                    1 as libc::c_int,
-                    8 as libc::c_int,
-                    &parameter.udp_buffer as *const u32 as *const libc::c_void,
-                    ::core::mem::size_of::<u32>() as libc::c_ulong as extc::socklen_t,
-                );
-                if status < 0 as libc::c_int {
-                    println!("WARNING: Error in resizing UDP receive buffer");
+pub fn create_udp_socket_client(parameter: &Parameter, ipv6: bool) -> anyhow::Result<UdpSocket> {
+    let catch_all_host = crate::common::catch_all_host(ipv6);
+    let mut higher_port_attempt = 0;
+    let mut socket_result = None;
+
+    while higher_port_attempt < 256 {
+        let port = parameter.client_port + higher_port_attempt;
+
+        let mut socket = match UdpSocket::bind((catch_all_host, port)) {
+            Ok(socket) => socket,
+            Err(err) => match err.kind() {
+                ErrorKind::AddrInUse => {
+                    higher_port_attempt += 1;
+                    continue;
                 }
-                status = extc::bind(
-                    socket_fd,
-                    extc::__CONST_SOCKADDR_ARG {
-                        __sockaddr__: (*info).ai_addr,
-                    },
-                    (*info).ai_addrlen,
-                );
-                if status == 0 as libc::c_int {
-                    parameter.client_port =
-                        extc::__bswap_16((*((*info).ai_addr as *mut extc::sockaddr_in)).sin_port);
-                    extc::fprintf(
-                        extc::stderr,
-                        b"Receiving data on UDP port %d\n\0" as *const u8 as *const libc::c_char,
-                        parameter.client_port as libc::c_int,
-                    );
-                    break;
+                _ => {
+                    bail!("Error while trying to create UDP socket: {}", err);
                 }
-            }
-            info = (*info).ai_next;
-            if info.is_null() {
-                break;
-            }
-        }
-        extc::freeaddrinfo(info_save);
-        higher_port_attempt += 1;
-        if !(higher_port_attempt < 256 as libc::c_int && info.is_null()) {
-            break;
-        }
+            },
+        };
+
+        if let Err(err) = set_udp_receive_buffer(&mut socket, parameter.udp_buffer) {
+            println!("WARNING: {}", err);
+        };
+
+        println!("Receiving data over UDP at: {}", socket.local_addr()?);
+        socket_result = Some(socket);
+        break;
     }
-    if higher_port_attempt > 1 as libc::c_int {
-        extc::fprintf(
-            extc::stderr,
-            b"Warning: there are %d other Tsunami clients running\n\0" as *const u8
-                as *const libc::c_char,
-            higher_port_attempt - 1 as libc::c_int,
+
+    if higher_port_attempt > 0 {
+        println!(
+            "Warning: ports {} to {} are in use",
+            parameter.client_port,
+            parameter.client_port + higher_port_attempt - 1,
         );
     }
-    if info.is_null() {
-        bail!("Error in creating UDP socket");
+
+    socket_result.ok_or(anyhow!("Error in creating UDP socket"))
+}
+
+pub fn set_udp_receive_buffer(
+    socket: &mut UdpSocket,
+    receive_buffer_size: u32,
+) -> anyhow::Result<()> {
+    // TODO: cross platform
+    unsafe {
+        let status = libc::setsockopt(
+            socket.as_raw_fd(),
+            1,
+            8,
+            &receive_buffer_size as *const u32 as *const libc::c_void,
+            ::core::mem::size_of::<u32>() as libc::c_ulong as libc::socklen_t,
+        );
+        if status < 0 as libc::c_int {
+            bail!("Could not resize UDP receive buffer");
+        }
     }
-    Ok(socket_fd)
+
+    Ok(())
 }

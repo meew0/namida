@@ -6,7 +6,6 @@ use anyhow::bail;
 use super::{ring, OutputMode, Parameter, Session, Statistics, Transfer};
 use crate::{
     datagram::{self, BlockType},
-    extc,
     message::{ClientToServer, DirListStatus, ServerToClient},
     types::{BlockIndex, BlockSize, ErrorRate, FileMetadata, FileSize, Fraction, TargetRate},
 };
@@ -160,9 +159,7 @@ pub fn command_get(
             local_filename,
         )?;
 
-        unsafe {
-            super::protocol::ttp_open_port_client(session, parameter)?;
-        }
+        super::protocol::ttp_open_port_client(session, parameter)?;
 
         session.transfer.retransmit.previous_table = vec![];
         session.transfer.received = vec![0; (session.transfer.block_count.0 / 8 + 2) as usize];
@@ -204,25 +201,18 @@ pub fn command_get(
         let mut dumpcount = 0_u32;
 
         loop {
-            let status;
+            let udp_result = session
+                .transfer
+                .udp_socket
+                .as_ref()
+                .unwrap()
+                .recv_from(local_datagram_buffer.as_mut());
 
-            unsafe {
-                status = extc::recvfrom(
-                    session.transfer.udp_fd,
-                    local_datagram_buffer.as_mut_ptr() as *mut libc::c_void,
-                    (6 as libc::c_int as u32).wrapping_add(parameter.block_size.0) as usize,
-                    0 as libc::c_int,
-                    extc::__SOCKADDR_ARG {
-                        __sockaddr__: std::ptr::null_mut::<libc::c_void>() as *mut extc::sockaddr,
-                    },
-                    std::ptr::null_mut::<extc::socklen_t>(),
-                ) as libc::c_int;
-                if status < 0 as libc::c_int {
-                    println!("WARNING: UDP data transmission error");
-                    extc::printf(
-                        b"Apparently frozen transfer, trying to do retransmit request\n\0"
-                            as *const u8 as *const libc::c_char,
-                    );
+            match udp_result {
+                Ok(_) => {}
+                Err(err) => {
+                    println!("WARNING: UDP data transmission error: {}", err);
+                    println!("Apparently frozen transfer, trying to do retransmit request");
                     if let Err(err) = super::protocol::ttp_repeat_retransmit(session) {
                         println!(
                             "WARNING: Repeat of retransmission requests failed: {:?}",
@@ -393,9 +383,7 @@ pub fn command_get(
         }
 
         println!("Transfer complete. Flushing to disk and signaling server to stop...");
-        unsafe {
-            extc::close(session.transfer.udp_fd);
-        }
+        session.transfer.udp_socket.take();
 
         if let Err(err) = super::protocol::ttp_request_stop(session) {
             println!("WARNING: Could not request end of transfer: {:?}", err);
@@ -519,9 +507,7 @@ pub fn command_get(
         eprintln!("Transfer not successful.  (WARNING: You may need to reconnect.)");
         eprintln!();
 
-        unsafe {
-            extc::close(session.transfer.udp_fd);
-        }
+        session.transfer.udp_socket.take();
         session.transfer.retransmit.previous_table.clear();
 
         bail!("Transfer unsuccessful");

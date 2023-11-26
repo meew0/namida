@@ -9,7 +9,7 @@ pub mod transcript;
 
 use std::{
     io::Write,
-    net::TcpStream,
+    net::{TcpStream, UdpSocket},
     path::PathBuf,
     sync::Arc,
     time::{Duration, Instant},
@@ -129,7 +129,7 @@ pub struct Transfer {
     pub local_filename: Option<PathBuf>,
     pub file: Option<std::fs::File>,
     pub transcript: Option<std::fs::File>,
-    pub udp_fd: libc::c_int,
+    pub udp_socket: Option<UdpSocket>,
     pub file_size: FileSize,
     pub block_count: BlockIndex,
     pub next_block: BlockIndex,

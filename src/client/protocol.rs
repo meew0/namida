@@ -5,7 +5,6 @@ use anyhow::bail;
 
 use super::{OutputMode, Parameter, Session, Transfer};
 use crate::{
-    extc,
     message::{ClientToServer, ServerToClient, TransmissionControl},
     types::{BlockIndex, ErrorRate},
 };
@@ -138,37 +137,21 @@ pub fn ttp_open_transfer_client(
     Ok(())
 }
 
-pub unsafe fn ttp_open_port_client(
+pub fn ttp_open_port_client(
     session: &mut Session,
     parameter: &mut Parameter,
 ) -> anyhow::Result<()> {
-    let mut udp_address: extc::sockaddr = extc::sockaddr {
-        sa_family: 0,
-        sa_data: [0; 14],
-    };
-    let mut udp_length: libc::c_uint =
-        ::core::mem::size_of::<extc::sockaddr>() as libc::c_ulong as libc::c_uint;
-    let mut port: *mut u16 = std::ptr::null_mut::<u16>();
-    session.transfer.udp_fd = super::network::create_udp_socket_client(parameter)?;
-    extc::memset(
-        &mut udp_address as *mut extc::sockaddr as *mut libc::c_void,
-        0 as libc::c_int,
-        ::core::mem::size_of::<extc::sockaddr>() as libc::c_ulong,
-    );
-    extc::getsockname(
-        session.transfer.udp_fd,
-        extc::__SOCKADDR_ARG {
-            __sockaddr__: &mut udp_address as *mut extc::sockaddr,
-        },
-        &mut udp_length,
-    );
-    port = if parameter.ipv6_yn as libc::c_int != 0 {
-        &mut (*(&mut udp_address as *mut extc::sockaddr as *mut extc::sockaddr_in6)).sin6_port
-    } else {
-        &mut (*(&mut udp_address as *mut extc::sockaddr as *mut extc::sockaddr_in)).sin_port
-    };
+    let udp_socket = session
+        .transfer
+        .udp_socket
+        .insert(super::network::create_udp_socket_client(
+            parameter,
+            session.server.local_addr()?.is_ipv6(),
+        )?);
 
-    session.write(ClientToServer::UdpPort(*port))?;
+    let port = udp_socket.local_addr()?.port();
+
+    session.write(ClientToServer::UdpPort(port))?;
     session.flush()?;
 
     Ok(())

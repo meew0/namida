@@ -1,8 +1,12 @@
-use std::{io::Write, net::TcpStream, path::PathBuf, time::Duration};
+use std::{
+    io::Write,
+    net::{SocketAddr, TcpStream, UdpSocket},
+    path::PathBuf,
+    time::Duration,
+};
 
-use crate::{
-    extc,
-    types::{BlockIndex, BlockSize, ErrorRate, FileMetadata, FileSize, Fraction, TargetRate},
+use crate::types::{
+    BlockIndex, BlockSize, ErrorRate, FileMetadata, FileSize, Fraction, TargetRate,
 };
 
 pub mod config;
@@ -104,9 +108,8 @@ pub struct Transfer {
     pub filename: Option<PathBuf>,
     pub file: Option<std::fs::File>,
     pub transcript: Option<std::fs::File>,
-    pub udp_fd: libc::c_int,
-    pub udp_address: *mut extc::sockaddr,
-    pub udp_length: extc::socklen_t,
+    pub udp_socket: Option<UdpSocket>,
+    pub udp_address: Option<SocketAddr>,
     pub ipd_current: libc::c_double,
     pub block: BlockIndex,
 }
@@ -117,9 +120,8 @@ impl Default for Transfer {
             filename: None,
             file: None,
             transcript: None,
-            udp_fd: 0,
-            udp_address: std::ptr::null_mut(),
-            udp_length: 0,
+            udp_socket: None,
+            udp_address: None,
             ipd_current: 0.0,
             block: BlockIndex(0),
         }

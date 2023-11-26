@@ -1,21 +1,18 @@
 use std::{
-    ffi::CString,
     io::{Seek, SeekFrom},
     net::ToSocketAddrs,
-    os::fd::AsRawFd,
     time::Instant,
 };
 
 use crate::{
     datagram::BlockType,
-    extc,
     message::{
         ClientToServer, DirListStatus, FileRequestError, ServerToClient, TransmissionControl,
     },
     types::{BlockIndex, FileSize},
 };
-use ::libc;
-use anyhow::bail;
+
+use anyhow::{anyhow, bail};
 
 use super::{Parameter, Session, Transfer};
 
@@ -103,21 +100,12 @@ pub fn ttp_accept_retransmit(
             )?;
             datagram.write_to(datagram_buffer);
 
-            unsafe {
-                let status = extc::sendto(
-                    session.transfer.udp_fd,
-                    datagram_buffer.as_ptr() as *const libc::c_void,
-                    (6 as libc::c_int as u32).wrapping_add(session.properties.block_size.0) as u64,
-                    0 as libc::c_int,
-                    extc::__CONST_SOCKADDR_ARG {
-                        __sockaddr__: session.transfer.udp_address,
-                    },
-                    session.transfer.udp_length,
-                ) as libc::c_int;
-                if status < 0 as libc::c_int {
-                    bail!("Could not retransmit block {}", block.0);
-                }
-            }
+            session
+                .transfer
+                .udp_socket
+                .as_ref()
+                .unwrap()
+                .send_to(datagram_buffer, session.transfer.udp_address.unwrap())?;
         }
         _ => {
             bail!(
@@ -169,85 +157,27 @@ pub unsafe fn ttp_open_port_server(
     session: &mut Session,
     parameter: &Parameter,
 ) -> anyhow::Result<()> {
-    let mut address: *mut extc::sockaddr = std::ptr::null_mut::<extc::sockaddr>();
-    let mut ipv6_yn: bool = parameter
-        .bind
-        .to_socket_addrs()
-        .unwrap()
-        .next()
-        .unwrap()
-        .is_ipv6();
-    if let Some(client) = &parameter.client {
-        let mut result: *mut extc::addrinfo = std::ptr::null_mut::<extc::addrinfo>();
-        let mut _errmsg: [libc::c_char; 256] = [0; 256];
-        let client_c = CString::new(client.as_str()).unwrap();
-        let mut status_0: libc::c_int = extc::getaddrinfo(
-            client_c.as_ptr(),
-            std::ptr::null::<libc::c_char>(),
-            std::ptr::null::<extc::addrinfo>(),
-            &mut result,
-        );
-        if status_0 != 0 {
-            bail!(
-                "error in getaddrinfo: {}",
-                extc::gai_strerror_wrap(status_0),
-            );
-        }
-        ipv6_yn = (*result).ai_family == 10 as libc::c_int;
-        // session.properties.ipv6_yn = ipv6_yn;
-        session.transfer.udp_length = (*result).ai_addrlen;
-        address = extc::malloc((*result).ai_addrlen as libc::c_ulong) as *mut extc::sockaddr;
-        if address.is_null() {
-            panic!("Could not allocate space for UDP socket address");
-        }
-        extc::memcpy(
-            address as *mut libc::c_void,
-            (*result).ai_addr as *const libc::c_void,
-            (*result).ai_addrlen as libc::c_ulong,
-        );
-        if !((*result).ai_canonname).is_null() {
-            extc::printf(
-                b"Sending data to: %s\n\0" as *const u8 as *const libc::c_char,
-                (*result).ai_canonname,
-            );
-        }
-        extc::freeaddrinfo(result);
+    let mut address = if let Some(client) = &parameter.client {
+        client.to_socket_addrs()?.next().ok_or(anyhow!(
+            "Could not resolve specified client address: {}",
+            client
+        ))?
     } else {
-        session.transfer.udp_length = (if ipv6_yn as libc::c_int != 0 {
-            ::core::mem::size_of::<extc::sockaddr_in6>() as libc::c_ulong
-        } else {
-            ::core::mem::size_of::<extc::sockaddr_in>() as libc::c_ulong
-        }) as extc::socklen_t;
-        address = extc::malloc(session.transfer.udp_length as libc::c_ulong) as *mut extc::sockaddr;
-        if address.is_null() {
-            panic!("Could not allocate space for UDP socket address");
-        }
-        extc::getpeername(
-            session.client.as_raw_fd(),
-            extc::__SOCKADDR_ARG {
-                __sockaddr__: address,
-            },
-            &mut session.transfer.udp_length,
-        );
-    }
+        session.client.peer_addr()?
+    };
 
     let ClientToServer::UdpPort(port) = session.read()? else {
         bail!("Expected UDP port number");
     };
+    address.set_port(port);
 
-    if ipv6_yn {
-        (*(address as *mut extc::sockaddr_in6)).sin6_port = port;
-    } else {
-        (*(address as *mut extc::sockaddr_in)).sin_port = port;
-    }
     if parameter.verbose_yn {
-        extc::printf(
-            b"Sending to client port %d\n\0" as *const u8 as *const libc::c_char,
-            extc::__bswap_16(port) as libc::c_int,
-        );
+        println!("Sending to client {}", address);
     }
-    session.transfer.udp_fd = super::network::create_udp_socket_server(parameter)?;
-    session.transfer.udp_address = address;
+
+    session.transfer.udp_socket = Some(super::network::create_udp_socket_server(parameter)?);
+    session.transfer.udp_address = Some(address);
+
     Ok(())
 }
 

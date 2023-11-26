@@ -230,25 +230,18 @@ pub fn client_handler(mut session: Session, parameter: Parameter) -> anyhow::Res
                     .unwrap();
                     datagram.write_to(datagram_buffer.as_mut_slice());
 
-                    unsafe {
-                        let status = extc::sendto(
-                            session.transfer.udp_fd,
-                            datagram_buffer.as_mut_ptr() as *const libc::c_void,
-                            (6 as libc::c_int as u32).wrapping_add(session.properties.block_size.0)
-                                as u64,
-                            0 as libc::c_int,
-                            extc::__CONST_SOCKADDR_ARG {
-                                __sockaddr__: session.transfer.udp_address,
-                            },
-                            session.transfer.udp_length,
-                        ) as libc::c_int;
-                        if status < 0 as libc::c_int {
-                            println!(
-                                "WARNING: Could not transmit block #{}",
-                                session.transfer.block.0
-                            );
-                            continue;
-                        }
+                    if let Err(err) = session
+                        .transfer
+                        .udp_socket
+                        .as_ref()
+                        .unwrap()
+                        .send_to(&datagram_buffer, session.transfer.udp_address.unwrap())
+                    {
+                        println!(
+                            "WARNING: Could not transmit block #{}: {}",
+                            session.transfer.block.0, err
+                        );
+                        continue;
                     }
                 }
                 Ordering::Greater => {
@@ -343,9 +336,7 @@ pub fn client_handler(mut session: Session, parameter: Parameter) -> anyhow::Res
             ));
         }
 
-        unsafe {
-            extc::close(session.transfer.udp_fd);
-        }
+        session.transfer.udp_socket.take();
     }
 }
 
