@@ -15,9 +15,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::types::{BlockIndex, BlockSize, ErrorRate, FileSize, Fraction, TargetRate};
+use crate::types::{BlockIndex, BlockSize, ErrorRate, FileSize, Fraction, TargetRate, UdpErrors};
 
-#[derive(Copy, Clone, Default)]
+#[derive(Clone, Default)]
 pub struct Statistics {
     pub start_time: Option<Instant>,
     pub stop_time: Option<Instant>,
@@ -34,8 +34,7 @@ pub struct Statistics {
     pub transmit_rate: f64,
     pub this_retransmit_rate: f64,
     pub error_rate: f64,
-    pub start_udp_errors: u64,
-    pub this_udp_errors: u64,
+    pub udp_errors: UdpErrors,
 }
 
 #[derive(Clone)]

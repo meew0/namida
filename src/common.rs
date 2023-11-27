@@ -1,11 +1,13 @@
 use std::{
+    fs::File,
+    io::Read,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     time::{Duration, Instant},
 };
 
 use crate::extc;
 use ::libc;
-use anyhow::bail;
+use anyhow::{anyhow, bail};
 
 pub const NAMIDA_VERSION: &str = "devel";
 pub const PROTOCOL_REVISION: u32 = 0x20061025;
@@ -140,86 +142,31 @@ pub fn usleep_that_works(usec: u64) {
     std::thread::sleep(Duration::from_micros(usec));
 }
 
-pub unsafe fn get_udp_in_errors() -> u64 {
-    let mut f: *mut extc::FILE = std::ptr::null_mut::<extc::FILE>();
-    let mut errs: u64 = 0 as libc::c_int as u64;
-    let mut buf: [libc::c_char; 512] = [0; 512];
-    let mut p: *mut libc::c_char = std::ptr::null_mut::<libc::c_char>();
-    let mut len: libc::c_int = 0;
-    let mut i: libc::c_int = 0;
-    f = extc::fopen(
-        b"/proc/net/snmp\0" as *const u8 as *const libc::c_char,
-        b"r\0" as *const u8 as *const libc::c_char,
-    );
-    if f.is_null() {
-        return 0 as libc::c_int as u64;
-    }
-    while extc::feof(f) == 0 {
-        if (extc::fgets(
-            buf.as_mut_ptr(),
-            (::core::mem::size_of::<[libc::c_char; 512]>() as libc::c_ulong)
-                .wrapping_sub(1 as libc::c_int as libc::c_ulong) as libc::c_int,
-            f,
-        ))
-        .is_null()
-        {
-            break;
-        }
-        if !(!(extc::strstr(
-            buf.as_mut_ptr(),
-            b"Udp:\0" as *const u8 as *const libc::c_char,
-        ))
-        .is_null()
-            && !(extc::strstr(
-                buf.as_mut_ptr(),
-                b"InErrors\0" as *const u8 as *const libc::c_char,
-            ))
-            .is_null()
-            && extc::feof(f) == 0)
-        {
-            continue;
-        }
-        if (extc::fgets(
-            buf.as_mut_ptr(),
-            (::core::mem::size_of::<[libc::c_char; 512]>() as libc::c_ulong)
-                .wrapping_sub(1 as libc::c_int as libc::c_ulong) as libc::c_int,
-            f,
-        ))
-        .is_null()
-        {
-            break;
-        }
-        len = extc::strlen(buf.as_mut_ptr()) as libc::c_int;
-        p = buf.as_mut_ptr();
-        i = 0 as libc::c_int;
-        while i < 3 as libc::c_int
-            && !p.is_null()
-            && p < buf
-                .as_mut_ptr()
-                .offset(len as isize)
-                .offset(-(1 as libc::c_int as isize))
-        {
-            p = extc::strchr(p, ' ' as i32);
-            i += 1;
-            p = p.offset(1);
-        }
-        if !p.is_null()
-            && p < buf
-                .as_mut_ptr()
-                .offset(len as isize)
-                .offset(-(1 as libc::c_int as isize))
-        {
-            let fresh1 = p;
-            p = p.offset(-1);
-            errs = extc::atol(fresh1) as u64;
-        } else {
-            errs = 0 as libc::c_int as u64;
-        }
-        break;
-    }
-    extc::fclose(f);
-    errs
+pub fn get_udp_in_errors() -> anyhow::Result<u64> {
+    let mut snmp_file = File::open("/proc/net/snmp")?;
+    let mut snmp_string = String::new();
+    snmp_file.read_to_string(&mut snmp_string)?;
+
+    let mut lines = snmp_string.lines().filter(|line| line.starts_with("Udp: "));
+
+    let first_udp_line = lines.next().ok_or(anyhow!("Could not find UDP line"))?;
+    let second_udp_line = lines
+        .next()
+        .ok_or(anyhow!("Could not find second UDP line"))?;
+
+    let in_errors_pos = first_udp_line
+        .split(' ')
+        .position(|element| element == "InErrors")
+        .ok_or(anyhow!("Could not find InErrors in first UDP line"))?;
+    let in_errors_value_str = second_udp_line
+        .split(' ')
+        .nth(in_errors_pos)
+        .ok_or(anyhow!("Second UDP line does not have enough values"))?;
+    let in_errors_value: u64 = in_errors_value_str.parse()?;
+
+    Ok(in_errors_value)
 }
+
 pub unsafe fn full_write(mut fd: libc::c_int, mut buf: *const libc::c_void, mut count: u64) -> i64 {
     let mut written: i64 = 0 as libc::c_int as i64;
     while (written as u64) < count {

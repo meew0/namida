@@ -7,7 +7,9 @@ use super::{ring, OutputMode, Parameter, Session, Statistics, Transfer};
 use crate::{
     datagram::{self, BlockType},
     message::{ClientToServer, DirListStatus, ServerToClient},
-    types::{BlockIndex, BlockSize, ErrorRate, FileMetadata, FileSize, Fraction, TargetRate},
+    types::{
+        BlockIndex, BlockSize, ErrorRate, FileMetadata, FileSize, Fraction, TargetRate, UdpErrors,
+    },
 };
 
 pub fn command_close(parameter: &Parameter, session: Option<Session>) -> anyhow::Result<()> {
@@ -187,8 +189,7 @@ pub fn command_get(
 
         session.transfer.stats = Statistics::default();
 
-        session.transfer.stats.start_udp_errors = unsafe { crate::common::get_udp_in_errors() };
-        session.transfer.stats.this_udp_errors = session.transfer.stats.start_udp_errors;
+        session.transfer.stats.udp_errors = UdpErrors::new();
 
         session.transfer.stats.start_time = Some(Instant::now());
         session.transfer.stats.this_time = Some(Instant::now());
@@ -431,8 +432,7 @@ pub fn command_get(
             let time_secs = delta as f64 / 1e6f64;
 
             println!("PC performance figure : {} packets dropped (if high this indicates receiving PC overload)",
-                session.transfer.stats.this_udp_errors
-                    .saturating_sub(session.transfer.stats.start_udp_errors),
+                session.transfer.stats.udp_errors,
             );
             println!("Transfer duration     : {:0>.2} seconds", time_secs);
             println!("Total packet data     : {:0>.2} Mbit", mbit_thru);

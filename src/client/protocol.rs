@@ -281,7 +281,7 @@ pub fn ttp_update_stats(
     let data_this_goodpt =
         parameter.block_size.0 as f64 * session.transfer.stats.this_flow_originals.0 as f64;
 
-    session.transfer.stats.this_udp_errors = unsafe { crate::common::get_udp_in_errors() };
+    session.transfer.stats.udp_errors.update();
 
     let retransmits_fraction = session.transfer.stats.this_retransmits.0 as f64
         / (1.0f64
@@ -353,7 +353,7 @@ pub fn ttp_update_stats(
         .as_ref().map_or(0, |ring| ring.count()),
         session.transfer.blocks_left.0,
         session.transfer.stats.this_retransmits.0,
-        (session.transfer.stats.this_udp_errors).saturating_sub(session.transfer.stats.start_udp_errors),
+        session.transfer.stats.udp_errors,
         stats_flags,
     );
 
@@ -398,10 +398,7 @@ pub fn ttp_update_stats(
             );
             println!("Flags          :  {}", stats_flags);
             println!();
-            println!(
-                "OS UDP rx errors: {}",
-                (session.transfer.stats.this_udp_errors - session.transfer.stats.start_udp_errors),
-            );
+            println!("OS UDP rx errors: {}", session.transfer.stats.udp_errors);
         } else {
             if *iteration % 23 == 0 {
                 println!(

@@ -94,3 +94,58 @@ pub struct FileMetadata {
     pub path: PathBuf,
     pub size: FileSize,
 }
+
+#[derive(Debug, Clone)]
+pub enum UdpErrors {
+    Available { initial: u64, current: u64 },
+    Unavailable,
+}
+
+impl Display for UdpErrors {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Available { initial, current } => {
+                write!(f, "{}", current - initial)
+            }
+            Self::Unavailable => write!(f, "N/A"),
+        }
+    }
+}
+
+impl Default for UdpErrors {
+    fn default() -> Self {
+        Self::Unavailable
+    }
+}
+
+impl UdpErrors {
+    pub fn new() -> Self {
+        match crate::common::get_udp_in_errors() {
+            Ok(value) => Self::Available {
+                initial: value,
+                current: value,
+            },
+            Err(err) => {
+                println!(
+                    "Note: OS-level UDP error count is unavailable for reason: {}",
+                    err
+                );
+                Self::Unavailable
+            }
+        }
+    }
+
+    pub fn update(&mut self) {
+        let Self::Available { current, .. } = self else {
+            return;
+        };
+
+        match crate::common::get_udp_in_errors() {
+            Ok(value) => *current = value,
+            Err(err) => {
+                println!("WARNING: OS-level UDP error count was previously available, but is now unavailable for reason: {}", err);
+                *self = Self::Unavailable
+            }
+        }
+    }
+}
