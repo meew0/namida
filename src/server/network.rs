@@ -13,7 +13,7 @@ pub fn create_tcp_socket_server(parameter: &Parameter) -> anyhow::Result<TcpList
     Ok(listener)
 }
 
-pub unsafe fn create_udp_socket_server(parameter: &Parameter) -> anyhow::Result<UdpSocket> {
+pub fn create_udp_socket_server(parameter: &Parameter) -> anyhow::Result<UdpSocket> {
     let ipv6 = parameter.bind.to_socket_addrs()?.next().unwrap().is_ipv6();
     let catch_all_host = crate::common::catch_all_host(ipv6);
 

@@ -153,10 +153,7 @@ pub fn ttp_negotiate_server(session: &mut Session) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub unsafe fn ttp_open_port_server(
-    session: &mut Session,
-    parameter: &Parameter,
-) -> anyhow::Result<()> {
+pub fn ttp_open_port_server(session: &mut Session, parameter: &Parameter) -> anyhow::Result<()> {
     let mut address = if let Some(client) = &parameter.client {
         client.to_socket_addrs()?.next().ok_or(anyhow!(
             "Could not resolve specified client address: {}",

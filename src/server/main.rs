@@ -9,12 +9,10 @@ use super::{Parameter, Session, Transfer};
 
 use crate::{
     datagram::BlockType,
-    extc,
     message::TransmissionControl,
     server::Properties,
     types::{BlockIndex, ErrorRate, FileMetadata, FileSize},
 };
-use ::libc;
 use anyhow::bail;
 
 pub fn serve(mut parameter: Parameter) -> anyhow::Result<()> {
@@ -106,8 +104,7 @@ pub fn client_handler(mut session: Session, parameter: Parameter) -> anyhow::Res
             }
         }
 
-        if let Err(err) = unsafe { super::protocol::ttp_open_port_server(&mut session, &parameter) }
-        {
+        if let Err(err) = super::protocol::ttp_open_port_server(&mut session, &parameter) {
             println!("WARNING: UDP socket creation failed: {:?}", err);
             continue;
         }
@@ -377,20 +374,4 @@ pub fn process_options(parameter: &mut Parameter) {
         eprintln!("Buffer size: {}", parameter.udp_buffer);
         eprintln!("Bind: {}", parameter.bind);
     }
-}
-
-pub unsafe extern "C" fn reap(mut _signum: libc::c_int) {
-    let mut status: libc::c_int = 0;
-    while extc::waitpid(-(1 as libc::c_int), &mut status, 1 as libc::c_int) > 0 as libc::c_int {
-        extc::fprintf(
-            extc::stderr,
-            b"Child server process terminated with status code 0x%X\n\0" as *const u8
-                as *const libc::c_char,
-            status,
-        );
-    }
-    extc::signal(
-        17 as libc::c_int,
-        Some(reap as unsafe extern "C" fn(libc::c_int) -> ()),
-    );
 }
