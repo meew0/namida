@@ -1,6 +1,5 @@
 use std::io::Write;
 use std::path::Path;
-use std::time::SystemTime;
 
 use super::{Parameter, Session};
 
@@ -50,9 +49,7 @@ pub fn xscript_data_log_client(
 }
 
 pub fn xscript_data_start_client(session: &mut Session) -> anyhow::Result<()> {
-    let start_time = SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
+    let start_time = crate::common::epoch();
 
     let transcript = session.transfer.transcript.as_mut().unwrap();
     writeln!(
@@ -66,9 +63,7 @@ pub fn xscript_data_start_client(session: &mut Session) -> anyhow::Result<()> {
 }
 
 pub fn xscript_data_stop_client(session: &mut Session) -> anyhow::Result<()> {
-    let end_time = SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
+    let end_time = crate::common::epoch();
 
     let transcript = session.transfer.transcript.as_mut().unwrap();
     writeln!(
