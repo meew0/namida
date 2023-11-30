@@ -7,11 +7,11 @@ use super::{Parameter, Session};
 pub fn interactive(mut parameter: Parameter) -> anyhow::Result<()> {
     // show version / build information
     eprintln!(
-        "namida client for protocol revision {}\nVersion: {}\nCompiled: {} {}\n",
+        "namida client for protocol revision {}\nVersion: {} (revision {})\nCompiled: {}\n",
         crate::version::NAMIDA_PROTOCOL_REVISION,
         crate::version::NAMIDA_VERSION,
-        crate::version::COMPILE_DATE,
-        crate::version::COMPILE_TIME
+        &crate::version::GIT_HASH[0..7],
+        crate::version::COMPILE_DATE_TIME,
     );
 
     let mut session: Option<Session> = None;

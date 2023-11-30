@@ -15,3 +15,6 @@ libc = "0.2"
 md5 = "0.7.0"
 rand = "0.8.5"
 to-socket-addrs = "0.2.1"
+
+[build-dependencies]
+chrono = "0.4.31"

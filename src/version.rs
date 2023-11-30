@@ -11,6 +11,8 @@ pub const PROTOCOL_REVISION: u32 = 0xff23_0000 | NAMIDA_PROTOCOL_REVISION as u32
 /// counter.
 pub const NAMIDA_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-// TODO: automatically generate these
-pub const COMPILE_DATE: &str = "Nov 16 2023";
-pub const COMPILE_TIME: &str = "21:24:18";
+/// Git revision at compile time
+pub const GIT_HASH: &str = env!("GIT_HASH");
+
+/// Formatted date & time of when the namida executable was compiled.
+pub const COMPILE_DATE_TIME: &str = env!("NAMIDA_COMPILE_DT");
