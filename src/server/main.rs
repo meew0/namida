@@ -27,7 +27,7 @@ pub fn serve(mut parameter: Parameter) -> anyhow::Result<()> {
 
     // now show version / build information
     eprintln!(
-        "Tsunami Server for protocol rev {:X}\nRevision: {}\nCompiled: {} {}\nWaiting for clients to connect.",
+        "namida server for protocol rev {:X}\nRevision: {}\nCompiled: {} {}\nWaiting for clients to connect.",
         crate::common::PROTOCOL_REVISION,
         crate::common::NAMIDA_VERSION,
         crate::COMPILE_DATE,

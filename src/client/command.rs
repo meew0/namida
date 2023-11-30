@@ -658,13 +658,13 @@ pub fn help(command: &[&str]) {
     if query.eq_ignore_ascii_case("close") {
         println!("Usage: close");
         println!();
-        println!("Closes the current connection to a remote Tsunami server.");
+        println!("Closes the current connection to a remote namida server.");
     } else if query.eq_ignore_ascii_case("connect") {
         println!("Usage: connect");
         println!("       connect <remote-host>");
         println!("       connect <remote-host> <remote-port>");
         println!();
-        println!("Opens a connection to a remote Tsunami server.  If the host and port");
+        println!("Opens a connection to a remote namida server.  If the host and port");
         println!("are not specified, default values are used.  (Use the 'set' command to");
         println!("modify these values.)");
         println!();
@@ -674,10 +674,9 @@ pub fn help(command: &[&str]) {
         println!("Usage: get <remote-file>");
         println!("       get <remote-file> <local-file>");
         println!();
-        println!("Attempts to retrieve the remote file with the given name using the");
-        println!("Tsunami file transfer protocol.  If the local filename is not");
-        println!("specified, the final part of the remote filename (after the last path");
-        println!("separator) will be used.");
+        println!("Attempts to retrieve the remote file with the given name.  If the");
+        println!("local filename is not specified, the final part of the remote filename");
+        println!("(after the last path separator) will be used.");
     } else if query.eq_ignore_ascii_case("dir") {
         println!("Usage: dir");
         println!();
@@ -687,8 +686,8 @@ pub fn help(command: &[&str]) {
     } else if query.eq_ignore_ascii_case("quit") {
         println!("Usage: quit");
         println!();
-        println!("Closes any open connection to a remote Tsunami server and exits the");
-        println!("Tsunami client.");
+        println!("Closes any open connection to a remote namida server and exits the");
+        println!("namida client.");
     } else if query.eq_ignore_ascii_case("set") {
         println!("Usage: set");
         println!("       set <field>");
@@ -707,10 +706,9 @@ pub fn help(command: &[&str]) {
 
 /// No cleanup is necessary in Rust, so this method only prints a message and exits the process.
 pub fn quit() {
-    println!("Thank you for using Tsunami.");
+    println!("Thank you for using namida.");
     println!();
-    println!("The ANML web site can be found at:    http://www.anml.iu.edu/");
-    println!("The SourceForge site can be found at: http://tsunami-udp.sf.net/");
+    println!("The repository can be found at: https://github.com/meew0/namida/");
     println!();
 
     std::process::exit(0);
