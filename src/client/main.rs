@@ -2,9 +2,12 @@ use std::io::Write;
 
 use super::{Parameter, Session};
 
-pub fn interactive(mut parameter: Parameter) {
+/// The main function for the client running in interactive mode.
+#[allow(clippy::missing_errors_doc)]
+pub fn interactive(mut parameter: Parameter) -> anyhow::Result<()> {
+    // show version / build information
     eprintln!(
-        "namida client for protocol rev {:X}\nRevision: {}\nCompiled: {} {}\n\0",
+        "namida client for protocol rev {:X}\nRevision: {}\nCompiled: {} {}\n",
         crate::common::PROTOCOL_REVISION,
         crate::common::NAMIDA_VERSION,
         crate::COMPILE_DATE,
@@ -13,24 +16,27 @@ pub fn interactive(mut parameter: Parameter) {
 
     let mut session: Option<Session> = None;
 
+    // while the command loop is still running
     loop {
+        // present the prompt
         print!("namida> ");
-        std::io::stdout().flush().unwrap();
+        std::io::stdout().flush()?;
 
+        // read next command
         let mut input = String::new();
-        std::io::stdin()
-            .read_line(&mut input)
-            .expect("Could not read command input");
+        std::io::stdin().read_line(&mut input)?;
 
+        // parse the command
         let command = parse_command(&input);
 
+        // make sure we have at least one word
         if command.is_empty() {
             continue;
         }
 
         let result = run_command(&command, &mut parameter, &mut session);
         if let Err(err) = result {
-            println!("Error while running command: {:?}", err);
+            println!("Error while running command: {err:?}");
         }
     }
 }
@@ -41,31 +47,32 @@ fn run_command(
     session: &mut Option<Session>,
 ) -> anyhow::Result<()> {
     let mut found = true;
+    let instruction = command[0];
 
-    if command[0].eq_ignore_ascii_case("connect") {
-        let connect_result = super::command::command_connect(command, parameter);
+    if instruction.eq_ignore_ascii_case("connect") {
+        let connect_result = super::command::connect(command, parameter);
         match connect_result {
             Ok(new_session) => {
                 *session = Some(new_session);
             }
-            Err(err) => println!("Error in command_connect: {:?}", err),
+            Err(err) => println!("Error in command_connect: {err:?}"),
         }
-    } else if command[0].eq_ignore_ascii_case("set") {
-        super::command::command_set(command, parameter)?;
-    } else if command[0].eq_ignore_ascii_case("help") {
-        super::command::command_help(command)?;
-    } else if command[0].eq_ignore_ascii_case("quit")
-        || command[0].eq_ignore_ascii_case("exit")
-        || command[0].eq_ignore_ascii_case("bye")
+    } else if instruction.eq_ignore_ascii_case("set") {
+        super::command::set(command, parameter)?;
+    } else if instruction.eq_ignore_ascii_case("help") {
+        super::command::help(command);
+    } else if instruction.eq_ignore_ascii_case("quit")
+        || instruction.eq_ignore_ascii_case("exit")
+        || instruction.eq_ignore_ascii_case("bye")
     {
-        super::command::command_quit();
-    } else if command[0].eq_ignore_ascii_case("close") {
-        super::command::command_close(parameter, session.take())?;
+        super::command::quit();
+    } else if instruction.eq_ignore_ascii_case("close") {
+        super::command::close(parameter, session.take())?;
     } else if let Some(session) = session.as_mut() {
-        if command[0].eq_ignore_ascii_case("get") {
-            super::command::command_get(command, parameter, session)?;
-        } else if command[0].eq_ignore_ascii_case("dir") {
-            super::command::command_dir(command, session)?;
+        if instruction.eq_ignore_ascii_case("get") {
+            super::command::get(command, parameter, session)?;
+        } else if instruction.eq_ignore_ascii_case("dir") {
+            super::command::dir(command, session)?;
         } else {
             found = false;
         }
@@ -75,14 +82,14 @@ fn run_command(
 
     if !found {
         eprintln!(
-            "Unrecognized command: '{}'.  Use 'HELP' for help.",
-            command[0],
+            "Unrecognized command: '{instruction}'.  Use 'HELP' for help. Some commands are only available after connecting to a server.",
         );
     }
 
     Ok(())
 }
 
-pub fn parse_command(input: &str) -> Vec<&str> {
+#[must_use]
+fn parse_command(input: &str) -> Vec<&str> {
     input.split_whitespace().collect()
 }

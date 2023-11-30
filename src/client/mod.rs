@@ -8,14 +8,16 @@ pub mod ring;
 pub mod transcript;
 
 use std::{
-    io::Write,
-    net::{TcpStream, UdpSocket},
+    net::UdpSocket,
     path::PathBuf,
     sync::Arc,
     time::{Duration, Instant},
 };
 
-use crate::types::{BlockIndex, BlockSize, ErrorRate, FileSize, Fraction, TargetRate, UdpErrors};
+use crate::{
+    common::SocketWrapper,
+    types::{BlockIndex, BlockSize, ErrorRate, FileSize, Fraction, TargetRate, UdpErrors},
+};
 
 #[derive(Clone, Default)]
 pub struct Statistics {
@@ -44,6 +46,8 @@ pub struct Retransmit {
 }
 
 impl Retransmit {
+    pub const MAX_RETRANSMISSION_BUFFER: u32 = 2048;
+
     pub fn swap_tables(&mut self) {
         std::mem::swap(&mut self.previous_table, &mut self.next_table);
     }
@@ -52,8 +56,8 @@ impl Retransmit {
 impl Default for Retransmit {
     fn default() -> Self {
         Self {
-            previous_table: vec![BlockIndex(0); 2048],
-            next_table: vec![BlockIndex(0); 2048],
+            previous_table: vec![BlockIndex(0); Self::MAX_RETRANSMISSION_BUFFER as usize],
+            next_table: vec![BlockIndex(0); Self::MAX_RETRANSMISSION_BUFFER as usize],
         }
     }
 }
@@ -65,6 +69,7 @@ pub enum OutputMode {
 }
 
 #[derive(Clone, clap::Args)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct Parameter {
     #[arg(long = "server", default_value_t = config::DEFAULT_SERVER_NAME.to_owned())]
     pub server: String,
@@ -135,7 +140,7 @@ pub struct Transfer {
     pub gapless_to_block: BlockIndex,
     pub retransmit: Retransmit,
     pub stats: Statistics,
-    pub ring_buffer: Option<Arc<ring::RingBuffer>>,
+    pub ring_buffer: Option<Arc<ring::Buffer>>,
     pub received: Vec<u8>,
     pub blocks_left: BlockIndex,
     pub restart_pending: bool,
@@ -146,27 +151,5 @@ pub struct Transfer {
 
 pub struct Session {
     pub transfer: Transfer,
-    pub server: TcpStream,
-}
-
-impl Session {
-    pub fn read<T: bincode::Decode>(&mut self) -> anyhow::Result<T> {
-        Ok(bincode::decode_from_std_read(
-            &mut self.server,
-            crate::common::BINCODE_CONFIG,
-        )?)
-    }
-
-    pub fn write<T: bincode::Encode>(&mut self, value: T) -> anyhow::Result<usize> {
-        Ok(bincode::encode_into_std_write(
-            value,
-            &mut self.server,
-            crate::common::BINCODE_CONFIG,
-        )?)
-    }
-
-    pub fn flush(&mut self) -> anyhow::Result<()> {
-        self.server.flush()?;
-        Ok(())
-    }
+    pub server: SocketWrapper,
 }

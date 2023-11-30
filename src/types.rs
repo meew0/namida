@@ -28,8 +28,8 @@ macro_rules! clapify {
         }
 
         impl ::std::fmt::Display for $new_type {
-            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-                write!(f, "{}", self.0)
+            fn fmt(&self, formatter: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                write!(formatter, "{}", self.0)
             }
         }
     };
@@ -40,25 +40,28 @@ macro_rules! clapify {
 )]
 pub struct BlockIndex(pub u32);
 
-impl std::ops::Add for BlockIndex {
-    type Output = BlockIndex;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Self(self.0.checked_add(rhs.0).expect("block index overflow"))
-    }
-}
-
-impl std::ops::Sub for BlockIndex {
-    type Output = BlockIndex;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        Self(self.0.checked_sub(rhs.0).expect("block index overflow"))
-    }
-}
-
 impl BlockIndex {
+    #[must_use]
     pub fn is_zero(&self) -> bool {
         self.0 == 0
+    }
+
+    /// Adds another `BlockIndex` to this one.
+    ///
+    /// # Panics
+    /// Panics on overflow.
+    #[must_use]
+    pub fn safe_add(self, rhs: Self) -> Self {
+        Self(self.0.checked_add(rhs.0).expect("block index overflow"))
+    }
+
+    /// Subtracts another `BlockIndex` from this one.
+    ///
+    /// # Panics
+    /// Panics on underflow.
+    #[must_use]
+    pub fn safe_sub(self, rhs: Self) -> Self {
+        Self(self.0.checked_sub(rhs.0).expect("block index underflow"))
     }
 }
 
@@ -84,8 +87,8 @@ pub struct Fraction {
 }
 
 impl Display for Fraction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}/{}", self.numerator, self.denominator)
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}/{}", self.numerator, self.denominator)
     }
 }
 
@@ -102,12 +105,18 @@ pub enum UdpErrors {
 }
 
 impl Display for UdpErrors {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Available { initial, current } => {
-                write!(f, "{}", current - initial)
+                write!(
+                    formatter,
+                    "{}",
+                    current
+                        .checked_sub(*initial)
+                        .expect("UDP error count should not decrease over time")
+                )
             }
-            Self::Unavailable => write!(f, "N/A"),
+            Self::Unavailable => write!(formatter, "N/A"),
         }
     }
 }
@@ -119,6 +128,7 @@ impl Default for UdpErrors {
 }
 
 impl UdpErrors {
+    #[must_use]
     pub fn new() -> Self {
         match crate::common::get_udp_in_errors() {
             Ok(value) => Self::Available {
@@ -126,10 +136,7 @@ impl UdpErrors {
                 current: value,
             },
             Err(err) => {
-                println!(
-                    "Note: OS-level UDP error count is unavailable for reason: {}",
-                    err
-                );
+                println!("Note: OS-level UDP error count is unavailable for reason: {err}");
                 Self::Unavailable
             }
         }
@@ -143,8 +150,8 @@ impl UdpErrors {
         match crate::common::get_udp_in_errors() {
             Ok(value) => *current = value,
             Err(err) => {
-                println!("WARNING: OS-level UDP error count was previously available, but is now unavailable for reason: {}", err);
-                *self = Self::Unavailable
+                println!("WARNING: OS-level UDP error count was previously available, but is now unavailable for reason: {err}");
+                *self = Self::Unavailable;
             }
         }
     }

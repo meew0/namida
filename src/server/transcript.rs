@@ -3,38 +3,75 @@ use std::path::Path;
 
 use super::{Parameter, Session};
 
-pub fn xscript_close_server(session: &mut Session, mut delta: u64) -> anyhow::Result<()> {
-    let transcript = session.transfer.transcript.as_mut().unwrap();
+/// Closes the transcript file for the given session after writing out the final transfer
+/// statistics.
+///
+/// # Errors
+/// Returns an error on I/O failure.
+///
+/// # Panics
+/// Panics if no transcript file is opened.
+pub fn close(session: &mut Session, delta: u64) -> anyhow::Result<()> {
+    let transcript = session
+        .transfer
+        .transcript
+        .as_mut()
+        .expect("transcript should have been opened");
 
+    #[allow(clippy::cast_precision_loss)]
     writeln!(
         transcript,
         "mb_transmitted = {:0>.2}",
-        session.properties.file_size.0 as f64 / 1000000.0,
+        session.properties.file_size.0 as f64 / 1_000_000.0,
     )?;
-    writeln!(transcript, "duration = {:0>.2}", delta as f64 / 1000000.0)?;
+    #[allow(clippy::cast_precision_loss)]
+    writeln!(transcript, "duration = {:0>.2}", delta as f64 / 1_000_000.0)?;
 
     // Bits per microsecond = megabits per second
+    #[allow(clippy::cast_precision_loss)]
     writeln!(
         transcript,
         "throughput = {:0>.2}",
-        session.properties.file_size.0 as f64 * 8.0f64 / delta as f64,
+        session.properties.file_size.0 as f64 * 8.0_f64 / delta as f64,
     )?;
 
     session.transfer.transcript.take();
     Ok(())
 }
 
-pub fn xscript_data_log_server(session: &mut Session, mut logline: &str) -> anyhow::Result<()> {
-    let transcript = session.transfer.transcript.as_mut().unwrap();
-    write!(transcript, "{}", logline)?;
+/// Logs the given line to the transcript.
+///
+/// # Errors
+/// Returns an error on I/O failure.
+///
+/// # Panics
+/// Panics if no transcript file is opened.
+pub fn data_log(session: &mut Session, logline: &str) -> anyhow::Result<()> {
+    let transcript = session
+        .transfer
+        .transcript
+        .as_mut()
+        .expect("transcript should have been opened");
+    write!(transcript, "{logline}")?;
     transcript.flush()?;
     Ok(())
 }
 
-pub fn xscript_data_start_server(session: &mut Session) -> anyhow::Result<()> {
+/// Begins the data section of the transcript with a "START" line containing the current epoch.
+///
+/// # Errors
+/// Returns an error on I/O failure.
+///
+/// # Panics
+/// Panics if no transcript file is opened.
+pub fn data_start(session: &mut Session) -> anyhow::Result<()> {
     let start_time = crate::common::epoch();
 
-    let transcript = session.transfer.transcript.as_mut().unwrap();
+    let transcript = session
+        .transfer
+        .transcript
+        .as_mut()
+        .expect("transcript should have been opened");
     writeln!(
         transcript,
         "START {}.{:06}",
@@ -45,10 +82,21 @@ pub fn xscript_data_start_server(session: &mut Session) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn xscript_data_stop_server(session: &mut Session) -> anyhow::Result<()> {
+/// Terminates the data section of the transcript with a "STOP" line containing the current epoch.
+///
+/// # Errors
+/// Returns an error on I/O failure.
+///
+/// # Panics
+/// Panics if no transcript file is opened.
+pub fn data_stop(session: &mut Session) -> anyhow::Result<()> {
     let end_time = crate::common::epoch();
 
-    let transcript = session.transfer.transcript.as_mut().unwrap();
+    let transcript = session
+        .transfer
+        .transcript
+        .as_mut()
+        .expect("transcript should have been opened");
     writeln!(
         transcript,
         "STOP {}.{:06}",
@@ -59,7 +107,12 @@ pub fn xscript_data_stop_server(session: &mut Session) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn xscript_open_server(session: &mut Session, parameter: &Parameter) -> anyhow::Result<()> {
+/// Opens a new transcript file for the given session and writes the initial transcript information
+/// to the file.
+///
+/// # Errors
+/// Returns an error on I/O failure.
+pub fn open(session: &mut Session, parameter: &Parameter) -> anyhow::Result<()> {
     let transcript_filename = crate::common::make_transcript_filename("nams");
     let transcript = session.transfer.transcript.insert(
         std::fs::File::options()
@@ -68,11 +121,11 @@ pub fn xscript_open_server(session: &mut Session, parameter: &Parameter) -> anyh
             .open(Path::new(&transcript_filename))?,
     );
 
-    writeln!(
-        transcript,
-        "filename = {}",
-        session.transfer.filename.as_ref().unwrap().display()
-    )?;
+    if let Some(filename) = &session.transfer.filename {
+        writeln!(transcript, "filename = {}", filename.display())?;
+    } else {
+        writeln!(transcript, "filename = <not set>")?;
+    }
     writeln!(transcript, "file_size = {}", session.properties.file_size.0)?;
     writeln!(
         transcript,

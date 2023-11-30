@@ -1,12 +1,12 @@
 use std::{
-    io::Write,
-    net::{SocketAddr, TcpStream, UdpSocket},
+    net::{SocketAddr, UdpSocket},
     path::PathBuf,
     time::Duration,
 };
 
-use crate::types::{
-    BlockIndex, BlockSize, ErrorRate, FileMetadata, FileSize, Fraction, TargetRate,
+use crate::{
+    common::SocketWrapper,
+    types::{BlockIndex, BlockSize, ErrorRate, FileMetadata, FileSize, Fraction, TargetRate},
 };
 
 pub mod config;
@@ -74,7 +74,7 @@ pub struct Properties {
     pub slotnumber: i32,
     pub totalslots: i32,
     pub samplerate: i32,
-    pub wait_u_sec: i64,
+    pub wait_µs: i64,
 }
 
 impl Default for Properties {
@@ -82,11 +82,11 @@ impl Default for Properties {
         Self {
             epoch: Duration::default(),
             block_size: config::DEFAULT_BLOCK_SIZE,
-            file_size: Default::default(),
-            block_count: Default::default(),
+            file_size: FileSize::default(),
+            block_count: BlockIndex::default(),
             target_rate: TargetRate(0),
             error_rate: ErrorRate(0),
-            ipd_time: Default::default(),
+            ipd_time: 0,
             slower: Fraction {
                 numerator: 0,
                 denominator: 0,
@@ -95,11 +95,11 @@ impl Default for Properties {
                 numerator: 0,
                 denominator: 0,
             },
-            fileout: Default::default(),
-            slotnumber: Default::default(),
-            totalslots: Default::default(),
-            samplerate: Default::default(),
-            wait_u_sec: 0,
+            fileout: 0,
+            slotnumber: 0,
+            totalslots: 0,
+            samplerate: 0,
+            wait_µs: 0,
         }
     }
 }
@@ -131,28 +131,6 @@ impl Default for Transfer {
 pub struct Session {
     pub transfer: Transfer,
     pub properties: Properties,
-    pub client: TcpStream,
+    pub client: SocketWrapper,
     pub session_id: usize,
-}
-
-impl Session {
-    pub fn read<T: bincode::Decode>(&mut self) -> anyhow::Result<T> {
-        Ok(bincode::decode_from_std_read(
-            &mut self.client,
-            crate::common::BINCODE_CONFIG,
-        )?)
-    }
-
-    pub fn write<T: bincode::Encode>(&mut self, value: T) -> anyhow::Result<usize> {
-        Ok(bincode::encode_into_std_write(
-            value,
-            &mut self.client,
-            crate::common::BINCODE_CONFIG,
-        )?)
-    }
-
-    pub fn flush(&mut self) -> anyhow::Result<()> {
-        self.client.flush()?;
-        Ok(())
-    }
 }

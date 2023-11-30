@@ -3,25 +3,39 @@ use std::{io::Write, path::PathBuf, time::Instant};
 use ::libc;
 use anyhow::bail;
 
-use super::{OutputMode, Parameter, Session, Transfer};
+use super::{OutputMode, Parameter, Retransmit, Session, Transfer};
 use crate::{
     message::{ClientToServer, ServerToClient, TransmissionControl},
     types::{BlockIndex, ErrorRate},
 };
 
-pub fn ttp_authenticate_client(session: &mut Session, mut secret: String) -> anyhow::Result<()> {
-    let ServerToClient::AuthenticationChallenge(mut random) = session.read()? else {
+/// Given an active session, returns `Ok(())` if we were able to successfully authenticate to the
+/// server, and an error otherwise. See the documentation of `server::protocol::authenticate` for a
+/// description of the authentication process.
+///
+/// # Errors
+/// Returns an error on authentication failure, I/O failure, or if the server sent unexpected data.
+pub fn authenticate(session: &mut Session, secret: &str) -> anyhow::Result<()> {
+    // read in the shared secret and the challenge
+    let ServerToClient::AuthenticationChallenge(mut random) = session.server.read()? else {
         bail!("Expected authentication challenge");
     };
 
+    // prepare the proof of the shared secret
+    // Tsunami manually overwrites the secret bytes with zero afterwards. I think this is snake oil.
     let digest: [u8; 16] = crate::common::prepare_proof(&mut random, secret.as_bytes()).into();
 
-    session.write(ClientToServer::AuthenticationResponse(digest))?;
+    // send the response to the server
+    session
+        .server
+        .write(ClientToServer::AuthenticationResponse(digest))?;
 
-    let ServerToClient::AuthenticationStatus(success) = session.read()? else {
+    // read the results back from the server
+    let ServerToClient::AuthenticationStatus(success) = session.server.read()? else {
         bail!("Expected authentication status");
     };
 
+    // check the result
     if !success {
         bail!("Authentication failed");
     }
@@ -29,11 +43,21 @@ pub fn ttp_authenticate_client(session: &mut Session, mut secret: String) -> any
     Ok(())
 }
 
-pub fn ttp_negotiate_client(session: &mut Session) -> anyhow::Result<()> {
+/// Performs all of the negotiation with the remote server that is done prior to authentication.
+/// At the moment, this consists of verifying identical protocol revisions between the client and
+/// server. Returns `Ok(())` on success.
+///
+/// # Errors
+/// Returns an error on negotiation failure, I/O failure, or if the server sent unexpected data.
+pub fn negotiate(session: &mut Session) -> anyhow::Result<()> {
+    // send our protocol revision number to the server
     let client_revision = crate::common::PROTOCOL_REVISION;
-    session.write(client_revision)?;
-    let server_revision: u32 = session.read()?;
+    session.server.write(client_revision)?;
 
+    // read the protocol revision number from the server
+    let server_revision: u32 = session.server.read()?;
+
+    // compare the numbers
     if client_revision != server_revision {
         bail!(
             "Protocol negotiation failed: client_revision = {}, server_revision = {}",
@@ -45,17 +69,33 @@ pub fn ttp_negotiate_client(session: &mut Session) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn ttp_open_transfer_client(
+/// Tries to create a new TTP file request object for the given session by submitting a file request
+/// to the server (which is waiting for the name of a file to transfer). If the request is accepted,
+/// we retrieve the file parameters, open the file for writing, and return `Ok(())`.
+///
+/// # Errors
+/// Returns an error on I/O failure, if the file cannot be sent, or if the server sent unexpected
+/// messages.
+///
+/// # Panics
+/// Panics if no local path is set in the transfer object.
+pub fn open_transfer(
     session: &mut Session,
     parameter: &Parameter,
     remote_filename: PathBuf,
     local_filename: PathBuf,
 ) -> anyhow::Result<()> {
-    session.write(ClientToServer::FileRequest(remote_filename.clone()))?;
-    let ServerToClient::FileResponseOne(result) = session.read()? else {
+    // submit the transfer request
+    session
+        .server
+        .write(ClientToServer::FileRequest(remote_filename.clone()))?;
+
+    // see if the request was successful
+    let ServerToClient::FileResponseOne(result) = session.server.read()? else {
         bail!("Expected file response");
     };
 
+    // make sure the result was a good one
     if let Err(err) = result {
         bail!(
             "Server: File does not exist or cannot be transmitted: {:?}",
@@ -65,14 +105,24 @@ pub fn ttp_open_transfer_client(
 
     // Send our desired parameters...
 
-    session.write(ClientToServer::BlockSize(parameter.block_size))?;
-    session.write(ClientToServer::TargetRate(parameter.target_rate))?;
-    session.write(ClientToServer::ErrorRate(parameter.error_rate))?;
-    session.flush()?;
+    session
+        .server
+        .write(ClientToServer::BlockSize(parameter.block_size))?;
+    session
+        .server
+        .write(ClientToServer::TargetRate(parameter.target_rate))?;
+    session
+        .server
+        .write(ClientToServer::ErrorRate(parameter.error_rate))?;
+    session.server.flush()?;
 
-    session.write(ClientToServer::Slowdown(parameter.slower))?;
-    session.write(ClientToServer::Speedup(parameter.faster))?;
-    session.flush()?;
+    session
+        .server
+        .write(ClientToServer::Slowdown(parameter.slower))?;
+    session
+        .server
+        .write(ClientToServer::Speedup(parameter.faster))?;
+    session.server.flush()?;
 
     // and get the server's parameters
 
@@ -80,31 +130,38 @@ pub fn ttp_open_transfer_client(
     session.transfer.remote_filename = Some(remote_filename);
     session.transfer.local_filename = Some(local_filename);
 
-    let ServerToClient::FileSize(file_size) = session.read()? else {
+    let ServerToClient::FileSize(file_size) = session.server.read()? else {
         bail!("Expected file size");
     };
     session.transfer.file_size = file_size;
 
-    let ServerToClient::BlockSize(block_size) = session.read()? else {
+    let ServerToClient::BlockSize(block_size) = session.server.read()? else {
         bail!("Expected block size");
     };
     if block_size != parameter.block_size {
         bail!("Block size disagreement");
     }
 
-    let ServerToClient::BlockCount(block_count) = session.read()? else {
+    let ServerToClient::BlockCount(block_count) = session.server.read()? else {
         bail!("Expected block count");
     };
     session.transfer.block_count = block_count;
 
-    let ServerToClient::Epoch(epoch) = session.read()? else {
+    let ServerToClient::Epoch(epoch) = session.server.read()? else {
         bail!("Expected epoch");
     };
     session.transfer.epoch = epoch;
 
+    // we start out with every block yet to transfer
     session.transfer.blocks_left = session.transfer.block_count;
 
-    let local_path = session.transfer.local_filename.as_ref().unwrap().as_path();
+    // try to open the local file for writing
+    let local_path = session
+        .transfer
+        .local_filename
+        .as_ref()
+        .expect("there should be a local path")
+        .as_path();
     if local_path.exists() {
         println!(
             "Warning: overwriting existing file '{}'",
@@ -118,51 +175,75 @@ pub fn ttp_open_transfer_client(
             .open(local_path)?,
     );
 
-    session.transfer.on_wire_estimate = BlockIndex(
-        (0.5f64 * parameter.target_rate.0 as f64 / (parameter.block_size.0 * 8) as f64) as u32,
+    #[allow(clippy::cast_precision_loss)]
+    #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::cast_possible_truncation)]
+    let on_wire_estimate = BlockIndex(
+        (0.5_f64 * parameter.target_rate.0 as f64 / (f64::from(parameter.block_size.0) * 8.0_f64))
+            as u32,
     );
     session.transfer.on_wire_estimate =
-        if session.transfer.block_count < session.transfer.on_wire_estimate {
-            session.transfer.block_count
-        } else {
-            session.transfer.on_wire_estimate
-        };
+        BlockIndex::min(session.transfer.block_count, on_wire_estimate);
 
+    // if we're doing a transcript
     if parameter.transcript_yn {
-        crate::common::transcript_warn_error(super::transcript::xscript_open_client(
-            session, parameter,
-        ));
+        crate::common::transcript_warn_error(super::transcript::open(session, parameter));
     }
 
+    // indicate success
     Ok(())
 }
 
-pub fn ttp_open_port_client(
-    session: &mut Session,
-    parameter: &mut Parameter,
-) -> anyhow::Result<()> {
+/// Creates a new UDP socket for receiving the file data associated with our pending transfer and
+/// communicates the port number back to the server.
+///
+/// # Errors
+/// Returns an error when a socket could not be opened or when the port number could not be
+/// communicated to the server.
+pub fn open_port(session: &mut Session, parameter: &Parameter) -> anyhow::Result<()> {
+    // open a new UDP socket
     let udp_socket = session
         .transfer
         .udp_socket
-        .insert(super::network::create_udp_socket_client(
+        .insert(super::network::create_udp_socket(
             parameter,
-            session.server.local_addr()?.is_ipv6(),
+            session.server.socket.local_addr()?.is_ipv6(),
         )?);
 
+    // find out the port number we're using
     let port = udp_socket.local_addr()?.port();
 
-    session.write(ClientToServer::UdpPort(port))?;
-    session.flush()?;
+    // send that port number to the server
+    session.server.write(ClientToServer::UdpPort(port))?;
+    session.server.flush()?;
 
     Ok(())
 }
 
-pub fn ttp_repeat_retransmit(session: &mut Session) -> anyhow::Result<()> {
+/// Tries to repeat all of the outstanding retransmit requests for the current transfer on the
+/// given session. This also takes care of maintanence operations on the transmission table,
+/// such as relocating the entries toward the bottom of the array.
+///
+/// # Errors
+/// Returns an error if the retransmit requests could not be resent due to I/O failure.
+///
+/// # Panics
+/// Panics on arithmetic overflow.
+pub fn repeat_retransmit(session: &mut Session) -> anyhow::Result<()> {
     session.transfer.stats.this_retransmits = BlockIndex(0);
 
+    // Tsunami implements the retransmit table as one array that is modified in place.
+    // In Rust, that is not feasible, so we use two arrays that are swapped when necessary.
+    // At the start, `previous_table` contains the retransmit requests; `next_table` is only used
+    // in this function as a temporary buffer.
+
+    // Discard received blocks from the list, by iterating over the `previous_table` and inserting
+    // all blocks we don't yet have into a pristine `next_table`.
     session.transfer.retransmit.next_table.clear();
     for block in &session.transfer.retransmit.previous_table {
-        if session.transfer.retransmit.next_table.len() >= 2048 {
+        if session.transfer.retransmit.next_table.len()
+            >= Retransmit::MAX_RETRANSMISSION_BUFFER as usize
+        {
             break;
         }
 
@@ -171,26 +252,29 @@ pub fn ttp_repeat_retransmit(session: &mut Session) -> anyhow::Result<()> {
         }
     }
 
+    // How many blocks were left over after filtering. If this is MAX_RETRANSMISSION_BUFFER
+    // (or more) then we need to restart the transfer entirely.
+    let next_table_len = session.transfer.retransmit.next_table.len();
     let count = BlockIndex(
-        session
-            .transfer
-            .retransmit
-            .next_table
-            .len()
+        next_table_len
             .try_into()
-            .unwrap(),
+            .expect("retransmit count overflow"),
     );
 
-    if count >= BlockIndex(2048) {
-        let block =
-            if session.transfer.block_count < session.transfer.gapless_to_block + BlockIndex(1) {
-                session.transfer.block_count
-            } else {
-                session.transfer.gapless_to_block + BlockIndex(1)
-            };
+    // if there are too many entries, restart transfer from earlier point
+    if next_table_len >= Retransmit::MAX_RETRANSMISSION_BUFFER as usize {
+        // restart from first missing block
+        let block = BlockIndex::min(
+            session.transfer.block_count,
+            session.transfer.gapless_to_block.safe_add(BlockIndex(1)),
+        );
 
-        session.write(TransmissionControl::RestartAt(block))?;
+        // send out the request
+        session
+            .server
+            .write(TransmissionControl::RestartAt(block))?;
 
+        // remember the request so we can then ignore blocks that are still on the wire
         session.transfer.restart_pending = true;
         session.transfer.restart_lastidx = session
             .transfer
@@ -199,58 +283,85 @@ pub fn ttp_repeat_retransmit(session: &mut Session) -> anyhow::Result<()> {
             .last()
             .copied()
             .unwrap_or(BlockIndex(0));
-        session.transfer.restart_wireclearidx = if session.transfer.block_count
-            < (session.transfer.restart_lastidx + session.transfer.on_wire_estimate)
-        {
-            session.transfer.block_count
-        } else {
-            session.transfer.restart_lastidx + session.transfer.on_wire_estimate
-        };
+        session.transfer.restart_wireclearidx = BlockIndex::min(
+            session.transfer.block_count,
+            session
+                .transfer
+                .restart_lastidx
+                .safe_add(session.transfer.on_wire_estimate),
+        );
 
+        // reset the retransmission table and head block
         session.transfer.retransmit.previous_table.clear();
         session.transfer.retransmit.next_table.clear();
-
         session.transfer.next_block = block;
-        session.transfer.stats.this_retransmits = BlockIndex(2048);
+        session.transfer.stats.this_retransmits = BlockIndex(Retransmit::MAX_RETRANSMISSION_BUFFER);
     } else {
+        // update statistics
         session.transfer.stats.this_retransmits = count;
-        session.transfer.stats.total_retransmits = session.transfer.stats.total_retransmits + count;
+        session.transfer.stats.total_retransmits =
+            session.transfer.stats.total_retransmits.safe_add(count);
 
-        if count > BlockIndex(0) {
+        // send out the requests
+        if next_table_len > 0 {
             let mut retransmits = Vec::with_capacity(session.transfer.retransmit.next_table.len());
             for block_index in &session.transfer.retransmit.next_table {
                 retransmits.push(TransmissionControl::Retransmit(*block_index));
             }
             for retransmit in retransmits {
-                session.write(retransmit)?;
+                session.server.write(retransmit)?;
             }
         }
 
+        // clear the previous table which has now become invalid, and swap it for the next table
         session.transfer.retransmit.previous_table.clear();
         session.transfer.retransmit.swap_tables();
     }
-    session.flush()?;
+    session.server.flush()?;
     Ok(())
 }
 
-pub fn ttp_request_retransmit(session: &mut Session, block: BlockIndex) {
+const MAX_RETRANSMIT_TABLE_LENGTH: usize = 32 * Retransmit::MAX_RETRANSMISSION_BUFFER as usize;
+
+/// Requests a retransmission of the given block in the current transfer.
+pub fn request_retransmit(session: &mut Session, block: BlockIndex) {
+    // double checking: if we already got the block, don't add it
     if super::command::got_block(session, block) {
         return;
     }
 
-    if session.transfer.retransmit.previous_table.len() > 32 * 2048 {
+    // don't overgrow the table
+    if session.transfer.retransmit.previous_table.len() > MAX_RETRANSMIT_TABLE_LENGTH {
         return;
     }
 
+    // store the request
     session.transfer.retransmit.previous_table.push(block);
 }
 
-pub fn ttp_request_stop(session: &mut Session) -> anyhow::Result<()> {
-    session.write(TransmissionControl::EndTransmission(0))?;
+/// Requests that the server stop transmitting data for the current file transfer in the given
+/// session. This is done by sending a transmission control request with a type of
+/// `EndTransmission`.
+///
+/// # Errors
+/// Returns an error on I/O failure.
+pub fn request_stop(session: &mut Session) -> anyhow::Result<()> {
+    session
+        .server
+        .write(TransmissionControl::EndTransmission(0))?;
     Ok(())
 }
 
-pub fn ttp_update_stats(
+/// This routine must be called every interval to update the statistics for the progress of the
+/// ongoing file transfer.
+///
+/// # Errors
+/// Returns an error on I/O failure when sending the error rate to the server, or when flushing
+/// the standard output.
+///
+/// # Panics
+/// Panics if timings are uninitialised.
+pub fn update_stats(
     session: &mut Session,
     parameter: &Parameter,
     iteration: &mut u64,
@@ -258,8 +369,19 @@ pub fn ttp_update_stats(
     let u_mega: f64 = 1_000_000.0;
     let u_giga: f64 = 1_000_000_000.0;
 
-    let delta = Instant::now() - session.transfer.stats.this_time.unwrap();
-    let delta_total = Instant::now() - session.transfer.stats.start_time.unwrap();
+    // find the total time elapsed
+    let delta = session
+        .transfer
+        .stats
+        .this_time
+        .expect("this_time should be present")
+        .elapsed();
+    let delta_total = session
+        .transfer
+        .stats
+        .start_time
+        .expect("start_time should be present")
+        .elapsed();
 
     let milliseconds = delta_total.subsec_millis();
 
@@ -273,48 +395,81 @@ pub fn ttp_update_stats(
     let d_seconds = delta.as_secs_f64();
     let d_seconds_total = delta_total.as_secs_f64();
 
-    let data_total = parameter.block_size.0 as f64 * session.transfer.stats.total_blocks.0 as f64;
-    let data_this = parameter.block_size.0 as f64
-        * (session.transfer.stats.total_blocks - session.transfer.stats.this_blocks).0 as f64;
-    let data_this_rexmit =
-        parameter.block_size.0 as f64 * session.transfer.stats.this_flow_retransmitteds.0 as f64;
-    let data_this_goodpt =
-        parameter.block_size.0 as f64 * session.transfer.stats.this_flow_originals.0 as f64;
+    // find the amount of data transferred (bytes)
+    let data_total =
+        f64::from(parameter.block_size.0) * f64::from(session.transfer.stats.total_blocks.0);
+    let data_this = f64::from(parameter.block_size.0)
+        * f64::from(
+            (session
+                .transfer
+                .stats
+                .total_blocks
+                .safe_sub(session.transfer.stats.this_blocks))
+            .0,
+        );
+    let data_this_rexmit = f64::from(parameter.block_size.0)
+        * f64::from(session.transfer.stats.this_flow_retransmitteds.0);
 
+    // update the UDP receive error count reported by the operating system
     session.transfer.stats.udp_errors.update();
 
-    let retransmits_fraction = session.transfer.stats.this_retransmits.0 as f64
-        / (1.0f64
-            + session.transfer.stats.this_retransmits.0 as f64
-            + session.transfer.stats.total_blocks.0 as f64
-            - session.transfer.stats.this_blocks.0 as f64);
-    let ringfill_fraction = session
-        .transfer
-        .ring_buffer
-        .as_ref()
-        .map_or(0, |ring| ring.count()) as f64
-        / 4096_f64;
-    let total_retransmits_fraction = session.transfer.stats.total_retransmits.0 as f64
-        / (session.transfer.stats.total_retransmits + session.transfer.stats.total_blocks).0 as f64;
+    // precalculate some fractions
+    let retransmits_fraction = f64::from(session.transfer.stats.this_retransmits.0)
+        / (1.0_f64
+            + f64::from(session.transfer.stats.this_retransmits.0)
+            + f64::from(session.transfer.stats.total_blocks.0)
+            - f64::from(session.transfer.stats.this_blocks.0));
+    #[allow(clippy::cast_precision_loss)]
+    let ringfill_fraction = f64::from(
+        session
+            .transfer
+            .ring_buffer
+            .as_ref()
+            .map_or(0, |ring| ring.count()),
+    ) / f64::from(super::ring::MAX_BLOCKS_QUEUED);
+    let total_retransmits_fraction = f64::from(session.transfer.stats.total_retransmits.0)
+        / f64::from(
+            (session
+                .transfer
+                .stats
+                .total_retransmits
+                .safe_add(session.transfer.stats.total_blocks))
+            .0,
+        );
 
-    session.transfer.stats.this_transmit_rate = 8.0f64 * data_this / (d_seconds * u_mega);
-    session.transfer.stats.this_retransmit_rate = 8.0f64 * data_this_rexmit / (d_seconds * u_mega);
+    // update the rate statistics
+    // incoming transmit rate R = goodput R (Mbit/s) + retransmit R (Mbit/s)
+    session.transfer.stats.this_transmit_rate = 8.0_f64 * data_this / (d_seconds * u_mega);
+    session.transfer.stats.this_retransmit_rate = 8.0_f64 * data_this_rexmit / (d_seconds * u_mega);
 
-    let data_total_rate = 8.0f64 * data_total / (d_seconds_total * u_mega);
-    let fb = parameter.history as f64 / 100.0f64;
-    let ff = 1.0f64 - fb;
+    let data_total_rate = 8.0_f64 * data_total / (d_seconds_total * u_mega);
+    let feedback = f64::from(parameter.history) / 100.0_f64;
+    let feedforward = 1.0_f64 - feedback;
 
-    session.transfer.stats.transmit_rate =
-        fb * session.transfer.stats.transmit_rate + ff * session.transfer.stats.this_transmit_rate;
-    session.transfer.stats.error_rate = fb * session.transfer.stats.error_rate
-        + ff * 500 as libc::c_int as f64
-            * 100 as libc::c_int as f64
-            * (retransmits_fraction + ringfill_fraction);
+    // IIR filter rate R
+    session.transfer.stats.transmit_rate = feedback.mul_add(
+        session.transfer.stats.transmit_rate,
+        feedforward * session.transfer.stats.this_transmit_rate,
+    );
+    // IIR filtered composite error and loss, some sort of knee function
+    session.transfer.stats.error_rate = feedback.mul_add(
+        session.transfer.stats.error_rate,
+        feedforward
+            * f64::from(500 as libc::c_int)
+            * f64::from(100 as libc::c_int)
+            * (retransmits_fraction + ringfill_fraction),
+    );
 
-    session.write(TransmissionControl::SubmitErrorRate(ErrorRate(
-        session.transfer.stats.error_rate as u32,
-    )))?;
+    // send the current error rate information to the server
+    #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::cast_possible_truncation)]
+    session
+        .server
+        .write(TransmissionControl::SubmitErrorRate(ErrorRate(
+            session.transfer.stats.error_rate as u32,
+        )))?;
 
+    // build the stats string
     let stats_flags = format!(
         "{}{}",
         if session.transfer.restart_pending {
@@ -333,21 +488,20 @@ pub fn ttp_update_stats(
             '-' as i32
         },
     );
-
     let stats_line = format!(
         "{:02}:{:02}:{:02}.{:03} {:4} {:6.2}M {:6.1}Mbps {:5.1}% {:7} {:6.1}G {:6.1}Mbps {:5.1}% {:5} {:5} {:7} {:8} {:8} {}\n",
         hours,
         minutes,
         seconds,
         milliseconds,
-        (session.transfer.stats.total_blocks - session.transfer.stats.this_blocks).0,
+        (session.transfer.stats.total_blocks.safe_sub(session.transfer.stats.this_blocks)).0,
         session.transfer.stats.this_retransmit_rate,
         session.transfer.stats.this_transmit_rate,
-        100.0f64 * retransmits_fraction,
+        100.0_f64 * retransmits_fraction,
         session.transfer.stats.total_blocks.0,
         data_total / u_giga,
         data_total_rate,
-        100.0f64 * total_retransmits_fraction,
+        100.0_f64 * total_retransmits_fraction,
         session.transfer.retransmit.previous_table.len(),
         session.transfer.ring_buffer
         .as_ref().map_or(0, |ring| ring.count()),
@@ -357,20 +511,23 @@ pub fn ttp_update_stats(
         stats_flags,
     );
 
+    // give the user a show if they want it
     if parameter.verbose_yn {
         if parameter.output_mode == OutputMode::Screen {
             print!("\x1B[2J\x1B[H");
             println!("Current time:   {}", 0); // TODO
-            println!(
-                "Elapsed time:   {:02}:{:02}:{:02}.{:03}",
-                hours, minutes, seconds, milliseconds,
-            );
+            println!("Elapsed time:   {hours:02}:{minutes:02}:{seconds:02}.{milliseconds:03}",);
             println!();
             println!("Last interval");
             println!("--------------------------------------------------");
             println!(
                 "Blocks count:     {}",
-                (session.transfer.stats.total_blocks - session.transfer.stats.this_blocks).0,
+                (session
+                    .transfer
+                    .stats
+                    .total_blocks
+                    .safe_sub(session.transfer.stats.this_blocks))
+                .0,
             );
             println!("Data transferred: {:02} GB", data_this / u_giga);
             println!(
@@ -380,7 +537,7 @@ pub fn ttp_update_stats(
             println!(
                 "Retransmissions:  {} ({:02}%)",
                 session.transfer.stats.this_retransmits.0,
-                100.0f64 * retransmits_fraction,
+                100.0_f64 * retransmits_fraction,
             );
             println!();
             println!("Cumulative");
@@ -390,16 +547,19 @@ pub fn ttp_update_stats(
                 session.transfer.stats.total_blocks.0,
             );
             println!("Data transferred: {:02} GB", data_total / u_giga,);
-            println!("Transfer rate:    {:02} Mbps", data_total_rate,);
+            println!("Transfer rate:    {data_total_rate:02} Mbps",);
             println!(
                 "Retransmissions:  {} ({:02}%)",
                 session.transfer.stats.total_retransmits.0,
-                100.0f64 * total_retransmits_fraction,
+                100.0_f64 * total_retransmits_fraction,
             );
-            println!("Flags          :  {}", stats_flags);
+            println!("Flags          :  {stats_flags}");
             println!();
             println!("OS UDP rx errors: {}", session.transfer.stats.udp_errors);
         } else {
+            // print a header if necessary
+            // TODO: Tsunami has a STATS_NOHEADER compile-time constant that is checked here.
+            // It might be worth implementing this as a runtime flag
             if *iteration % 23 == 0 {
                 println!(
                     "             last_interval                   transfer_total                   buffers      transfer_remaining  OS UDP"
@@ -409,19 +569,23 @@ pub fn ttp_update_stats(
                 );
             }
             *iteration = iteration.wrapping_add(1);
-            print!("{}", stats_line);
+            print!("{stats_line}");
         }
+
+        // and flush the output
         std::io::stdout().flush()?;
     }
 
+    // print to the transcript if the user wants
     if parameter.transcript_yn {
-        crate::common::transcript_warn_error(super::transcript::xscript_data_log_client(
+        crate::common::transcript_warn_error(super::transcript::data_log(
             session,
             parameter,
             stats_line.as_str(),
         ));
     }
 
+    // reset the statistics for the next interval
     session.transfer.stats.this_blocks = session.transfer.stats.total_blocks;
     session.transfer.stats.this_retransmits = BlockIndex(0);
     session.transfer.stats.this_flow_originals = BlockIndex(0);
