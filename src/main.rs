@@ -110,10 +110,7 @@ pub mod datagram;
 pub mod message;
 pub mod server;
 pub mod types;
-
-// TODO: automatically generate these
-pub const COMPILE_DATE: &str = "Nov 16 2023";
-pub const COMPILE_TIME: &str = "21:24:18";
+pub mod version;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]

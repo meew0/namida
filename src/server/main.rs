@@ -27,11 +27,11 @@ pub fn serve(mut parameter: Parameter) -> anyhow::Result<()> {
 
     // now show version / build information
     eprintln!(
-        "namida server for protocol rev {:X}\nRevision: {}\nCompiled: {} {}\nWaiting for clients to connect.",
-        crate::common::PROTOCOL_REVISION,
-        crate::common::NAMIDA_VERSION,
-        crate::COMPILE_DATE,
-        crate::COMPILE_TIME
+        "namida server for protocol revision {}\nVersion: {}\nCompiled: {} {}\nWaiting for clients to connect.",
+        crate::version::NAMIDA_PROTOCOL_REVISION,
+        crate::version::NAMIDA_VERSION,
+        crate::version::COMPILE_DATE,
+        crate::version::COMPILE_TIME
     );
 
     // “while our little world keeps turning”...

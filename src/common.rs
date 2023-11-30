@@ -6,9 +6,6 @@ use std::{
 
 use anyhow::anyhow;
 
-pub const NAMIDA_VERSION: &str = "devel";
-pub const PROTOCOL_REVISION: u32 = 0x2006_1025;
-
 pub static BINCODE_CONFIG: bincode::config::Configuration<
     bincode::config::BigEndian,
     bincode::config::Fixint,

@@ -193,7 +193,7 @@ pub fn authenticate(session: &mut Session, secret: &[u8]) -> anyhow::Result<()> 
 /// # Errors
 /// Returns an error on I/O failure, or when negotiation was unsuccessful.
 pub fn negotiate(session: &mut Session) -> anyhow::Result<()> {
-    let server_revision = crate::common::PROTOCOL_REVISION;
+    let server_revision = crate::version::PROTOCOL_REVISION;
 
     // send our protocol revision number to the client
     session.client.write(server_revision)?;

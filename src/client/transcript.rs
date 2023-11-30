@@ -170,12 +170,17 @@ pub fn open(session: &mut Session, parameter: &Parameter) -> anyhow::Result<()> 
     writeln!(
         transcript,
         "protocol_version = 0x{:x}",
-        crate::common::PROTOCOL_REVISION,
+        crate::version::PROTOCOL_REVISION,
+    )?;
+    writeln!(
+        transcript,
+        "namida_protocol_revision = {}",
+        crate::version::NAMIDA_PROTOCOL_REVISION,
     )?;
     writeln!(
         transcript,
         "software_version = {}",
-        crate::common::NAMIDA_VERSION,
+        crate::version::NAMIDA_VERSION,
     )?;
     writeln!(transcript, "ipv6 = {}", parameter.ipv6_yn)?;
     writeln!(transcript)?;
