@@ -74,7 +74,6 @@ impl<'a> View<'a> {
     ///
     /// # Panics
     /// Panics if the current slice length is less than 6 bytes away from overflowing.
-    #[allow(clippy::missing_asserts_for_indexing)] // we assert the length exactly
     pub fn write_to(&self, slice: &mut [u8]) {
         assert_eq!(
             slice.len(),

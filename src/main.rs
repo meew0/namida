@@ -31,7 +31,6 @@
 #![warn(clippy::get_unwrap)]
 #![warn(clippy::if_then_some_else_none)]
 #![warn(clippy::impl_trait_in_params)]
-#![warn(clippy::implied_bounds_in_impls)] // supposed to exist but doesn't
 #![warn(clippy::imprecise_flops)]
 #![warn(clippy::iter_on_empty_collections)]
 #![warn(clippy::iter_on_single_items)]
@@ -42,7 +41,6 @@
 #![warn(clippy::manual_clamp)]
 #![warn(clippy::mem_forget)]
 #![warn(clippy::min_ident_chars)]
-#![warn(clippy::missing_asserts_for_indexing)] // supposed to exist but doesn't
 #![warn(clippy::mixed_read_write_in_expression)]
 #![warn(clippy::multiple_inherent_impl)]
 #![warn(clippy::needless_collect)]

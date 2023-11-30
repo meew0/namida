@@ -45,6 +45,7 @@ pub fn create_udp_socket(parameter: &Parameter) -> anyhow::Result<UdpSocket> {
 }
 
 /// Sets the transmit buffer of the given UDP socket. Currently only works on Linux.
+#[allow(clippy::needless_pass_by_ref_mut)] // since we are theoretically mutating the socket
 fn set_udp_transmit_buffer(
     socket: &mut UdpSocket,
     transmit_buffer_size: u32,

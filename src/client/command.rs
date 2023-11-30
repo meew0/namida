@@ -722,7 +722,6 @@ pub fn quit() {
 ///
 /// # Panics
 /// Panics on arithmetic overflow.
-#[allow(clippy::missing_asserts_for_indexing)]
 pub fn set(command: &[&str], parameter: &mut Parameter) -> anyhow::Result<()> {
     let do_all = command.len() == 1;
 
