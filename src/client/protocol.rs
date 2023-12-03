@@ -1,4 +1,8 @@
-use std::{io::Write, path::PathBuf, time::Instant};
+use std::{
+    io::Write,
+    path::PathBuf,
+    time::{Duration, Instant},
+};
 
 use ::libc;
 use anyhow::bail;
@@ -216,6 +220,24 @@ pub fn open_port(session: &mut Session, parameter: &Parameter) -> anyhow::Result
     // send that port number to the server
     session.server.write(ClientToServer::UdpPort(port))?;
     session.server.flush()?;
+
+    // Obtain the server's UDP port, and try to send some (non-)data to it. This will hopefully
+    // punch a hole through stateful firewalls and/or NATs in the way between us and the server.
+    let ServerToClient::UdpPort(remote_port) = session.server.read()? else {
+        bail!("Expected UDP port from server");
+    };
+    let mut remote_address = session.server.socket.peer_addr()?;
+    remote_address.set_port(remote_port);
+
+    loop {
+        udp_socket.send_to(b"namida", remote_address)?;
+
+        if matches!(session.server.read()?, ServerToClient::UdpDone) {
+            break;
+        }
+
+        std::thread::sleep(Duration::from_secs(1));
+    }
 
     Ok(())
 }

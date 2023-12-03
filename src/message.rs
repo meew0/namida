@@ -40,6 +40,8 @@ pub enum ServerToClient {
     DirListFile(FileMetadata),
     MultiFileCount(u32),
     MultiFile(FileMetadata),
+    UdpPort(u16),
+    UdpDone,
 }
 
 #[derive(Debug, bincode::Encode, bincode::Decode)]

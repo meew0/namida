@@ -239,10 +239,28 @@ pub fn open_port(session: &mut Session, parameter: &Parameter) -> anyhow::Result
     }
 
     // open a new datagram socket
-    session.transfer.udp_socket = Some(super::network::create_udp_socket(parameter)?);
+    let udp_socket = session
+        .transfer
+        .udp_socket
+        .insert(super::network::create_udp_socket(parameter)?);
+
+    // Send the generated port to the client, so it can try to hole-punch through stateful firewalls
+    session
+        .client
+        .write(ServerToClient::UdpPort(udp_socket.local_addr()?.port()))?;
+
+    let mut buffer = [0_u8; 6];
+    let client_udp_address = loop {
+        let (len, address) = udp_socket.recv_from(&mut buffer)?;
+        if len == 6 && &buffer == b"namida" {
+            break address;
+        }
+    };
+
+    session.client.write(ServerToClient::UdpDone)?;
 
     // we succeeded
-    session.transfer.udp_address = Some(address);
+    session.transfer.udp_address = Some(client_udp_address);
     Ok(())
 }
 
