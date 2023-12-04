@@ -7,7 +7,7 @@ use std::{
 use crate::{
     datagram::BlockType,
     message::{
-        ClientToServer, DirListStatus, FileRequestError, ServerToClient, TransmissionControl,
+        ClientToServer, FileRequest, FileRequestError, ServerToClient, TransmissionControl,
         UdpMethod,
     },
     types::{BlockIndex, FileSize},
@@ -280,6 +280,24 @@ pub fn determine_client_udp_address(
     Ok(())
 }
 
+/// Sends a list of available files to the client.
+///
+/// # Errors
+/// Returns an error on I/O failure.
+pub fn send_file_list(session: &mut Session, parameter: &Parameter) -> anyhow::Result<()> {
+    session
+        .client
+        .write(ServerToClient::FileCount(parameter.files.len() as u64))?;
+
+    for file_metadata in &parameter.files {
+        session
+            .client
+            .write(ServerToClient::FileListEntry(file_metadata.clone()))?;
+    }
+
+    Ok(())
+}
+
 /// Reads a file request from the client — either a request to have an individual file sent,
 /// or a file listing request. On success, returns true if the client should continue to send
 /// an individual file request, or false if the client may send any request afterwards.
@@ -289,81 +307,21 @@ pub fn determine_client_udp_address(
 ///
 /// # Panics
 /// Panics on file or block count overflow.
-pub fn open_transfer(session: &mut Session, parameter: &Parameter) -> anyhow::Result<bool> {
+pub fn open_transfer(
+    session: &mut Session,
+    parameter: &Parameter,
+    request: FileRequest,
+) -> anyhow::Result<()> {
     session.transfer = Transfer::default();
 
-    let mut request: ClientToServer = session.client.read()?;
-
-    // Check if a file list is being requested, either Dir or Multi
-    match request {
-        ClientToServer::DirList => {
-            session.client.write(ServerToClient::DirListHeader {
-                status: DirListStatus::Ok,
-                num_files: parameter
-                    .files
-                    .len()
-                    .try_into()
-                    .expect("File count overflow"),
-            })?;
-
-            for file_metadata in &parameter.files {
-                session
-                    .client
-                    .write(ServerToClient::DirListFile(file_metadata.clone()))?;
-            }
-
-            let ClientToServer::DirListEnd = session.client.read()? else {
-                bail!("Expected acknowledgment of file listing");
-            };
-
-            println!("File list sent!");
-            return Ok(false); // should not try to receive a file request
-        }
-        ClientToServer::MultiRequest => {
-            session.client.write(ServerToClient::MultiFileCount(
-                parameter
-                    .files
-                    .len()
-                    .try_into()
-                    .expect("File count overflow"),
-            ))?;
-
-            let ClientToServer::MultiAcknowledgeCount = session.client.read()? else {
-                bail!("Expected acknowledgment of file count");
-            };
-
-            for file_metadata in &parameter.files {
-                session
-                    .client
-                    .write(ServerToClient::MultiFile(file_metadata.clone()))?;
-            }
-
-            let ClientToServer::MultiEnd = session.client.read()? else {
-                bail!("Expected acknowledgment of file list");
-            };
-
-            request = session.client.read()?;
-        }
-        _ => {} // other requests handled later
-    }
-
-    // Now we should definitely have gotten a file request. Use the opportunity to perform RTT
-    // estimation as well
-    let ping_s = Instant::now();
-    let ClientToServer::FileRequest {
+    let FileRequest {
         path,
         block_size,
         target_rate,
         error_rate,
         slowdown,
         speedup,
-    } = request
-    else {
-        bail!("Expected file request");
-    };
-
-    // end round trip time estimation
-    let ping_e = Instant::now();
+    } = request;
 
     // store the filename in the transfer object
     let requested_path = session.transfer.filename.insert(path);
@@ -437,9 +395,23 @@ pub fn open_transfer(session: &mut Session, parameter: &Parameter) -> anyhow::Re
         udp_port: udp_socket.local_addr()?.port(),
     })?;
 
+    Ok(())
+}
+
+/// Takes the given ping `Instant`s and uses them to calculate an initial inter-packet delay, which
+/// will be set for the session.
+///
+/// # Panics
+/// Panics on arithmetic overflow.
+pub fn start_transfer_timing(
+    session: &mut Session,
+    parameter: &Parameter,
+    ping_start: Instant,
+    ping_end: Instant,
+) {
     // calculate and convert RTT to microseconds...
-    session.properties.wait_µs = ping_e
-        .duration_since(ping_s)
+    session.properties.wait_µs = ping_end
+        .duration_since(ping_start)
         .as_micros()
         .try_into()
         .expect("RTT microseconds conversion overflow");
@@ -468,7 +440,4 @@ pub fn open_transfer(session: &mut Session, parameter: &Parameter) -> anyhow::Re
     if parameter.transcript_yn {
         crate::common::transcript_warn_error(super::transcript::open(session, parameter));
     }
-
-    // we succeeded!
-    Ok(true) // should try to receive a file request
 }

@@ -9,7 +9,7 @@ use anyhow::bail;
 
 use super::{OutputMode, Parameter, Retransmit, Session, Transfer};
 use crate::{
-    message::{ClientToServer, ServerToClient, TransmissionControl, UdpMethod},
+    message::{ClientToServer, FileRequest, ServerToClient, TransmissionControl, UdpMethod},
     types::{BlockIndex, ErrorRate},
 };
 
@@ -91,14 +91,16 @@ pub fn open_transfer(
     local_filename: PathBuf,
 ) -> anyhow::Result<u16> {
     // submit the transfer request
-    session.server.write(ClientToServer::FileRequest {
-        path: remote_filename.clone(),
-        block_size: parameter.block_size,
-        target_rate: parameter.target_rate,
-        error_rate: parameter.error_rate,
-        slowdown: parameter.slower,
-        speedup: parameter.faster,
-    })?;
+    session
+        .server
+        .write(ClientToServer::FileRequest(FileRequest {
+            path: remote_filename.clone(),
+            block_size: parameter.block_size,
+            target_rate: parameter.target_rate,
+            error_rate: parameter.error_rate,
+            slowdown: parameter.slower,
+            speedup: parameter.faster,
+        }))?;
 
     // see if the request was successful
     let result = session.server.read()?;

@@ -8,21 +8,9 @@ use crate::types::{
 pub enum ClientToServer {
     ProtocolRevision(u32),
     AuthenticationResponse([u8; 16]),
-    FileRequest {
-        path: PathBuf,
-        block_size: BlockSize,
-        target_rate: TargetRate,
-        error_rate: ErrorRate,
-        slowdown: Fraction,
-        speedup: Fraction,
-    },
+    FileRequest(FileRequest),
     UdpInit(UdpMethod),
-    MultiRequest,
-    MultiAcknowledgeCount,
-    MultiEnd,
-    RetransmitMany(Vec<BlockIndex>),
-    DirList,
-    DirListEnd,
+    FileListRequest,
 }
 
 #[derive(Debug, bincode::Encode, bincode::Decode)]
@@ -39,13 +27,8 @@ pub enum ServerToClient {
     },
     FileRequestError(FileRequestError),
     UdpDone,
-    DirListHeader {
-        status: DirListStatus,
-        num_files: u32,
-    },
-    DirListFile(FileMetadata),
-    MultiFileCount(u32),
-    MultiFile(FileMetadata),
+    FileCount(u64),
+    FileListEntry(FileMetadata),
 }
 
 #[derive(Debug, bincode::Encode, bincode::Decode)]
@@ -62,6 +45,16 @@ impl TransmissionControl {
     pub const SIZE: usize = 8;
 }
 
+#[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
+pub struct FileRequest {
+    pub path: PathBuf,
+    pub block_size: BlockSize,
+    pub target_rate: TargetRate,
+    pub error_rate: ErrorRate,
+    pub slowdown: Fraction,
+    pub speedup: Fraction,
+}
+
 #[derive(Debug, Copy, Clone, bincode::Encode, bincode::Decode)]
 pub enum UdpMethod {
     StaticPort(u16),
@@ -71,12 +64,6 @@ pub enum UdpMethod {
 #[derive(Debug, Copy, Clone, bincode::Encode, bincode::Decode)]
 pub enum FileRequestError {
     Nonexistent,
-}
-
-#[derive(Debug, Copy, Clone, bincode::Encode, bincode::Decode)]
-pub enum DirListStatus {
-    Ok,
-    Unsupported,
 }
 
 #[cfg(test)]

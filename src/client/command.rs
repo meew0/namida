@@ -11,7 +11,7 @@ use super::{ring, OutputMode, Parameter, Session, Statistics, Transfer};
 use crate::{
     common::SocketWrapper,
     datagram::{self, BlockType},
-    message::{ClientToServer, DirListStatus, ServerToClient},
+    message::{ClientToServer, ServerToClient},
     types::{
         BlockIndex, BlockSize, ErrorRate, FileMetadata, FileSize, Fraction, TargetRate, UdpErrors,
     },
@@ -86,21 +86,15 @@ pub fn connect(command: &[&str], parameter: &mut Parameter) -> anyhow::Result<Se
 /// Returns an error on I/O failure.
 pub fn dir(_command: &[&str], session: &mut Session) -> anyhow::Result<()> {
     // send request and parse the resulting response
-    session.server.write(ClientToServer::DirList)?;
-    let ServerToClient::DirListHeader { status, num_files } = session.server.read()? else {
-        bail!("Expected dir list status");
+    session.server.write(ClientToServer::FileListRequest)?;
+    let ServerToClient::FileCount(num_files) = session.server.read()? else {
+        bail!("Expected file count");
     };
-    if !matches!(status, DirListStatus::Ok) {
-        bail!(
-            "Server does not support listing of shared files: {:?}",
-            status
-        );
-    }
 
     eprintln!("Remote file list:");
     for i in 0..num_files {
-        let ServerToClient::DirListFile(file_metadata) = session.server.read()? else {
-            bail!("Expected dir list file");
+        let ServerToClient::FileListEntry(file_metadata) = session.server.read()? else {
+            bail!("Expected file list entry");
         };
 
         eprintln!(
@@ -111,9 +105,6 @@ pub fn dir(_command: &[&str], session: &mut Session) -> anyhow::Result<()> {
         );
     }
     eprintln!();
-
-    session.server.write(ClientToServer::DirListEnd)?;
-
     Ok(())
 }
 
@@ -148,15 +139,10 @@ pub fn get(
         multimode = true;
         println!("Requesting all available files");
 
-        session.server.write(ClientToServer::MultiRequest)?;
-        let ServerToClient::MultiFileCount(count) = session.server.read()? else {
+        session.server.write(ClientToServer::FileListRequest)?;
+        let ServerToClient::FileCount(count) = session.server.read()? else {
             bail!("Expected file count");
         };
-
-        session
-            .server
-            .write(ClientToServer::MultiAcknowledgeCount)?;
-
         if count == 0 {
             bail!("Server advertised no files to get");
         }
@@ -166,7 +152,7 @@ pub fn get(
         println!("Multi-GET of {count} files:");
 
         for _i in 0..count {
-            let ServerToClient::MultiFile(file_metadata) = session.server.read()? else {
+            let ServerToClient::FileListEntry(file_metadata) = session.server.read()? else {
                 bail!("Expected file");
             };
             let FileMetadata { path, size } = file_metadata;
@@ -175,7 +161,6 @@ pub fn get(
             file_names.push(path);
         }
 
-        session.server.write(ClientToServer::MultiEnd)?;
         session.server.flush()?;
     } else {
         file_names.push(PathBuf::from(command[1].to_owned()));
