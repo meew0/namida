@@ -1,8 +1,6 @@
 #![warn(clippy::pedantic)]
 #![warn(clippy::style)]
-#![warn(clippy::allow_attributes)] // add once lint_reasons is stable
-#![warn(clippy::allow_attributes_without_reason)] // add once lint_reasons is stable
-#![warn(clippy::arithmetic_side_effects)] // potentially add in the future
+#![warn(clippy::arithmetic_side_effects)]
 #![warn(clippy::as_underscore)]
 #![warn(clippy::assertions_on_result_states)]
 #![warn(clippy::branches_sharing_code)]
@@ -87,7 +85,6 @@
 #![warn(macro_use_extern_crate)]
 #![warn(meta_variable_misuse)]
 #![warn(missing_abi)]
-// #![warn(must_not_suspend)] // add once stable
 #![warn(pointer_structural_match)]
 #![warn(unsafe_op_in_unsafe_fn)]
 #![warn(unused_crate_dependencies)]
@@ -95,7 +92,7 @@
 #![warn(unused_import_braces)]
 #![warn(unused_qualifications)]
 #![warn(unused_tuple_struct_fields)]
-#![allow(clippy::doc_markdown)] // false positives on any kind of camel case-looking words
+#![allow(clippy::doc_markdown)]
 #![allow(clippy::enum_glob_use)]
 #![allow(clippy::too_many_lines)] // warn later with cognitive_complexity
 #![allow(uncommon_codepoints)]
