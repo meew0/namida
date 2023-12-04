@@ -8,6 +8,7 @@ use crate::{
     datagram::BlockType,
     message::{
         ClientToServer, DirListStatus, FileRequestError, ServerToClient, TransmissionControl,
+        UdpMethod,
     },
     types::{BlockIndex, FileSize},
 };
@@ -209,58 +210,73 @@ pub fn negotiate(session: &mut Session) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Creates a new UDP socket for transmitting the file data associated with our pending transfer
-/// and receives the destination port number from the client.
+/// Determine the address to which we should send UDP data. This can be done using one of two
+/// methods, depending on the client's choice:
+///
+///  * `StaticPort`, where we send it UDP data on the same address as the TCP one, but with a
+///    client-specified UDP port number, or
+///  * `Discovery`, where the client sends us UDP data and we send our data back where that came
+///    from.
 ///
 /// # Errors
-/// Returns an error on I/O failure, if the client address could not be resolved, or when the client
-/// sends an unexpected message instead of the destination port.
-pub fn open_port(session: &mut Session, parameter: &Parameter) -> anyhow::Result<()> {
-    let mut address = if let Some(client) = &parameter.client {
-        // Resolve the target address specified in the parameters
-        client
-            .to_socket_addrs()?
-            .next()
-            .ok_or_else(|| anyhow!("Could not resolve specified client address: {}", client))?
-    } else {
-        // If no dedicated client parameter is set, connect back to IP address of TCP connection
-        session.client.socket.peer_addr()?
-    };
+/// Returns an error on I/O failure.
+///
+/// # Panics
+/// Panics if discovery has been specified, but no UDP socket is available to send data from.
+pub fn determine_client_udp_address(
+    session: &mut Session,
+    parameter: &Parameter,
+    method: UdpMethod,
+) -> anyhow::Result<()> {
+    let address = match &parameter.client {
+        Some(parameter_client) => {
+            // If a client address has been specified in the command line, we don't care about what
+            // the TCP client told us, we will send the data there.
+            parameter_client.to_socket_addrs()?.next().ok_or_else(|| {
+                anyhow!(
+                    "Could not resolve specified client address: {}",
+                    parameter_client
+                )
+            })?
+        }
+        None => {
+            // If no dedicated client parameter is set, determine the address based on the desired
+            // method
+            match method {
+                UdpMethod::StaticPort(static_port) => {
+                    // Get the client's TCP address, overwrite the port, and use that as the target
+                    // UDP address
+                    let mut tcp_peer_addr = session.client.socket.peer_addr()?;
+                    tcp_peer_addr.set_port(static_port);
+                    tcp_peer_addr
+                }
+                UdpMethod::Discovery => {
+                    // Listen on our socket until we receive a `namida` message.
+                    let mut buffer = [0_u8; 6];
+                    let udp_socket = session.transfer.udp_socket.as_mut().expect("A UDP socket should have been set before calling `determine_client_udp_address`");
+                    let client_udp_address = loop {
+                        let (len, address) = udp_socket.recv_from(&mut buffer)?;
+                        if len == 6 && &buffer == b"namida" {
+                            break address;
+                        }
+                    };
 
-    // read in the port number from the client
-    let ClientToServer::UdpPort(port) = session.client.read()? else {
-        bail!("Expected UDP port number");
+                    // Tell the client that it worked
+                    session.client.write(ServerToClient::UdpDone)?;
+
+                    client_udp_address
+                }
+            }
+        }
     };
-    address.set_port(port);
 
     // print out the client address and port number
     if parameter.verbose_yn {
         println!("Sending to client {address}");
     }
 
-    // open a new datagram socket
-    let udp_socket = session
-        .transfer
-        .udp_socket
-        .insert(super::network::create_udp_socket(parameter)?);
-
-    // Send the generated port to the client, so it can try to hole-punch through stateful firewalls
-    session
-        .client
-        .write(ServerToClient::UdpPort(udp_socket.local_addr()?.port()))?;
-
-    let mut buffer = [0_u8; 6];
-    let client_udp_address = loop {
-        let (len, address) = udp_socket.recv_from(&mut buffer)?;
-        if len == 6 && &buffer == b"namida" {
-            break address;
-        }
-    };
-
-    session.client.write(ServerToClient::UdpDone)?;
-
     // we succeeded
-    session.transfer.udp_address = Some(client_udp_address);
+    session.transfer.udp_address = Some(address);
     Ok(())
 }
 
@@ -331,13 +347,26 @@ pub fn open_transfer(session: &mut Session, parameter: &Parameter) -> anyhow::Re
         _ => {} // other requests handled later
     }
 
-    // Now we should definitely have gotten a file request
-    let ClientToServer::FileRequest(requested_path) = request else {
+    // Now we should definitely have gotten a file request. Use the opportunity to perform RTT
+    // estimation as well
+    let ping_s = Instant::now();
+    let ClientToServer::FileRequest {
+        path,
+        block_size,
+        target_rate,
+        error_rate,
+        slowdown,
+        speedup,
+    } = request
+    else {
         bail!("Expected file request");
     };
 
+    // end round trip time estimation
+    let ping_e = Instant::now();
+
     // store the filename in the transfer object
-    let requested_path = session.transfer.filename.insert(requested_path);
+    let requested_path = session.transfer.filename.insert(path);
 
     // make a note of the request
     if parameter.verbose_yn {
@@ -348,9 +377,9 @@ pub fn open_transfer(session: &mut Session, parameter: &Parameter) -> anyhow::Re
     let file = match std::fs::File::open(&requested_path) {
         Ok(opened_file) => session.transfer.file.insert(opened_file),
         Err(err) => {
-            session.client.write(ServerToClient::FileResponseOne(Err(
+            session.client.write(ServerToClient::FileRequestError(
                 FileRequestError::Nonexistent,
-            )))?;
+            ))?;
             bail!(
                 "File '{}' does not exist or cannot be read: {}",
                 requested_path.display(),
@@ -359,43 +388,12 @@ pub fn open_transfer(session: &mut Session, parameter: &Parameter) -> anyhow::Re
         }
     };
 
-    // begin round trip time estimation
-    let ping_s = Instant::now();
-
-    // try to signal success to the client
-    session
-        .client
-        .write(ServerToClient::FileResponseOne(Ok(())))?;
-
-    // read in the block size, target bitrate, and error rate
-    let ClientToServer::BlockSize(block_size) = session.client.read()? else {
-        bail!("Expected block size");
-    };
+    // store other requested property values
     session.properties.block_size = block_size;
-
-    let ClientToServer::TargetRate(target_rate) = session.client.read()? else {
-        bail!("Expected target rate");
-    };
     session.properties.target_rate = target_rate;
-
-    let ClientToServer::ErrorRate(error_rate) = session.client.read()? else {
-        bail!("Expected error rate");
-    };
     session.properties.error_rate = error_rate;
-
-    // end round trip time estimation
-    let ping_e = Instant::now();
-
-    // read in the slowdown and speedup factors
-    let ClientToServer::Slowdown(slower) = session.client.read()? else {
-        bail!("Expected slowdown");
-    };
-    session.properties.slower = slower;
-
-    let ClientToServer::Speedup(faster) = session.client.read()? else {
-        bail!("Expected speedup");
-    };
-    session.properties.faster = faster;
+    session.properties.slower = slowdown;
+    session.properties.faster = speedup;
 
     // determine the file size, and calculate the number of blocks based on that
     session.properties.file_size = FileSize(file.seek(SeekFrom::End(0))?);
@@ -424,19 +422,20 @@ pub fn open_transfer(session: &mut Session, parameter: &Parameter) -> anyhow::Re
         BlockIndex(block_count_base.try_into().expect("block count overflow"));
     session.properties.epoch = crate::common::epoch();
 
-    // reply with the length, block size, number of blocks, and run epoch
-    session
-        .client
-        .write(ServerToClient::FileSize(session.properties.file_size))?;
-    session
-        .client
-        .write(ServerToClient::BlockSize(session.properties.block_size))?;
-    session
-        .client
-        .write(ServerToClient::BlockCount(session.properties.block_count))?;
-    session
-        .client
-        .write(ServerToClient::Epoch(session.properties.epoch))?;
+    // open a UDP socket now, so we have a port number that the client can try to connect to
+    let udp_socket = session
+        .transfer
+        .udp_socket
+        .insert(super::network::create_udp_socket(parameter)?);
+
+    // signal success to the client and send it the required metadata fields
+    session.client.write(ServerToClient::FileRequestSuccess {
+        file_size: session.properties.file_size,
+        block_size: session.properties.block_size,
+        block_count: session.properties.block_count,
+        epoch: session.properties.epoch,
+        udp_port: udp_socket.local_addr()?.port(),
+    })?;
 
     // calculate and convert RTT to microseconds...
     session.properties.wait_µs = ping_e

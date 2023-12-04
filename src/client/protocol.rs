@@ -9,7 +9,7 @@ use anyhow::bail;
 
 use super::{OutputMode, Parameter, Retransmit, Session, Transfer};
 use crate::{
-    message::{ClientToServer, ServerToClient, TransmissionControl},
+    message::{ClientToServer, ServerToClient, TransmissionControl, UdpMethod},
     types::{BlockIndex, ErrorRate},
 };
 
@@ -75,7 +75,8 @@ pub fn negotiate(session: &mut Session) -> anyhow::Result<()> {
 
 /// Tries to create a new TTP file request object for the given session by submitting a file request
 /// to the server (which is waiting for the name of a file to transfer). If the request is accepted,
-/// we retrieve the file parameters, open the file for writing, and return `Ok(())`.
+/// we retrieve the file parameters, open the file for writing, and return `Ok` with the server's
+/// UDP port.
 ///
 /// # Errors
 /// Returns an error on I/O failure, if the file cannot be sent, or if the server sent unexpected
@@ -88,73 +89,57 @@ pub fn open_transfer(
     parameter: &Parameter,
     remote_filename: PathBuf,
     local_filename: PathBuf,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<u16> {
     // submit the transfer request
-    session
-        .server
-        .write(ClientToServer::FileRequest(remote_filename.clone()))?;
+    session.server.write(ClientToServer::FileRequest {
+        path: remote_filename.clone(),
+        block_size: parameter.block_size,
+        target_rate: parameter.target_rate,
+        error_rate: parameter.error_rate,
+        slowdown: parameter.slower,
+        speedup: parameter.faster,
+    })?;
 
     // see if the request was successful
-    let ServerToClient::FileResponseOne(result) = session.server.read()? else {
-        bail!("Expected file response");
+    let result = session.server.read()?;
+    let remote_udp_port = match result {
+        ServerToClient::FileRequestSuccess {
+            file_size,
+            block_size,
+            block_count,
+            epoch,
+            udp_port,
+        } => {
+            // It was. Initialise the transfer
+            session.transfer = Transfer::default();
+            session.transfer.remote_filename = Some(remote_filename);
+            session.transfer.local_filename = Some(local_filename);
+
+            // Get the server's parameters
+            session.transfer.file_size = file_size;
+            if block_size != parameter.block_size {
+                bail!("Block size disagreement");
+            }
+            session.transfer.block_count = block_count;
+            session.transfer.epoch = epoch;
+
+            // Return the server's UDP port to outside of the match block, so we can return it from
+            // the function later
+            udp_port
+        }
+        ServerToClient::FileRequestError(err) => {
+            bail!(
+                "Server: File does not exist or cannot be transmitted: {:?}",
+                err
+            );
+        }
+        _ => {
+            bail!(
+                "Expected `FileRequestSuccess` or `FileRequestError` but got: {:?}",
+                result
+            );
+        }
     };
-
-    // make sure the result was a good one
-    if let Err(err) = result {
-        bail!(
-            "Server: File does not exist or cannot be transmitted: {:?}",
-            err
-        );
-    }
-
-    // Send our desired parameters...
-
-    session
-        .server
-        .write(ClientToServer::BlockSize(parameter.block_size))?;
-    session
-        .server
-        .write(ClientToServer::TargetRate(parameter.target_rate))?;
-    session
-        .server
-        .write(ClientToServer::ErrorRate(parameter.error_rate))?;
-    session.server.flush()?;
-
-    session
-        .server
-        .write(ClientToServer::Slowdown(parameter.slower))?;
-    session
-        .server
-        .write(ClientToServer::Speedup(parameter.faster))?;
-    session.server.flush()?;
-
-    // and get the server's parameters
-
-    session.transfer = Transfer::default();
-    session.transfer.remote_filename = Some(remote_filename);
-    session.transfer.local_filename = Some(local_filename);
-
-    let ServerToClient::FileSize(file_size) = session.server.read()? else {
-        bail!("Expected file size");
-    };
-    session.transfer.file_size = file_size;
-
-    let ServerToClient::BlockSize(block_size) = session.server.read()? else {
-        bail!("Expected block size");
-    };
-    if block_size != parameter.block_size {
-        bail!("Block size disagreement");
-    }
-
-    let ServerToClient::BlockCount(block_count) = session.server.read()? else {
-        bail!("Expected block count");
-    };
-    session.transfer.block_count = block_count;
-
-    let ServerToClient::Epoch(epoch) = session.server.read()? else {
-        bail!("Expected epoch");
-    };
-    session.transfer.epoch = epoch;
 
     // we start out with every block yet to transfer
     session.transfer.blocks_left = session.transfer.block_count;
@@ -194,8 +179,8 @@ pub fn open_transfer(
         crate::common::transcript_warn_error(super::transcript::open(session, parameter));
     }
 
-    // indicate success
-    Ok(())
+    // indicate success, and let the outside know of the server's UDP port
+    Ok(remote_udp_port)
 }
 
 /// Creates a new UDP socket for receiving the file data associated with our pending transfer and
@@ -204,7 +189,11 @@ pub fn open_transfer(
 /// # Errors
 /// Returns an error when a socket could not be opened or when the port number could not be
 /// communicated to the server.
-pub fn open_port(session: &mut Session, parameter: &Parameter) -> anyhow::Result<()> {
+pub fn open_port(
+    session: &mut Session,
+    parameter: &Parameter,
+    remote_port: u16,
+) -> anyhow::Result<()> {
     // open a new UDP socket
     let udp_socket = session
         .transfer
@@ -214,29 +203,39 @@ pub fn open_port(session: &mut Session, parameter: &Parameter) -> anyhow::Result
             session.server.socket.local_addr()?.is_ipv6(),
         )?);
 
-    // find out the port number we're using
-    let port = udp_socket.local_addr()?.port();
+    // Let the server know of our UDP address, by one means or another.
+    if parameter.discovery {
+        // If discovery is desired, let the server know of that fact so it can listen for our
+        // UDP message.
+        session
+            .server
+            .write(ClientToServer::UdpInit(UdpMethod::Discovery))?;
 
-    // send that port number to the server
-    session.server.write(ClientToServer::UdpPort(port))?;
-    session.server.flush()?;
+        // Send some (non-)data to the server. This will open the port on NATs along the path to
+        // the server, and also let the server know about the mapped port on the final NAT, if one
+        // exists.
+        let mut remote_address = session.server.socket.peer_addr()?;
+        remote_address.set_port(remote_port);
 
-    // Obtain the server's UDP port, and try to send some (non-)data to it. This will hopefully
-    // punch a hole through stateful firewalls and/or NATs in the way between us and the server.
-    let ServerToClient::UdpPort(remote_port) = session.server.read()? else {
-        bail!("Expected UDP port from server");
-    };
-    let mut remote_address = session.server.socket.peer_addr()?;
-    remote_address.set_port(remote_port);
+        // Try to send the message every second, until the server tells us (over TCP) that it has
+        // arrived.
+        loop {
+            udp_socket.send_to(b"namida", remote_address)?;
 
-    loop {
-        udp_socket.send_to(b"namida", remote_address)?;
+            if matches!(session.server.read()?, ServerToClient::UdpDone) {
+                break;
+            }
 
-        if matches!(session.server.read()?, ServerToClient::UdpDone) {
-            break;
+            std::thread::sleep(Duration::from_secs(1));
         }
-
-        std::thread::sleep(Duration::from_secs(1));
+    } else {
+        // If discovery is not desired, find out the port number we're using and send it to the
+        // server as-is.
+        let port = udp_socket.local_addr()?.port();
+        session
+            .server
+            .write(ClientToServer::UdpInit(UdpMethod::StaticPort(port)))?;
+        session.server.flush()?;
     }
 
     Ok(())

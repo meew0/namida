@@ -4,35 +4,41 @@ use crate::types::{
     BlockIndex, BlockSize, ErrorRate, FileMetadata, FileSize, Fraction, TargetRate,
 };
 
-#[derive(bincode::Encode, bincode::Decode)]
+#[derive(Debug, bincode::Encode, bincode::Decode)]
 pub enum ClientToServer {
     ProtocolRevision(u32),
     AuthenticationResponse([u8; 16]),
-    FileRequest(PathBuf),
+    FileRequest {
+        path: PathBuf,
+        block_size: BlockSize,
+        target_rate: TargetRate,
+        error_rate: ErrorRate,
+        slowdown: Fraction,
+        speedup: Fraction,
+    },
+    UdpInit(UdpMethod),
     MultiRequest,
     MultiAcknowledgeCount,
     MultiEnd,
-    BlockSize(BlockSize),
-    TargetRate(TargetRate),
-    ErrorRate(ErrorRate),
-    Slowdown(Fraction),
-    Speedup(Fraction),
-    UdpPort(u16),
     RetransmitMany(Vec<BlockIndex>),
     DirList,
     DirListEnd,
 }
 
-#[derive(bincode::Encode, bincode::Decode)]
+#[derive(Debug, bincode::Encode, bincode::Decode)]
 pub enum ServerToClient {
     ProtocolRevision(u32),
     AuthenticationChallenge([u8; 64]),
     AuthenticationStatus(bool),
-    FileResponseOne(Result<(), FileRequestError>),
-    FileSize(FileSize),
-    BlockSize(BlockSize),
-    BlockCount(BlockIndex),
-    Epoch(Duration),
+    FileRequestSuccess {
+        file_size: FileSize,
+        block_size: BlockSize,
+        block_count: BlockIndex,
+        epoch: Duration,
+        udp_port: u16,
+    },
+    FileRequestError(FileRequestError),
+    UdpDone,
     DirListHeader {
         status: DirListStatus,
         num_files: u32,
@@ -40,8 +46,6 @@ pub enum ServerToClient {
     DirListFile(FileMetadata),
     MultiFileCount(u32),
     MultiFile(FileMetadata),
-    UdpPort(u16),
-    UdpDone,
 }
 
 #[derive(Debug, bincode::Encode, bincode::Decode)]
@@ -58,12 +62,18 @@ impl TransmissionControl {
     pub const SIZE: usize = 8;
 }
 
-#[derive(Debug, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Copy, Clone, bincode::Encode, bincode::Decode)]
+pub enum UdpMethod {
+    StaticPort(u16),
+    Discovery,
+}
+
+#[derive(Debug, Copy, Clone, bincode::Encode, bincode::Decode)]
 pub enum FileRequestError {
     Nonexistent,
 }
 
-#[derive(Debug, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Copy, Clone, bincode::Encode, bincode::Decode)]
 pub enum DirListStatus {
     Ok,
     Unsupported,

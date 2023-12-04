@@ -189,10 +189,11 @@ pub fn get(
         let local_filename = create_local_filename(multimode, &remote_filename, command);
 
         // negotiate the file request with the server
-        super::protocol::open_transfer(session, parameter, remote_filename, local_filename)?;
+        let remote_udp_port =
+            super::protocol::open_transfer(session, parameter, remote_filename, local_filename)?;
 
         // create the UDP data socket
-        super::protocol::open_port(session, parameter)?;
+        super::protocol::open_port(session, parameter, remote_udp_port)?;
 
         // allocate the retransmission table and received bitfield
         session.transfer.retransmit.previous_table = vec![];
@@ -733,7 +734,7 @@ pub fn set(command: &[&str], parameter: &mut Parameter) -> anyhow::Result<()> {
         if property.eq_ignore_ascii_case("server") {
             parameter.server = value_str.to_owned();
         } else if property.eq_ignore_ascii_case("udpport") {
-            parameter.client_port = value_str.parse()?;
+            parameter.client_port = Some(value_str.parse()?);
         } else if property.eq_ignore_ascii_case("buffer") {
             parameter.udp_buffer = value_str.parse()?;
         } else if property.eq_ignore_ascii_case("blocksize") {
@@ -785,7 +786,7 @@ pub fn set(command: &[&str], parameter: &mut Parameter) -> anyhow::Result<()> {
         println!("server = {}", parameter.server);
     }
     if do_all || property.eq_ignore_ascii_case("udpport") {
-        println!("udpport = {}", i32::from(parameter.client_port));
+        println!("udpport = {:?}", parameter.client_port);
     }
     if do_all || property.eq_ignore_ascii_case("buffer") {
         println!("buffer = {}", parameter.udp_buffer);

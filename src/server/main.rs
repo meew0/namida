@@ -9,7 +9,7 @@ use super::{Parameter, Session, Transfer};
 use crate::{
     common::SocketWrapper,
     datagram::BlockType,
-    message::TransmissionControl,
+    message::{ClientToServer, TransmissionControl},
     server::Properties,
     types::{BlockIndex, ErrorRate, FileMetadata, FileSize},
 };
@@ -118,9 +118,16 @@ pub fn client_handler(mut session: Session, parameter: &Parameter) -> anyhow::Re
             }
         }
 
-        // negotiate a data transfer port
-        if let Err(err) = super::protocol::open_port(&mut session, parameter) {
-            println!("WARNING: UDP socket creation failed: {err:?}");
+        // Find out which method the client would like to use to receive UDP data
+        let ClientToServer::UdpInit(udp_method) = session.client.read()? else {
+            bail!("Expected UdpInit");
+        };
+
+        // Get the client's UDP address
+        if let Err(err) =
+            super::protocol::determine_client_udp_address(&mut session, parameter, udp_method)
+        {
+            println!("WARNING: UDP address determination failed: {err:?}");
             continue;
         }
 

@@ -5,7 +5,7 @@ use std::{
 };
 
 use ::libc;
-use anyhow::{anyhow, bail};
+use anyhow::bail;
 use to_socket_addrs::ToSocketAddrsWithDefaultPort;
 
 use super::Parameter;
@@ -38,49 +38,31 @@ pub fn create_tcp_socket(parameter: &Parameter) -> anyhow::Result<TcpStream> {
 /// Returns an error if the socket could not be created or configured correctly.
 pub fn create_udp_socket(parameter: &Parameter, ipv6: bool) -> anyhow::Result<UdpSocket> {
     let catch_all_host = crate::common::catch_all_host(ipv6);
-    let mut higher_port_attempt = 0;
-    let mut socket_result = None;
+    let port = parameter.client_port.unwrap_or(0);
 
-    while higher_port_attempt < 256 {
-        let port = parameter.client_port.saturating_add(higher_port_attempt);
+    let mut socket = match UdpSocket::bind((catch_all_host, port)) {
+        Ok(socket) => socket,
+        Err(err) => match err.kind() {
+            ErrorKind::AddrInUse => {
+                bail!("UDP port {port} is in use. Please specify a different port, or make use of auto-discovery by not specifying a port at all.");
+            }
+            _ => {
+                bail!(
+                    "Miscellaneous error while trying to create UDP socket: {}",
+                    err
+                );
+            }
+        },
+    };
 
-        // try to create a socket with this port
-        let mut socket = match UdpSocket::bind((catch_all_host, port)) {
-            Ok(socket) => socket,
-            Err(err) => match err.kind() {
-                ErrorKind::AddrInUse => {
-                    higher_port_attempt = higher_port_attempt.saturating_add(1);
-                    continue;
-                }
-                _ => {
-                    bail!("Error while trying to create UDP socket: {}", err);
-                }
-            },
-        };
+    // set the receive buffer size
+    if let Err(err) = set_udp_receive_buffer(&mut socket, parameter.udp_buffer) {
+        println!("WARNING: {err}");
+    };
 
-        // set the receive buffer size
-        if let Err(err) = set_udp_receive_buffer(&mut socket, parameter.udp_buffer) {
-            println!("WARNING: {err}");
-        };
+    println!("Receiving data over UDP at: {}", socket.local_addr()?);
 
-        println!("Receiving data over UDP at: {}", socket.local_addr()?);
-        socket_result = Some(socket);
-        break;
-    }
-
-    if higher_port_attempt > 0 {
-        println!(
-            "Warning: ports {} to {} are in use",
-            parameter.client_port,
-            parameter
-                .client_port
-                .saturating_add(higher_port_attempt)
-                .saturating_sub(1),
-        );
-    }
-
-    // make sure that we succeeded with at least one address
-    socket_result.ok_or_else(|| anyhow!("Error in creating UDP socket"))
+    Ok(socket)
 }
 
 /// Sets the transmit buffer of the given UDP socket. Currently only works on Linux.

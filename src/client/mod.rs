@@ -74,8 +74,17 @@ pub struct Parameter {
     #[arg(long = "server", default_value_t = config::DEFAULT_SERVER_NAME.to_owned())]
     pub server: String,
 
-    #[arg(long = "udpport", default_value_t = config::DEFAULT_CLIENT_PORT)]
-    pub client_port: u16,
+    /// Specify a static UDP port to receive data on. If not specified, a random port will be used.
+    #[arg(long = "udpport")]
+    pub client_port: Option<u16>,
+
+    /// By default, the client will have the server discover its public UDP address by sending some
+    /// data to it. If this option is set, this behaviour will be disabled and data will always be
+    /// sent to the client's TCP address combined with the port to which the UDP socket is bound.
+    /// This will make the file initialisation process simpler and more deterministic, but it will
+    /// cause problems if the client is behind NAT.
+    #[arg(long = "no-discovery", action = clap::ArgAction::SetFalse)]
+    pub discovery: bool,
 
     #[arg(long = "buffer", default_value_t = config::DEFAULT_UDP_BUFFER)]
     pub udp_buffer: u32,
