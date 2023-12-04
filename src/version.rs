@@ -1,5 +1,5 @@
 /// Our own protocol revision counter. On every protocol update, this is incremented by 1.
-pub const NAMIDA_PROTOCOL_REVISION: u16 = 0;
+pub const NAMIDA_PROTOCOL_REVISION: u16 = 1;
 
 /// The protocol revision as a 32 bit integer, compatible with Tsunami's negotiation mechanism.
 /// Tsunami simply used a date interpreted as hexadecimal digits, e.g. 0x20061025.

@@ -3,7 +3,7 @@ members = []
 [package]
 name = "namida"
 authors = ["C2Rust"]
-version = "0.0.0"    # minor part should stay in sync with NAMIDA_PROTOCOL_REVISION
+version = "0.1.0"    # minor part should stay in sync with NAMIDA_PROTOCOL_REVISION
 publish = false
 edition = "2021"
 
