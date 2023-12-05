@@ -11,8 +11,8 @@ puts "----------------------------"
 puts
 
 start = Time.now
-sin, sout, swait = Open3.popen2e(*NAMIDA_PATH, "server", "--verbose", "--transcript", "source/fish.jpg")
-cin, cout, cwait = Open3.popen2e(*NAMIDA_PATH, "client")
+sin, sout, swait = Open3.popen2e({ "RUST_BACKTRACE" => "1" }, *NAMIDA_PATH, "server", "--verbose", "--transcript", "source/fish.jpg", "--secret", "psk.txt")
+cin, cout, cwait = Open3.popen2e({ "RUST_BACKTRACE" => "1" }, *NAMIDA_PATH, "client", "--secret", "psk.txt")
 
 sleep 0.1
 cin.puts "set transcript yes"

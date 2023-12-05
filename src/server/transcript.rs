@@ -155,7 +155,7 @@ pub fn open(session: &mut Session, parameter: &Parameter) -> anyhow::Result<()> 
     writeln!(
         transcript,
         "protocol_version = 0x{:x}",
-        crate::version::PROTOCOL_REVISION,
+        crate::version::protocol_revision(parameter.encrypted),
     )?;
     writeln!(
         transcript,

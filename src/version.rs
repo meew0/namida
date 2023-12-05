@@ -5,7 +5,20 @@ pub const NAMIDA_PROTOCOL_REVISION: u16 = 1;
 /// Tsunami simply used a date interpreted as hexadecimal digits, e.g. 0x20061025.
 /// We use a different format that should always be incompatible with hypothetical other versions
 /// of Tsunami.
-pub const PROTOCOL_REVISION: u32 = 0xff23_0000 | NAMIDA_PROTOCOL_REVISION as u32;
+const PROTOCOL_REVISION: u32 = 0xff23_0000 | NAMIDA_PROTOCOL_REVISION as u32;
+
+/// This value is bitwise or-ed with `PROTOCOL_REVISION` if the given party desires an encrypted
+/// connection.
+const ENCRYPTED_PROTOCOL_FLAG: u32 = 0x0004_0000;
+
+#[must_use]
+pub fn protocol_revision(encrypted: bool) -> u32 {
+    if encrypted {
+        PROTOCOL_REVISION | ENCRYPTED_PROTOCOL_FLAG
+    } else {
+        PROTOCOL_REVISION
+    }
+}
 
 /// The version as a string. The semver “minor” part should be the same as the protocol revision
 /// counter.

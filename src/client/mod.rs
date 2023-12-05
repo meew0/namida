@@ -86,6 +86,11 @@ pub struct Parameter {
     #[arg(long = "no-discovery", action = clap::ArgAction::SetFalse)]
     pub discovery: bool,
 
+    /// If this flag is present, the client will not encrypt the connection. The same flag must also
+    /// be specified on the server.
+    #[arg(long = "unencrypted", action = clap::ArgAction::SetFalse)]
+    pub encrypted: bool,
+
     #[arg(long = "buffer", default_value_t = config::DEFAULT_UDP_BUFFER)]
     pub udp_buffer: u32,
 
@@ -131,8 +136,14 @@ pub struct Parameter {
     #[arg(long = "blockdump")]
     pub blockdump: bool,
 
-    #[arg(long = "passphrase")]
-    pub passphrase: Option<String>,
+    /// Specifies the path to a file from which the pre-shared key will be loaded. Only the first 32
+    /// bytes of the file will be used as the PSK. If not specified, a hard-coded key will be used;
+    /// this is not recommended.
+    #[arg(long = "secret")]
+    pub secret_file: Option<PathBuf>,
+
+    #[arg(skip = *crate::common::DEFAULT_SECRET)]
+    pub secret: [u8; 32],
 }
 
 #[derive(Default)]

@@ -52,22 +52,22 @@ pub fn connect(command: &[&str], parameter: &mut Parameter) -> anyhow::Result<Se
     // obtain our client socket, and create a new session object with it
     let mut session = Session {
         transfer: Transfer::default(),
-        server: SocketWrapper {
-            socket: super::network::create_tcp_socket(parameter)?,
-        },
+        server: SocketWrapper::new(super::network::create_tcp_socket(parameter)?),
     };
 
     // negotiate the connection parameters
-    if let Err(err) = super::protocol::negotiate(&mut session) {
+    if let Err(err) = super::protocol::negotiate(&mut session, parameter) {
         bail!("Protocol negotiation failed: {:?}", err);
     }
 
-    // get the shared secret, and authenticate to the server
-    let secret = match &parameter.passphrase {
-        Some(passphrase) => passphrase,
-        None => "kitten",
+    // authenticate to the server, and potentially initiate an encrypted connection
+    let auth_result = if parameter.encrypted {
+        super::protocol::authenticate_encrypted(&mut session, &parameter.secret)
+    } else {
+        super::protocol::authenticate_unencrypted(&mut session, &parameter.secret)
     };
-    if let Err(err) = super::protocol::authenticate(&mut session, secret) {
+
+    if let Err(err) = auth_result {
         bail!("Authentication failure: {:?}", err);
     }
 
@@ -759,8 +759,9 @@ pub fn set(command: &[&str], parameter: &mut Parameter) -> anyhow::Result<()> {
             parameter.losswindow_ms = value_str.parse()?;
         } else if property.eq_ignore_ascii_case("blockdump") {
             parameter.blockdump = value_str == "yes";
-        } else if property.eq_ignore_ascii_case("passphrase") {
-            parameter.passphrase = Some(value_str.to_owned());
+        } else if property.eq_ignore_ascii_case("secret") {
+            parameter.secret_file = Some(PathBuf::from(value_str));
+            crate::common::load_secret(&parameter.secret_file, &mut parameter.secret);
         }
     }
 
@@ -848,10 +849,10 @@ pub fn set(command: &[&str], parameter: &mut Parameter) -> anyhow::Result<()> {
             if parameter.blockdump { "yes" } else { "no" },
         );
     }
-    if do_all || property.eq_ignore_ascii_case("passphrase") {
+    if do_all || property.eq_ignore_ascii_case("secret") {
         println!(
-            "passphrase = {}",
-            if (parameter.passphrase).is_none() {
+            "secret = {}",
+            if (parameter.secret_file).is_none() {
                 "default"
             } else {
                 "<user-specified>"

@@ -5,6 +5,8 @@ use super::{Parameter, Session};
 /// The main function for the client running in interactive mode.
 #[allow(clippy::missing_errors_doc)]
 pub fn interactive(mut parameter: Parameter) -> anyhow::Result<()> {
+    crate::common::load_secret(&parameter.secret_file, &mut parameter.secret);
+
     // show version / build information
     eprintln!(
         "namida client for protocol revision {}\nVersion: {} (revision {})\nCompiled: {}\n",

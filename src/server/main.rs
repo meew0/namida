@@ -9,7 +9,7 @@ use super::{Parameter, Session, Transfer};
 use crate::{
     common::SocketWrapper,
     datagram::BlockType,
-    message::{ClientToServer, FileRequest, TransmissionControl},
+    message::{ClientToServer, FileRequest, NoiseHeader, TransmissionControl},
     server::Properties,
     types::{BlockIndex, ErrorRate, FileMetadata, FileSize},
 };
@@ -48,19 +48,17 @@ pub fn serve(mut parameter: Parameter) -> anyhow::Result<()> {
             let session = Session {
                 transfer: Transfer::default(),
                 properties: Properties::default(),
-                client: SocketWrapper { socket },
+                client: SocketWrapper::new(socket),
                 session_id,
             };
 
             // and run the client handler, catching any panics so we can inform the user about what
             // happened
-            let result =
-                std::panic::catch_unwind(move || client_handler(session, &parameter_cloned));
+            let result = client_handler(session, &parameter_cloned);
 
             match result {
-                Ok(Ok(())) => eprintln!("Child server thread terminated succcessfully."),
-                Ok(Err(err)) => eprintln!("Child server thread terminated with error: {err}"),
-                Err(_panic) => eprintln!("Child server thread panicked"),
+                Ok(()) => eprintln!("Child server thread terminated succcessfully."),
+                Err(err) => eprintln!("Child server thread terminated with error: {err}"),
             };
         });
     }
@@ -75,15 +73,23 @@ pub fn serve(mut parameter: Parameter) -> anyhow::Result<()> {
 pub fn client_handler(mut session: Session, parameter: &Parameter) -> anyhow::Result<()> {
     // negotiate the connection parameters
     // We call it negotiation, but we unilaterally impose our parameters on the client!
-    super::protocol::negotiate(&mut session)?;
+    super::protocol::negotiate(&mut session, parameter)?;
 
-    // have the client try to authenticate to us
-    super::protocol::authenticate(&mut session, parameter.secret.as_bytes())?;
+    // have the client try to authenticate to us, and potentially initiate an encrypted connection
+    if parameter.encrypted {
+        super::protocol::authenticate_encrypted(&mut session, &parameter.secret)?;
+    } else {
+        super::protocol::authenticate_unencrypted(&mut session, &parameter.secret)?;
+    };
 
     if parameter.verbose_yn {
         println!("Client authenticated. Negotiated parameters are:");
         println!("Block size: {}", session.properties.block_size);
         println!("Buffer size: {}", parameter.udp_buffer);
+        println!(
+            "Encryption: {}",
+            if parameter.encrypted { "yes" } else { "no" }
+        );
     }
 
     // while we haven't been told to stop
@@ -150,8 +156,11 @@ fn handle_transfer(
     let mut ipd_time = 0_i64;
     let mut ipd_time_max = 0_u64;
 
-    let mut control_slice = [0_u8; 8];
+    let mut control_slice = [0_u8; 100];
     let mut control_slice_cursor = 0_usize;
+    let mut maybe_header: Option<NoiseHeader> = None;
+    let mut maybe_transmission_control: Option<TransmissionControl> = None;
+
     let mut retransmit_accept_iteration = 0;
 
     let mut datagram_block_buffer: Vec<u8> = vec![0_u8; session.properties.block_size.0 as usize];
@@ -197,123 +206,115 @@ fn handle_transfer(
         }
 
         // see if transmit requests are available
-        let read_result = session
-            .client
-            .socket
-            .read(&mut control_slice[control_slice_cursor..]);
-        let read_count = match read_result {
-            Ok(read_count) => read_count,
-            Err(err) => {
-                if matches!(err.kind(), ErrorKind::WouldBlock) {
-                    0
-                } else {
-                    bail!(
-                        "Error while trying to read transmission control request: {}",
-                        err
-                    );
-                }
-            }
-        };
-        control_slice_cursor = control_slice_cursor
-            .checked_add(read_count)
-            .expect("control_slice_cursor overflow");
-
-        match control_slice_cursor.cmp(&TransmissionControl::SIZE) {
-            Ordering::Equal => {
-                // we have read enough bytes for a full transmission control request
-                let retransmission =
-                    bincode::decode_from_slice(&control_slice, crate::common::BINCODE_CONFIG)?.0;
-
-                // store current time
-                lastfeedback = current_packet_time;
-                lasthblostreport = current_packet_time;
-                deadconnection_counter = 0;
-
-                // if it's a stop request, go back to waiting for a file request
-                if let TransmissionControl::EndTransmission(_) = retransmission {
-                    let filename = session
-                        .transfer
-                        .filename
-                        .as_ref()
-                        .expect("filename should be available");
-                    eprintln!("Transmission of {} complete.", filename.display());
-
-                    if let Some(finishhook) = &parameter.finishhook {
-                        eprintln!("Executing: {} {}", finishhook.display(), filename.display());
-
-                        let spawned = std::process::Command::new(finishhook).arg(filename).spawn();
-
-                        if let Err(err) = spawned {
-                            eprintln!("Could not execute finish hook: {err}");
-                        }
-                    }
-                    break;
-                }
-
-                // otherwise, handle the retransmission
-                if let Err(err) = super::protocol::accept_retransmit(
+        if parameter.encrypted {
+            if let Some(header) = maybe_header.as_ref() {
+                let done = try_read(
                     session,
-                    parameter,
-                    &retransmission,
-                    datagram_block_buffer.as_mut_slice(),
-                    datagram_buffer.as_mut_slice(),
-                    &mut retransmit_accept_iteration,
-                ) {
-                    println!("WARNING: Retransmission error: {err:?}");
-                }
-                control_slice_cursor = 0;
-            }
-            Ordering::Less => {
-                // we could not read a full transmission control request so far, so simply send
-                // some blocks that haven't yet been sent
-
-                // increment block index for the next datagram
-                let incremented = session.transfer.block.safe_add(BlockIndex(1));
-                session.transfer.block =
-                    BlockIndex::min(incremented, session.properties.block_count);
-
-                // check whether we're sending the final block
-                block_type = if session.transfer.block == session.properties.block_count {
-                    BlockType::Final
-                } else {
-                    BlockType::Original
-                };
-
-                // build the datagram
-                let block_index = session.transfer.block;
-                let datagram = super::io::build_datagram(
-                    session,
-                    block_index,
-                    block_type,
-                    datagram_block_buffer.as_mut_slice(),
+                    &mut control_slice,
+                    &mut control_slice_cursor,
+                    header.length as usize,
                 )?;
-                datagram.write_to(datagram_buffer.as_mut_slice());
 
-                // transmit the datagram
-                if let Err(err) = session
-                    .transfer
-                    .udp_socket
-                    .as_ref()
-                    .expect("UDP socket should be available")
-                    .send_to(
-                        &datagram_buffer,
-                        session
-                            .transfer
-                            .udp_address
-                            .expect("Client UDP address should be available"),
-                    )
-                {
-                    println!(
-                        "WARNING: Could not transmit block #{}: {}",
-                        session.transfer.block.0, err
+                if done {
+                    // Decrypt and decode transmission control payload
+                    maybe_transmission_control = Some(session.client.decrypt_decode(
+                        header.nonce,
+                        &control_slice[..(header.length as usize)],
+                    )?);
+                    maybe_header = None;
+                }
+            } else {
+                // Encrypted connection, but no header was read yet. Try to read one
+                let done = try_read(
+                    session,
+                    &mut control_slice,
+                    &mut control_slice_cursor,
+                    NoiseHeader::SIZE,
+                )?;
+
+                if done {
+                    // we have read enough bytes for a full header
+                    maybe_header = Some(
+                        bincode::decode_from_slice(
+                            &control_slice[..NoiseHeader::SIZE],
+                            crate::common::BINCODE_CONFIG,
+                        )?
+                        .0,
                     );
-                    continue;
                 }
             }
-            Ordering::Greater => {
-                // if we have too long transmission control message
-                eprintln!("warn: retransmitlen > {}", TransmissionControl::SIZE);
-                control_slice_cursor = 0;
+        } else {
+            // Unencrypted connection. Try to read a `TransmissionControl` directly
+            let done = try_read(
+                session,
+                &mut control_slice,
+                &mut control_slice_cursor,
+                TransmissionControl::SIZE,
+            )?;
+
+            if done {
+                // we have read enough bytes for a full transmission control request
+                maybe_transmission_control = Some(
+                    bincode::decode_from_slice(
+                        &control_slice[..TransmissionControl::SIZE],
+                        crate::common::BINCODE_CONFIG,
+                    )?
+                    .0,
+                );
+            }
+        }
+
+        if let Some(transmission_control) = maybe_transmission_control {
+            // store current time
+            lastfeedback = current_packet_time;
+            lasthblostreport = current_packet_time;
+            deadconnection_counter = 0;
+
+            // if it's a stop request, go back to waiting for a file request
+            if let TransmissionControl::EndTransmission(_) = transmission_control {
+                let filename = session
+                    .transfer
+                    .filename
+                    .as_ref()
+                    .expect("filename should be available");
+                eprintln!("Transmission of {} complete.", filename.display());
+
+                if let Some(finishhook) = &parameter.finishhook {
+                    eprintln!("Executing: {} {}", finishhook.display(), filename.display());
+
+                    let spawned = std::process::Command::new(finishhook).arg(filename).spawn();
+
+                    if let Err(err) = spawned {
+                        eprintln!("Could not execute finish hook: {err}");
+                    }
+                }
+                break;
+            }
+
+            // otherwise, handle the retransmission request
+            if let Err(err) = super::protocol::accept_retransmit(
+                session,
+                parameter,
+                &transmission_control,
+                datagram_block_buffer.as_mut_slice(),
+                datagram_buffer.as_mut_slice(),
+                &mut retransmit_accept_iteration,
+            ) {
+                println!("WARNING: Retransmission error: {err:?}");
+            }
+
+            maybe_transmission_control = None; // wait for the next one
+        } else {
+            // we could not read a full transmission control request so far, so simply send
+            // some blocks that haven't yet been sent
+            let cont = send_next_block(
+                session,
+                &mut block_type,
+                &mut datagram_block_buffer,
+                &mut datagram_buffer,
+            )?;
+            if cont {
+                continue;
             }
         }
 
@@ -392,7 +393,7 @@ fn handle_transfer(
         .duration_since(start)
         .as_micros()
         .try_into()
-        .expect("timing delta microsecconds overflow");
+        .expect("timing delta microseconds overflow");
 
     if parameter.verbose_yn {
         #[allow(clippy::cast_precision_loss)]
@@ -416,9 +417,98 @@ fn handle_transfer(
     Ok(())
 }
 
+/// Tries to read enough bytes to fill the `slice` from `cursor` to `max`. If not enough bytes are
+/// available, it increments the cursor by the given amount and returns `false`. If enough bytes
+/// were available, it resets the cursor to 0 and returns `true`.
+fn try_read(
+    session: &mut Session,
+    slice: &mut [u8],
+    cursor: &mut usize,
+    max: usize,
+) -> anyhow::Result<bool> {
+    let read_result = session.client.socket.read(&mut slice[*cursor..max]);
+    let read_count = match read_result {
+        Ok(read_count) => read_count,
+        Err(err) => {
+            if matches!(err.kind(), ErrorKind::WouldBlock) {
+                0
+            } else {
+                bail!(
+                    "Error while trying to read transmission control request: {}",
+                    err
+                );
+            }
+        }
+    };
+
+    *cursor = cursor.checked_add(read_count).expect("cursor overflow");
+
+    match (*cursor).cmp(&max) {
+        Ordering::Equal => {
+            *cursor = 0;
+            Ok(true)
+        }
+        Ordering::Less => Ok(false),
+        Ordering::Greater => {
+            // somehow we read too much??
+            panic!("read too many bytes: {cursor} > {max}");
+        }
+    }
+}
+
+fn send_next_block(
+    session: &mut Session,
+    block_type: &mut BlockType,
+    datagram_block_buffer: &mut [u8],
+    datagram_buffer: &mut [u8],
+) -> anyhow::Result<bool> {
+    // increment block index for the next datagram
+    let incremented = session.transfer.block.safe_add(BlockIndex(1));
+    session.transfer.block = BlockIndex::min(incremented, session.properties.block_count);
+
+    // check whether we're sending the final block
+    *block_type = if session.transfer.block == session.properties.block_count {
+        BlockType::Final
+    } else {
+        BlockType::Original
+    };
+
+    // build the datagram
+    let block_index = session.transfer.block;
+    let datagram =
+        super::io::build_datagram(session, block_index, *block_type, datagram_block_buffer)?;
+    datagram.write_to(datagram_buffer);
+
+    // transmit the datagram
+    if let Err(err) = session
+        .transfer
+        .udp_socket
+        .as_ref()
+        .expect("UDP socket should be available")
+        .send_to(
+            datagram_buffer,
+            session
+                .transfer
+                .udp_address
+                .expect("Client UDP address should be available"),
+        )
+    {
+        println!(
+            "WARNING: Could not transmit block #{}: {}",
+            session.transfer.block.0, err
+        );
+        return Ok(true);
+    }
+
+    Ok(false)
+}
+
 /// Perform required processing on command line options. Primarily this involves trying to open all
 /// files that were specified to be served, and obtaining their file size.
 pub fn process_options(parameter: &mut Parameter) {
+    // Load the secret key from the secret file, if specified
+    crate::common::load_secret(&parameter.secret_file, &mut parameter.secret);
+
     if !parameter.file_names.is_empty() {
         let total_files = parameter.file_names.len();
         eprintln!("\nThe specified {total_files} files will be listed on GET *:");

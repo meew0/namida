@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     io::Write,
     path::PathBuf,
     time::{Duration, Instant},
@@ -9,17 +10,18 @@ use anyhow::bail;
 
 use super::{OutputMode, Parameter, Retransmit, Session, Transfer};
 use crate::{
-    message::{ClientToServer, FileRequest, ServerToClient, TransmissionControl, UdpMethod},
+    message::{self, ClientToServer, FileRequest, ServerToClient, TransmissionControl, UdpMethod},
     types::{BlockIndex, ErrorRate},
 };
 
 /// Given an active session, returns `Ok(())` if we were able to successfully authenticate to the
-/// server, and an error otherwise. See the documentation of `server::protocol::authenticate` for a
-/// description of the authentication process.
+/// server, and an error otherwise. Used only for unencrypted connections. See the documentation of
+/// `server::protocol::authenticate_unencrypted` for a description of the unencrypted authentication
+/// process.
 ///
 /// # Errors
 /// Returns an error on authentication failure, I/O failure, or if the server sent unexpected data.
-pub fn authenticate(session: &mut Session, secret: &str) -> anyhow::Result<()> {
+pub fn authenticate_unencrypted(session: &mut Session, secret: &[u8]) -> anyhow::Result<()> {
     // read in the shared secret and the challenge
     let ServerToClient::AuthenticationChallenge(mut random) = session.server.read()? else {
         bail!("Expected authentication challenge");
@@ -27,7 +29,7 @@ pub fn authenticate(session: &mut Session, secret: &str) -> anyhow::Result<()> {
 
     // prepare the proof of the shared secret
     // Tsunami manually overwrites the secret bytes with zero afterwards. I think this is snake oil.
-    let digest: [u8; 16] = crate::common::prepare_proof(&mut random, secret.as_bytes()).into();
+    let digest: [u8; 16] = crate::common::prepare_proof(&mut random, secret).into();
 
     // send the response to the server
     session
@@ -47,15 +49,54 @@ pub fn authenticate(session: &mut Session, secret: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Authenticates to the server and establishes a shared encrypted connection.
+///
+/// # Errors
+/// Returns an error on I/O failure, authentication failure, or when the encrypted connection could
+/// not be established.
+pub fn authenticate_encrypted(session: &mut Session, secret: &[u8]) -> anyhow::Result<()> {
+    let mut noise_init_buffer = [0_u8; 1024];
+
+    let builder = snow::Builder::new(crate::common::NOISE_PATTERN.parse()?);
+    let static_key = builder.generate_keypair()?.private;
+    let mut noise = builder
+        .local_private_key(&static_key)
+        .psk(3, secret)
+        .build_initiator()?;
+
+    // -> e
+    let len = noise.write_message(&[], &mut noise_init_buffer)?;
+    session
+        .server
+        .write(message::Noise(Cow::from(&noise_init_buffer[..len])))?;
+
+    // <- e, ee, s, es
+    let message::Noise(data) = session.server.read()?;
+    noise.read_message(&data, &mut noise_init_buffer)?;
+
+    // -> s, se
+    let len = noise.write_message(&[], &mut noise_init_buffer)?;
+    session
+        .server
+        .write(message::Noise(Cow::from(&noise_init_buffer[..len])))?;
+
+    let noise = noise.into_stateless_transport_mode()?;
+    session.server.set_noise_state(noise);
+
+    println!("Encrypted session established.");
+
+    Ok(())
+}
+
 /// Performs all of the negotiation with the remote server that is done prior to authentication.
 /// At the moment, this consists of verifying identical protocol revisions between the client and
 /// server. Returns `Ok(())` on success.
 ///
 /// # Errors
 /// Returns an error on negotiation failure, I/O failure, or if the server sent unexpected data.
-pub fn negotiate(session: &mut Session) -> anyhow::Result<()> {
+pub fn negotiate(session: &mut Session, parameter: &Parameter) -> anyhow::Result<()> {
     // send our protocol revision number to the server
-    let client_revision = crate::version::PROTOCOL_REVISION;
+    let client_revision = crate::version::protocol_revision(parameter.encrypted);
     session.server.write(client_revision)?;
 
     // read the protocol revision number from the server

@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     io::{Seek, SeekFrom},
     net::ToSocketAddrs,
     time::Instant,
@@ -7,7 +8,7 @@ use std::{
 use crate::{
     datagram::BlockType,
     message::{
-        ClientToServer, FileRequest, FileRequestError, ServerToClient, TransmissionControl,
+        self, ClientToServer, FileRequest, FileRequestError, ServerToClient, TransmissionControl,
         UdpMethod,
     },
     types::{BlockIndex, FileSize},
@@ -136,7 +137,7 @@ pub fn accept_retransmit(
 }
 
 /// Given an active session, returns `()` if we are able to negotiate authentication successfully
-/// and an error otherwise.
+/// and an error otherwise. Used only for unencrypted connections.
 ///
 /// The negotiation process works like this:
 ///
@@ -150,7 +151,7 @@ pub fn accept_retransmit(
 /// # Errors
 /// Returns an error on I/O failure, when the client sends unexpected messages, or when
 /// authentication is unsuccessful.
-pub fn authenticate(session: &mut Session, secret: &[u8]) -> anyhow::Result<()> {
+pub fn authenticate_unencrypted(session: &mut Session, secret: &[u8]) -> anyhow::Result<()> {
     use rand::Rng;
 
     // obtain the random data
@@ -187,14 +188,51 @@ pub fn authenticate(session: &mut Session, secret: &[u8]) -> anyhow::Result<()> 
     Ok(())
 }
 
+/// Authenticates a client and initiates an encrypted connection with it using the Noise protocol.
+///
+/// # Errors
+/// Returns an error on I/O failure, authentication failure, or if the Noise handshake was
+/// unsuccessful.
+pub fn authenticate_encrypted(session: &mut Session, secret: &[u8]) -> anyhow::Result<()> {
+    let mut noise_init_buffer = [0_u8; 1024];
+
+    let builder = snow::Builder::new(crate::common::NOISE_PATTERN.parse()?);
+    let static_key = builder.generate_keypair()?.private;
+    let mut noise = builder
+        .local_private_key(&static_key)
+        .psk(3, secret)
+        .build_responder()?;
+
+    // <- e
+    let message::Noise(data) = session.client.read()?;
+    noise.read_message(&data, &mut noise_init_buffer)?;
+
+    // -> e, ee, s, es
+    let len = noise.write_message(&[], &mut noise_init_buffer)?;
+    session
+        .client
+        .write(message::Noise(Cow::from(&noise_init_buffer[..len])))?;
+
+    // <- s, se
+    let message::Noise(data) = session.client.read()?;
+    noise.read_message(&data, &mut noise_init_buffer)?;
+
+    let noise = noise.into_stateless_transport_mode()?;
+    session.client.set_noise_state(noise);
+
+    println!("Encrypted session established.");
+
+    Ok(())
+}
+
 /// Negotiates the protocol version used between the server and the client. Needs to match exactly
 /// for a connection to be initiated. This is the only part in the code where we send raw bytes
 /// instead of message structs, to ensure that old Tsunami clients are appropriately rejected.
 ///
 /// # Errors
 /// Returns an error on I/O failure, or when negotiation was unsuccessful.
-pub fn negotiate(session: &mut Session) -> anyhow::Result<()> {
-    let server_revision = crate::version::PROTOCOL_REVISION;
+pub fn negotiate(session: &mut Session, parameter: &Parameter) -> anyhow::Result<()> {
+    let server_revision = crate::version::protocol_revision(parameter.encrypted);
 
     // send our protocol revision number to the client
     session.client.write(server_revision)?;

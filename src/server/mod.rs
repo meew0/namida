@@ -31,6 +31,11 @@ pub struct Parameter {
     #[arg(long = "bind", short = 'B', default_value_t = config::DEFAULT_BIND.to_owned())]
     pub bind: String,
 
+    /// If this flag is present, the server will only accept unencrypted connections. By default, it
+    /// will only accept encrypted connections.
+    #[arg(long = "unencrypted", action = clap::ArgAction::SetFalse)]
+    pub encrypted: bool,
+
     /// specifies the desired size for UDP socket send buffer (in bytes)
     #[arg(long = "buffer", short = 'b', default_value_t = config::DEFAULT_UDP_BUFFER)]
     pub udp_buffer: u32,
@@ -39,9 +44,10 @@ pub struct Parameter {
     #[arg(long = "hbtimeout", default_value_t = config::DEFAULT_HEARTBEAT_TIMEOUT)]
     pub hb_timeout: u16,
 
-    /// specifies the shared secret for the client and server
-    #[arg(long = "secret", short = 's', default_value_t = config::DEFAULT_SECRET.to_owned())]
-    pub secret: String,
+    /// specifies the file from which the pre-shared key will be read. If not specified, a
+    /// hardcoded key will be used (not recommended)
+    #[arg(long = "secret", short = 's')]
+    pub secret_file: Option<PathBuf>,
 
     /// specifies an alternate client IP or host where to send data
     #[arg(long = "client", short = 'c')]
@@ -58,6 +64,9 @@ pub struct Parameter {
     /// Files with associated size
     #[arg(skip)]
     pub files: Vec<FileMetadata>,
+
+    #[arg(skip = *crate::common::DEFAULT_SECRET)]
+    pub secret: [u8; 32],
 }
 
 pub struct Properties {

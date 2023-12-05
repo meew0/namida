@@ -1,4 +1,4 @@
-use std::{path::PathBuf, time::Duration};
+use std::{borrow::Cow, path::PathBuf, time::Duration};
 
 use crate::types::{
     BlockIndex, BlockSize, ErrorRate, FileMetadata, FileSize, Fraction, TargetRate,
@@ -45,6 +45,19 @@ impl TransmissionControl {
     pub const SIZE: usize = 8;
 }
 
+#[derive(Debug, bincode::Encode, bincode::Decode)]
+pub struct Noise<'a>(pub Cow<'a, [u8]>);
+
+#[derive(Debug, bincode::Encode, bincode::Decode)]
+pub struct NoiseHeader {
+    pub length: u16,
+    pub nonce: u64,
+}
+
+impl NoiseHeader {
+    pub const SIZE: usize = 10;
+}
+
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
 pub struct FileRequest {
     pub path: PathBuf,
@@ -70,11 +83,30 @@ pub enum FileRequestError {
 mod tests {
     use crate::types::{BlockIndex, ErrorRate};
 
-    use super::TransmissionControl;
+    use super::{NoiseHeader, TransmissionControl};
+
+    #[test]
+    fn noise_header_size() -> anyhow::Result<()> {
+        let mut slice = [0_u8; NoiseHeader::SIZE];
+
+        assert_eq!(
+            bincode::encode_into_slice(
+                NoiseHeader {
+                    length: 1,
+                    nonce: 2,
+                },
+                &mut slice,
+                crate::common::BINCODE_CONFIG,
+            )?,
+            NoiseHeader::SIZE
+        );
+
+        Ok(())
+    }
 
     #[test]
     fn transmission_control_sizes() -> anyhow::Result<()> {
-        let mut slice = [0_u8; 8];
+        let mut slice = [0_u8; TransmissionControl::SIZE];
 
         assert_eq!(
             bincode::encode_into_slice(
