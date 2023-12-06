@@ -56,3 +56,7 @@ $ namida get --server example.com "*"
 ```
 
 Many more options are available for the individual subcommands. Run `namida help [command]` to get more information.
+
+# Licencing information
+
+namida is available under the same licence as Tsunami (both the original Tsunami from Indiana University, and Jan Wagner's updated version), which is a permissive BSD-style licence with the additional restriction that derivative programs may not be called “Tsunami” without permission from Indiana University. See `LICENSE.txt` for the full licence text.
