@@ -11,18 +11,10 @@ puts "----------------------------"
 puts
 
 start = Time.now
-sin, sout, swait = Open3.popen2e({ "RUST_BACKTRACE" => "1" }, *NAMIDA_PATH, "server", "--verbose", "--transcript", "source/fish.jpg", "--secret", "psk.txt")
-cin, cout, cwait = Open3.popen2e({ "RUST_BACKTRACE" => "1" }, *NAMIDA_PATH, "client", "--secret", "psk.txt")
+sin, sout, swait = Open3.popen2e({ "RUST_BACKTRACE" => "1" }, *NAMIDA_PATH, "serve", "--verbose", "--transcript", "source/fish.jpg", "--secret", "psk.txt")
+cin, cout, cwait = Open3.popen2e({ "RUST_BACKTRACE" => "1" }, *NAMIDA_PATH, "get", "--secret", "psk.txt", "--transcript", "--server", "127.0.0.1", "source/fish.jpg")
 
-sleep 0.1
-cin.puts "set transcript yes"
-sleep 0.1
-cin.puts "connect 127.0.0.1"
-sleep 0.1
-cin.puts "dir"
-sleep 0.2
-cin.puts "get source/fish.jpg"
-sleep 0.5
+sleep 1.0
 
 Process.kill("KILL", cwait.pid) rescue puts "failed to kill client"
 Process.kill("KILL", swait.pid) rescue puts "failed to kill server"

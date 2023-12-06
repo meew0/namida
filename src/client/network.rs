@@ -8,7 +8,7 @@ use ::libc;
 use anyhow::bail;
 use to_socket_addrs::ToSocketAddrsWithDefaultPort;
 
-use super::Parameter;
+use super::get;
 
 /// Establishes a new TCP control session based on the given parameters. The TCP session is
 /// connected to the given server; we return the socket on success. Whether the socket is IPv6 or
@@ -16,11 +16,8 @@ use super::Parameter;
 ///
 /// # Errors
 /// Returns an error if the socket could not be created or configured correctly.
-pub fn create_tcp_socket(parameter: &Parameter) -> anyhow::Result<TcpStream> {
-    let socket_addr = parameter
-        .server
-        .as_str()
-        .with_default_port(super::config::DEFAULT_SERVER_PORT);
+pub fn create_tcp_socket(server: &str) -> anyhow::Result<TcpStream> {
+    let socket_addr = server.with_default_port(super::config::DEFAULT_SERVER_PORT);
 
     let socket = TcpStream::connect(socket_addr)?;
     // TODO: "make reusable" (SO_REUSEADDR)
@@ -36,7 +33,7 @@ pub fn create_tcp_socket(parameter: &Parameter) -> anyhow::Result<TcpStream> {
 ///
 /// # Errors
 /// Returns an error if the socket could not be created or configured correctly.
-pub fn create_udp_socket(parameter: &Parameter, ipv6: bool) -> anyhow::Result<UdpSocket> {
+pub fn create_udp_socket(parameter: &get::Parameter, ipv6: bool) -> anyhow::Result<UdpSocket> {
     let catch_all_host = crate::common::catch_all_host(ipv6);
     let port = parameter.client_port.unwrap_or(0);
 

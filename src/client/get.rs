@@ -7,138 +7,178 @@ use std::{
 
 use anyhow::bail;
 
-use super::{ring, OutputMode, Parameter, Session, Statistics, Transfer};
 use crate::{
-    common::SocketWrapper,
+    client::Statistics,
     datagram::{self, BlockType},
-    message::{ClientToServer, ServerToClient},
+    message,
     types::{BlockIndex, ErrorRate, FileMetadata, FileSize, Fraction, TargetRate, UdpErrors},
 };
 
-/// “Closes the connection” by virtue of dropping the session object.
-///
-/// # Errors
-/// Will never error, only returns a `Result` for compatibility with other `command` functions.
-pub fn close(parameter: &Parameter, session: Option<Session>) -> anyhow::Result<()> {
-    if parameter.verbose_yn {
-        if session.is_some() {
-            drop(session);
-            println!("Connection closed.");
-        } else {
-            println!("No connection currently active.");
-        }
-        println!();
-    }
+use super::{ring, OutputMode, Transfer};
 
-    Ok(())
+#[derive(Clone, clap::Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct Parameter {
+    /// The server to connect to. May be specified as IP address or hostname. A remote TCP port may
+    /// also be specified using the `host:port` notation. If no port is specified, the default port
+    /// will be used (51038).
+    #[arg(long = "server", short = 's')]
+    pub server: String,
+
+    /// Specify a static UDP port to receive data on. If not specified, a random port will be used.
+    #[arg(long = "udpport")]
+    pub client_port: Option<u16>,
+
+    /// By default, the client will have the server discover its public UDP address by sending some
+    /// data to it. If this option is set, this behaviour will be disabled and data will always be
+    /// sent to the client's TCP address combined with the port to which the UDP socket is bound.
+    /// This will make the file initialisation process simpler and more deterministic, but it will
+    /// cause problems if the client is behind NAT.
+    #[arg(long = "no-discovery", action = clap::ArgAction::SetFalse)]
+    pub discovery: bool,
+
+    /// If this flag is present, the client will not encrypt the connection. The same flag must also
+    /// be specified on the server.
+    #[arg(long = "unencrypted", action = clap::ArgAction::SetFalse)]
+    pub encrypted: bool,
+
+    #[arg(long = "buffer", default_value_t = super::config::DEFAULT_UDP_BUFFER)]
+    pub udp_buffer: u32,
+
+    #[arg(long = "quiet", action = clap::ArgAction::SetFalse)]
+    pub verbose_yn: bool,
+
+    #[arg(long = "transcript")]
+    pub transcript_yn: bool,
+
+    #[arg(long = "ipv6")]
+    pub ipv6_yn: bool,
+
+    #[arg(long = "output", value_enum, default_value_t = OutputMode::Line)]
+    pub output_mode: OutputMode,
+
+    #[arg(long = "rate", value_parser = clap::builder::ValueParser::new(parse_rate), default_value_t = super::config::DEFAULT_TARGET_RATE)]
+    pub target_rate: TargetRate,
+
+    #[arg(long = "rateadjust")]
+    pub rate_adjust: bool,
+
+    #[arg(long = "error", default_value_t = super::config::DEFAULT_ERROR_RATE)]
+    pub error_rate: ErrorRate,
+
+    #[arg(long = "slower", value_parser = clap::builder::ValueParser::new(parse_fraction), default_value_t = super::config::DEFAULT_SLOWER)]
+    pub slower: Fraction,
+
+    #[arg(long = "faster", value_parser = clap::builder::ValueParser::new(parse_fraction), default_value_t = super::config::DEFAULT_FASTER)]
+    pub faster: Fraction,
+
+    #[arg(long = "history", default_value_t = super::config::DEFAULT_HISTORY)]
+    pub history: u16,
+
+    #[arg(long = "lossy", action = clap::ArgAction::SetFalse)]
+    pub lossless: bool,
+
+    #[arg(long = "losswindow", default_value_t = super::config::DEFAULT_LOSSWINDOW_MS)]
+    pub losswindow_ms: u32,
+
+    #[arg(long = "blockdump")]
+    pub blockdump: bool,
+
+    /// Specifies the path to a file from which the pre-shared key will be loaded. Only the first 32
+    /// bytes of the file will be used as the PSK. If not specified, a hard-coded key will be used;
+    /// this is not recommended.
+    #[arg(long = "secret")]
+    pub secret_file: Option<PathBuf>,
+
+    /// The local filename under which the remote file should be saved. This will only work if
+    /// requesting exactly one file, otherwise the command will fail!
+    #[arg(long = "local")]
+    pub local_filename: Option<PathBuf>,
+
+    #[arg(skip = *crate::common::DEFAULT_SECRET)]
+    pub secret: [u8; 32],
+
+    /// The files to try to read from the server. The special value `*` may be specified to try to
+    /// obtain all files available on the server. (Make sure to avoid shell expansion here!)
+    #[arg()]
+    pub files: Vec<PathBuf>,
 }
 
-/// Opens a new control session to the server specified in the command, or in the given set of
-/// default parameters. On success, we return the created session object.
-///
-/// Note that the default host and port stored in the parameter object are updated if they were
-/// specified in the command itself.
+/// Parse a string in the form `123M` into an integer like `123000000`.
 ///
 /// # Errors
-/// Returns an error on I/O failure.
-pub fn connect(command: &[&str], parameter: &mut Parameter) -> anyhow::Result<Session> {
-    // if we were given a new host, store that information
-    if command.len() > 1 {
-        parameter.server = command[1].to_owned();
-    }
-
-    // obtain our client socket, and create a new session object with it
-    let mut session = Session {
-        transfer: Transfer::default(),
-        server: SocketWrapper::new(super::network::create_tcp_socket(parameter)?),
-    };
-
-    // negotiate the connection parameters
-    if let Err(err) = super::protocol::negotiate(&mut session, parameter) {
-        bail!("Protocol negotiation failed: {:?}", err);
-    }
-
-    // authenticate to the server, and potentially initiate an encrypted connection
-    let auth_result = if parameter.encrypted {
-        super::protocol::authenticate_encrypted(&mut session, &parameter.secret)
-    } else {
-        super::protocol::authenticate_unencrypted(&mut session, &parameter.secret)
-    };
-
-    if let Err(err) = auth_result {
-        bail!("Authentication failure: {:?}", err);
-    }
-
-    // we succeeded
-    if parameter.verbose_yn {
-        println!("Connected.");
-        println!();
-    }
-
-    Ok(session)
-}
-
-/// Tries to request a list of server shared files and their sizes.
-///
-/// # Errors
-/// Returns an error on I/O failure.
-pub fn dir(_command: &[&str], session: &mut Session) -> anyhow::Result<()> {
-    // send request and parse the resulting response
-    session.server.write(ClientToServer::FileListRequest)?;
-    let ServerToClient::FileCount(num_files) = session.server.read()? else {
-        bail!("Expected file count");
-    };
-
-    eprintln!("Remote file list:");
-    for i in 0..num_files {
-        let ServerToClient::FileListEntry(file_metadata) = session.server.read()? else {
-            bail!("Expected file list entry");
-        };
-
-        eprintln!(
-            " {:2}) {:<64} {:10}",
-            i,
-            file_metadata.path.display(),
-            file_metadata.size.0
-        );
-    }
-    eprintln!();
-    Ok(())
-}
-
-/// Tries to initiate a file transfer for the remote file given in the command. If the user did not
-/// supply a local filename, we derive it from the remote filename.
-///
-/// # Errors
-/// Returns an error on I/O failure, or when the command syntax is invalid.
+/// Returns an error on parse failure.
 ///
 /// # Panics
-/// Panics if the ring buffer becomes unset for some reason.
-pub fn get(
-    command: &[&str],
-    parameter: &mut Parameter,
-    session: &mut Session,
-) -> anyhow::Result<()> {
-    // make sure that we have a remote file name
-    if command.len() < 2 {
-        bail!("Invalid command syntax (use 'help get' for details)");
-    }
-    assert!(command.len() >= 2); // to ensure bounds check elision
+/// Panics on arithmetic overflow.
+pub fn parse_rate(rate: &str) -> anyhow::Result<TargetRate> {
+    let (main_part, last_char) = rate.split_at(
+        rate.len()
+            .checked_sub(1)
+            .expect("tried to `parse_rate` an empty string"),
+    );
+    let parsed: u64 = main_part.parse()?;
 
-    // reinitialize the transfer data
-    session.transfer = Transfer::default();
+    let value = match last_char {
+        "k" | "K" => parsed.checked_mul(1000).expect("rate parsing overflow"),
+        "m" | "M" => parsed
+            .checked_mul(1_000_000)
+            .expect("rate parsing overflow"),
+        "g" | "G" => parsed
+            .checked_mul(1_000_000_000)
+            .expect("rate parsing overflow"),
+        "t" | "T" => parsed
+            .checked_mul(1_000_000_000_000)
+            .expect("rate parsing overflow"),
+        "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" => rate.parse()?,
+        _ => bail!("Invalid unit specifier"),
+    };
+
+    Ok(TargetRate(value))
+}
+
+/// Parse a string in the form `aaa/bbb` into a `Fraction` object.
+///
+/// # Errors
+/// Returns an error on parse failure.
+pub fn parse_fraction(fraction: &str) -> anyhow::Result<Fraction> {
+    if let Some((num_str, den_str)) = fraction.split_once('/') {
+        let numerator: u16 = num_str.parse()?;
+        let denominator: u16 = den_str.parse()?;
+        Ok(Fraction {
+            numerator,
+            denominator,
+        })
+    } else {
+        bail!("No slash found")
+    }
+}
+
+#[allow(clippy::missing_errors_doc)]
+#[allow(clippy::missing_panics_doc)]
+pub fn run(mut parameter: Parameter) -> anyhow::Result<()> {
+    crate::common::load_secret(&parameter.secret_file, &mut parameter.secret);
+    super::print_intro(parameter.encrypted);
+
+    // Connect to the server
+    let mut session =
+        super::protocol::connect(&parameter.server, parameter.encrypted, &parameter.secret)?;
+
+    if parameter.files.is_empty() {
+        bail!("No files are specified.");
+    }
 
     // These variables are only used when requesting multiple files.
-    let mut multimode = false;
     let mut file_names: Vec<PathBuf> = vec![];
 
-    if command[1] == "*" {
+    if parameter.files.len() == 1 && parameter.files[0] == PathBuf::from("*") {
         // if the client is asking for multiple files to be transferred
-        multimode = true;
         println!("Requesting all available files");
 
-        session.server.write(ClientToServer::FileListRequest)?;
-        let ServerToClient::FileCount(count) = session.server.read()? else {
+        session
+            .server
+            .write(message::ClientToServer::FileListRequest)?;
+        let message::ServerToClient::FileCount(count) = session.server.read()? else {
             bail!("Expected file count");
         };
         if count == 0 {
@@ -150,7 +190,8 @@ pub fn get(
         println!("Multi-GET of {count} files:");
 
         for _i in 0..count {
-            let ServerToClient::FileListEntry(file_metadata) = session.server.read()? else {
+            let message::ServerToClient::FileListEntry(file_metadata) = session.server.read()?
+            else {
                 bail!("Expected file");
             };
             let FileMetadata { path, size } = file_metadata;
@@ -161,7 +202,15 @@ pub fn get(
 
         session.server.flush()?;
     } else {
-        file_names.push(PathBuf::from(command[1].to_owned()));
+        file_names.extend_from_slice(&parameter.files);
+    }
+
+    if file_names.is_empty() {
+        bail!("No files are to be downloaded.");
+    }
+
+    if file_names.len() > 1 && parameter.local_filename.is_some() {
+        bail!("A local filename can only be specified if only one file is to be downloaded.");
     }
 
     let mut stats_iteration = 0;
@@ -169,14 +218,18 @@ pub fn get(
 
     'outer: for remote_filename in file_names {
         // Get a suitable local filename for the remote one
-        let local_filename = create_local_filename(multimode, &remote_filename, command);
+        let local_filename = create_local_filename(&remote_filename, &parameter.local_filename);
 
         // negotiate the file request with the server
-        let remote_udp_port =
-            super::protocol::open_transfer(session, parameter, remote_filename, local_filename)?;
+        let remote_udp_port = super::protocol::open_transfer(
+            &mut session,
+            &parameter,
+            remote_filename,
+            local_filename,
+        )?;
 
         // create the UDP data socket
-        super::protocol::open_port(session, parameter, remote_udp_port)?;
+        super::protocol::open_port(&mut session, &parameter, remote_udp_port)?;
 
         // allocate the retransmission table and received bitfield
         session.transfer.retransmit.previous_table = vec![];
@@ -241,7 +294,7 @@ pub fn get(
         session.transfer.stats.start_time = Some(Instant::now());
         session.transfer.stats.this_time = Some(Instant::now());
         if parameter.transcript_yn {
-            crate::common::transcript_warn_error(super::transcript::data_start(session));
+            crate::common::transcript_warn_error(super::transcript::data_start(&mut session));
         }
 
         let mut dumpcount = 0_u32;
@@ -274,7 +327,7 @@ pub fn get(
                 Err(err) => {
                     println!("WARNING: UDP data transmission error: {err}");
                     println!("Apparently frozen transfer, trying to do retransmit request");
-                    if let Err(err) = super::protocol::repeat_retransmit(session) {
+                    if let Err(err) = super::protocol::repeat_retransmit(&mut session) {
                         println!("WARNING: Repeat of retransmission requests failed: {err:?}");
                         successful = false;
                         break 'outer;
@@ -327,12 +380,12 @@ pub fn get(
 
             // main transfer control logic
             if !ring_buffer.is_full() // don't let disk-I/O freeze stop feedback of stats to server
-                && (!got_block(session, this_block)
+                && (!session.got_block(this_block)
                     || matches!(this_type, BlockType::Final)
                     || session.transfer.restart_pending)
             {
                 // insert new blocks into disk write ringbuffer
-                if !got_block(session, this_block) {
+                if !session.got_block(this_block) {
                     // reserve ring space, copy the data in, confirm the reservation
                     ring_buffer.reserve(local_datagram_view);
                     ring_buffer.confirm();
@@ -367,7 +420,7 @@ pub fn get(
                             // lossless transfer mode, request all missing data to be resent
                             let mut block = session.transfer.next_block;
                             while block < this_block {
-                                super::protocol::request_retransmit(session, block);
+                                super::protocol::request_retransmit(&mut session, block);
                                 block = block.safe_add(BlockIndex(1));
                             }
                         } else {
@@ -399,7 +452,7 @@ pub fn get(
                                     BlockIndex((f64::from(this_block.0) - block_diff) as u32);
                                 let mut block = earliest_block;
                                 while block < this_block {
-                                    super::protocol::request_retransmit(session, block);
+                                    super::protocol::request_retransmit(&mut session, block);
                                     block = block.safe_add(BlockIndex(1));
                                 }
 
@@ -412,10 +465,9 @@ pub fn get(
 
                     // advance the index of the gapless section going from start block to highest
                     // block
-                    while got_block(
-                        session,
-                        session.transfer.gapless_to_block.safe_add(BlockIndex(1)),
-                    ) && session.transfer.gapless_to_block < session.transfer.block_count
+                    while session
+                        .got_block(session.transfer.gapless_to_block.safe_add(BlockIndex(1)))
+                        && session.transfer.gapless_to_block < session.transfer.block_count
                     {
                         session.transfer.gapless_to_block =
                             session.transfer.gapless_to_block.safe_add(BlockIndex(1));
@@ -450,12 +502,12 @@ pub fn get(
                         // add possible still missing blocks to retransmit list
                         let mut block = session.transfer.gapless_to_block.safe_add(BlockIndex(1));
                         while block < session.transfer.block_count {
-                            super::protocol::request_retransmit(session, block);
+                            super::protocol::request_retransmit(&mut session, block);
                             block = block.safe_add(BlockIndex(1));
                         }
 
                         // send the retransmit request list again
-                        super::protocol::repeat_retransmit(session)?;
+                        super::protocol::repeat_retransmit(&mut session)?;
                     }
                 }
             }
@@ -478,10 +530,10 @@ pub fn get(
             }
 
             // repeat our retransmission requests
-            super::protocol::repeat_retransmit(session)?;
+            super::protocol::repeat_retransmit(&mut session)?;
 
             // send and show our current statistics
-            super::protocol::update_stats(session, parameter, &mut stats_iteration)?;
+            super::protocol::update_stats(&mut session, &parameter, &mut stats_iteration)?;
 
             // progress blockmap (DEBUG)
             if parameter.blockdump {
@@ -497,7 +549,7 @@ pub fn get(
         session.transfer.udp_socket.take();
 
         // tell the server to quit transmitting
-        if let Err(err) = super::protocol::request_stop(session) {
+        if let Err(err) = super::protocol::request_stop(&mut session) {
             println!("WARNING: Could not request end of transfer: {err:?}");
             successful = false;
             break;
@@ -526,7 +578,7 @@ pub fn get(
         session.transfer.stats.total_lost = BlockIndex(0);
         let mut block = BlockIndex(1);
         while block <= session.transfer.block_count {
-            if !got_block(session, block) {
+            if !session.got_block(block) {
                 session.transfer.stats.total_lost =
                     session.transfer.stats.total_lost.safe_add(BlockIndex(1));
             }
@@ -595,8 +647,8 @@ pub fn get(
 
         // update the transcript
         if parameter.transcript_yn {
-            crate::common::transcript_warn_error(super::transcript::data_stop(session));
-            crate::common::transcript_warn_error(super::transcript::close(session, delta));
+            crate::common::transcript_warn_error(super::transcript::data_stop(&mut session));
+            crate::common::transcript_warn_error(super::transcript::close(&mut session, delta));
         }
 
         // dump the received packet bitfield to a file, with added filename prefix `.blockmap`
@@ -639,13 +691,10 @@ pub fn get(
     Ok(())
 }
 
-fn create_local_filename(multimode: bool, remote_filename: &Path, command: &[&str]) -> PathBuf {
-    let local_filename = if multimode {
-        println!("GET *: now requesting file '{}'", remote_filename.display());
-        remote_filename.to_path_buf()
-    } else if command.len() >= 3 {
+fn create_local_filename(remote_filename: &Path, local_filename: &Option<PathBuf>) -> PathBuf {
+    if let Some(local_filename) = local_filename.as_ref() {
         // Local filename was specified
-        PathBuf::from(command[2])
+        PathBuf::from(local_filename)
     } else if let Some(file_name_part) = remote_filename.file_name() {
         // Remote filename contains slash, use only the last part as the local filename
         PathBuf::from(file_name_part)
@@ -653,239 +702,7 @@ fn create_local_filename(multimode: bool, remote_filename: &Path, command: &[&st
         // Remote filename does not contain slash, use it as the local filename in its
         // entirety
         remote_filename.to_path_buf()
-    };
-    local_filename
-}
-
-/// Offers help on either the list of available commands or a particular command.
-pub fn help(command: &[&str]) {
-    if command.len() < 2 {
-        println!("Help is available for the following commands:");
-        println!();
-        println!("    close    connect    get    dir    help    quit    set");
-        println!();
-        println!("Use 'help <command>' for help on an individual command.");
-        println!();
-        return;
     }
-
-    let query = command[1];
-
-    if query.eq_ignore_ascii_case("close") {
-        println!("Usage: close");
-        println!();
-        println!("Closes the current connection to a remote namida server.");
-    } else if query.eq_ignore_ascii_case("connect") {
-        println!("Usage: connect");
-        println!("       connect <remote-host>");
-        println!("       connect <remote-host> <remote-port>");
-        println!();
-        println!("Opens a connection to a remote namida server.  If the host and port");
-        println!("are not specified, default values are used.  (Use the 'set' command to");
-        println!("modify these values.)");
-        println!();
-        println!("After connecting, you will be prompted to enter a shared secret for");
-        println!("authentication.");
-    } else if query.eq_ignore_ascii_case("get") {
-        println!("Usage: get <remote-file>");
-        println!("       get <remote-file> <local-file>");
-        println!();
-        println!("Attempts to retrieve the remote file with the given name.  If the");
-        println!("local filename is not specified, the final part of the remote filename");
-        println!("(after the last path separator) will be used.");
-    } else if query.eq_ignore_ascii_case("dir") {
-        println!("Usage: dir");
-        println!();
-        println!("Attempts to list the available remote files.");
-    } else if query.eq_ignore_ascii_case("help") {
-        println!("Come on.  You know what that command does.");
-    } else if query.eq_ignore_ascii_case("quit") {
-        println!("Usage: quit");
-        println!();
-        println!("Closes any open connection to a remote namida server and exits the");
-        println!("namida client.");
-    } else if query.eq_ignore_ascii_case("set") {
-        println!("Usage: set");
-        println!("       set <field>");
-        println!("       set <field> <value>");
-        println!();
-        println!("Sets one of the defaults to the given value.  If the value is omitted,");
-        println!("the current value of the field is returned.  If the field is also");
-        println!("omitted, the current values of all defaults are returned.");
-    } else {
-        println!("'{query}' is not a recognized command.");
-        println!("Use 'help' for a list of commands.");
-    }
-
-    println!();
-}
-
-/// No cleanup is necessary in Rust, so this method only prints a message and exits the process.
-pub fn quit() {
-    println!("Thank you for using namida.");
-    println!();
-    println!("The repository can be found at: https://github.com/meew0/namida/");
-    println!();
-
-    std::process::exit(0);
-}
-
-/// Sets a particular parameter to the given value, or simply reports on the current value of one
-/// or more fields.
-///
-/// # Errors
-/// Returns an error if a value fails to be parsed.
-///
-/// # Panics
-/// Panics on arithmetic overflow.
-pub fn set(command: &[&str], parameter: &mut Parameter) -> anyhow::Result<()> {
-    let do_all = command.len() == 1;
-
-    // handle actual set operations first
-    if command.len() == 3 {
-        let property = command[1];
-        let value_str = command[2];
-
-        if property.eq_ignore_ascii_case("server") {
-            parameter.server = value_str.to_owned();
-        } else if property.eq_ignore_ascii_case("udpport") {
-            parameter.client_port = Some(value_str.parse()?);
-        } else if property.eq_ignore_ascii_case("buffer") {
-            parameter.udp_buffer = value_str.parse()?;
-        } else if property.eq_ignore_ascii_case("verbose") {
-            parameter.verbose_yn = value_str == "yes";
-        } else if property.eq_ignore_ascii_case("transcript") {
-            parameter.transcript_yn = value_str == "yes";
-        } else if property.eq_ignore_ascii_case("ip") {
-            parameter.ipv6_yn = value_str == "v6";
-        } else if property.eq_ignore_ascii_case("output") {
-            parameter.output_mode = if value_str == "screen" {
-                OutputMode::Screen
-            } else {
-                OutputMode::Line
-            };
-        } else if property.eq_ignore_ascii_case("rateadjust") {
-            parameter.rate_adjust = value_str == "yes";
-        } else if property.eq_ignore_ascii_case("rate") {
-            parameter.target_rate = parse_rate(value_str)?;
-        } else if property.eq_ignore_ascii_case("error") {
-            parameter.error_rate = ErrorRate(
-                value_str
-                    .parse::<u32>()?
-                    .checked_mul(1000)
-                    .expect("error rate overflow"),
-            );
-        } else if property.eq_ignore_ascii_case("slowdown") {
-            parameter.slower = parse_fraction(value_str)?;
-        } else if property.eq_ignore_ascii_case("speedup") {
-            parameter.faster = parse_fraction(value_str)?;
-        } else if property.eq_ignore_ascii_case("history") {
-            parameter.history = value_str.parse()?;
-        } else if property.eq_ignore_ascii_case("lossless") {
-            parameter.lossless = value_str == "yes";
-        } else if property.eq_ignore_ascii_case("losswindow") {
-            parameter.losswindow_ms = value_str.parse()?;
-        } else if property.eq_ignore_ascii_case("blockdump") {
-            parameter.blockdump = value_str == "yes";
-        } else if property.eq_ignore_ascii_case("secret") {
-            parameter.secret_file = Some(PathBuf::from(value_str));
-            crate::common::load_secret(&parameter.secret_file, &mut parameter.secret);
-        }
-    }
-
-    let property = if command.len() > 1 { command[1] } else { "" };
-
-    // report on current values
-    if do_all || property.eq_ignore_ascii_case("server") {
-        println!("server = {}", parameter.server);
-    }
-    if do_all || property.eq_ignore_ascii_case("udpport") {
-        println!("udpport = {:?}", parameter.client_port);
-    }
-    if do_all || property.eq_ignore_ascii_case("buffer") {
-        println!("buffer = {}", parameter.udp_buffer);
-    }
-    if do_all || property.eq_ignore_ascii_case("verbose") {
-        println!(
-            "verbose = {}",
-            if parameter.verbose_yn { "yes" } else { "no" },
-        );
-    }
-    if do_all || property.eq_ignore_ascii_case("transcript") {
-        println!(
-            "transcript = {}",
-            if parameter.transcript_yn { "yes" } else { "no" },
-        );
-    }
-    if do_all || property.eq_ignore_ascii_case("ip") {
-        println!("ip = {}", if parameter.ipv6_yn { "v6" } else { "v4" });
-    }
-    if do_all || property.eq_ignore_ascii_case("output") {
-        println!(
-            "output = {}",
-            match parameter.output_mode {
-                OutputMode::Screen => "screen",
-                OutputMode::Line => "line",
-            },
-        );
-    }
-    if do_all || property.eq_ignore_ascii_case("rate") {
-        println!("rate = {}", parameter.target_rate);
-    }
-    if do_all || property.eq_ignore_ascii_case("rateadjust") {
-        println!(
-            "rateadjust = {}",
-            if parameter.rate_adjust { "yes" } else { "no" },
-        );
-    }
-    if do_all || property.eq_ignore_ascii_case("error") {
-        println!(
-            "error = {:0>.2}%",
-            f64::from(parameter.error_rate.0) / 1000.0_f64
-        );
-    }
-    if do_all || property.eq_ignore_ascii_case("slowdown") {
-        println!(
-            "slowdown = {}/{}",
-            parameter.slower.numerator, parameter.slower.denominator,
-        );
-    }
-    if do_all || property.eq_ignore_ascii_case("speedup") {
-        println!(
-            "speedup = {}/{}",
-            parameter.faster.numerator, parameter.faster.denominator,
-        );
-    }
-    if do_all || property.eq_ignore_ascii_case("history") {
-        println!("history = {}%", parameter.history);
-    }
-    if do_all || property.eq_ignore_ascii_case("lossless") {
-        println!(
-            "lossless = {}",
-            if parameter.lossless { "yes" } else { "no" },
-        );
-    }
-    if do_all || property.eq_ignore_ascii_case("losswindow") {
-        println!("losswindow = {} msec", parameter.losswindow_ms);
-    }
-    if do_all || property.eq_ignore_ascii_case("blockdump") {
-        println!(
-            "blockdump = {}",
-            if parameter.blockdump { "yes" } else { "no" },
-        );
-    }
-    if do_all || property.eq_ignore_ascii_case("secret") {
-        println!(
-            "secret = {}",
-            if (parameter.secret_file).is_none() {
-                "default"
-            } else {
-                "<user-specified>"
-            },
-        );
-    }
-    println!();
-    Ok(())
 }
 
 /// This is the thread that takes care of saved received blocks to disk. It runs until the network
@@ -914,66 +731,6 @@ fn disk_thread(
         // pop the block
         ring_buffer.pop();
     }
-}
-
-/// Parse a string in the form `123M` into an integer like `123000000`.
-///
-/// # Errors
-/// Returns an error on parse failure.
-///
-/// # Panics
-/// Panics on arithmetic overflow.
-pub fn parse_rate(rate: &str) -> anyhow::Result<TargetRate> {
-    let (main_part, last_char) = rate.split_at(
-        rate.len()
-            .checked_sub(1)
-            .expect("tried to `parse_rate` an empty string"),
-    );
-    let parsed: u64 = main_part.parse()?;
-
-    let value = match last_char {
-        "k" | "K" => parsed.checked_mul(1000).expect("rate parsing overflow"),
-        "m" | "M" => parsed
-            .checked_mul(1_000_000)
-            .expect("rate parsing overflow"),
-        "g" | "G" => parsed
-            .checked_mul(1_000_000_000)
-            .expect("rate parsing overflow"),
-        "t" | "T" => parsed
-            .checked_mul(1_000_000_000_000)
-            .expect("rate parsing overflow"),
-        "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" => rate.parse()?,
-        _ => bail!("Invalid unit specifier"),
-    };
-
-    Ok(TargetRate(value))
-}
-
-/// Parse a string in the form `aaa/bbb` into a `Fraction` object.
-///
-/// # Errors
-/// Returns an error on parse failure.
-pub fn parse_fraction(fraction: &str) -> anyhow::Result<Fraction> {
-    if let Some((num_str, den_str)) = fraction.split_once('/') {
-        let numerator: u16 = num_str.parse()?;
-        let denominator: u16 = den_str.parse()?;
-        Ok(Fraction {
-            numerator,
-            denominator,
-        })
-    } else {
-        bail!("No slash found")
-    }
-}
-
-/// Returns true if the block has already been received
-#[must_use]
-pub fn got_block(session: &Session, blocknr: BlockIndex) -> bool {
-    if blocknr > session.transfer.block_count {
-        return true;
-    }
-
-    session.transfer.received[(blocknr.0 / 8) as usize] & (1 << (blocknr.0 % 8)) != 0
 }
 
 /// Writes the current bitmap of received block accounting into a file named like the transferred

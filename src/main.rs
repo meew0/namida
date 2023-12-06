@@ -117,8 +117,14 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    Client(client::Parameter),
-    Server(server::Parameter),
+    /// List the files a namida server has available for download.
+    Dir(client::dir::Parameter),
+
+    /// Download one or more files from a namida server.
+    Get(client::get::Parameter),
+
+    /// Start a namida server process, serving the specified files.
+    Serve(server::Parameter),
 }
 
 #[allow(clippy::missing_errors_doc)]
@@ -126,10 +132,13 @@ pub fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Client(parameter) => {
-            client::main::interactive(parameter)?;
+        Commands::Get(parameter) => {
+            client::get::run(parameter)?;
         }
-        Commands::Server(parameter) => {
+        Commands::Dir(parameter) => {
+            client::dir::run(parameter)?;
+        }
+        Commands::Serve(parameter) => {
             server::main::serve(parameter)?;
         }
     }

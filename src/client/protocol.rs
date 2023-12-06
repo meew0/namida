@@ -8,11 +8,46 @@ use std::{
 use ::libc;
 use anyhow::bail;
 
-use super::{OutputMode, Parameter, Retransmit, Session, Transfer};
+use super::{get, OutputMode, Retransmit, Session, Transfer};
 use crate::{
+    common::SocketWrapper,
     message::{self, ClientToServer, FileRequest, ServerToClient, TransmissionControl, UdpMethod},
     types::{BlockIndex, ErrorRate},
 };
+
+/// Opens a new control session to the specified server. On success, we return the created session
+/// object.
+///
+/// Note that the default host and port stored in the parameter object are updated if they were
+/// specified in the command itself.
+///
+/// # Errors
+/// Returns an error on I/O failure.
+pub fn connect(server: &str, encrypted: bool, secret: &[u8]) -> anyhow::Result<Session> {
+    // obtain our client socket, and create a new session object with it
+    let mut session = Session {
+        transfer: Transfer::default(),
+        server: SocketWrapper::new(super::network::create_tcp_socket(server)?),
+    };
+
+    // negotiate the connection parameters
+    if let Err(err) = negotiate(&mut session, encrypted) {
+        bail!("Protocol negotiation failed: {:?}", err);
+    }
+
+    // authenticate to the server, and potentially initiate an encrypted connection
+    let auth_result = if encrypted {
+        authenticate_encrypted(&mut session, secret)
+    } else {
+        authenticate_unencrypted(&mut session, secret)
+    };
+
+    if let Err(err) = auth_result {
+        bail!("Authentication failure: {:?}", err);
+    }
+
+    Ok(session)
+}
 
 /// Given an active session, returns `Ok(())` if we were able to successfully authenticate to the
 /// server, and an error otherwise. Used only for unencrypted connections. See the documentation of
@@ -94,9 +129,9 @@ pub fn authenticate_encrypted(session: &mut Session, secret: &[u8]) -> anyhow::R
 ///
 /// # Errors
 /// Returns an error on negotiation failure, I/O failure, or if the server sent unexpected data.
-pub fn negotiate(session: &mut Session, parameter: &Parameter) -> anyhow::Result<()> {
+pub fn negotiate(session: &mut Session, encrypted: bool) -> anyhow::Result<()> {
     // send our protocol revision number to the server
-    let client_revision = crate::version::magic(parameter.encrypted);
+    let client_revision = crate::version::magic(encrypted);
     session.server.write(client_revision)?;
 
     // read the protocol revision number from the server
@@ -127,7 +162,7 @@ pub fn negotiate(session: &mut Session, parameter: &Parameter) -> anyhow::Result
 /// Panics if no local path is set in the transfer object.
 pub fn open_transfer(
     session: &mut Session,
-    parameter: &Parameter,
+    parameter: &get::Parameter,
     remote_filename: PathBuf,
     local_filename: PathBuf,
 ) -> anyhow::Result<u16> {
@@ -229,7 +264,7 @@ pub fn open_transfer(
 /// communicated to the server.
 pub fn open_port(
     session: &mut Session,
-    parameter: &Parameter,
+    parameter: &get::Parameter,
     remote_port: u16,
 ) -> anyhow::Result<()> {
     // open a new UDP socket
@@ -306,7 +341,7 @@ pub fn repeat_retransmit(session: &mut Session) -> anyhow::Result<()> {
             break;
         }
 
-        if !block.is_zero() && !super::command::got_block(session, *block) {
+        if !block.is_zero() && !session.got_block(*block) {
             session.transfer.retransmit.next_table.push(*block);
         }
     }
@@ -385,7 +420,7 @@ const MAX_RETRANSMIT_TABLE_LENGTH: usize = 32 * Retransmit::MAX_RETRANSMISSION_B
 /// Requests a retransmission of the given block in the current transfer.
 pub fn request_retransmit(session: &mut Session, block: BlockIndex) {
     // double checking: if we already got the block, don't add it
-    if super::command::got_block(session, block) {
+    if session.got_block(block) {
         return;
     }
 
@@ -422,7 +457,7 @@ pub fn request_stop(session: &mut Session) -> anyhow::Result<()> {
 /// Panics if timings are uninitialised.
 pub fn update_stats(
     session: &mut Session,
-    parameter: &Parameter,
+    parameter: &get::Parameter,
     iteration: &mut u64,
 ) -> anyhow::Result<()> {
     let u_mega: f64 = 1_000_000.0;

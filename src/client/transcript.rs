@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::path::Path;
 
-use super::{Parameter, Session};
+use super::{get, Session};
 
 /// Closes the transcript file for the given session after writing out the final transfer
 /// statistics.
@@ -58,7 +58,7 @@ pub fn close(session: &mut Session, delta: u64) -> anyhow::Result<()> {
 /// Panics if no transcript file is opened.
 pub fn data_log(
     session: &mut Session,
-    _parameter: &Parameter,
+    _parameter: &get::Parameter,
     logline: &str,
 ) -> anyhow::Result<()> {
     let transcript = session
@@ -126,7 +126,7 @@ pub fn data_stop(session: &mut Session) -> anyhow::Result<()> {
 ///
 /// # Errors
 /// Returns an error on I/O failure.
-pub fn open(session: &mut Session, parameter: &Parameter) -> anyhow::Result<()> {
+pub fn open(session: &mut Session, parameter: &get::Parameter) -> anyhow::Result<()> {
     let transcript_filename = crate::common::make_transcript_filename("namc");
     let transcript = session.transfer.transcript.insert(
         std::fs::File::options()

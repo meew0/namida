@@ -1,7 +1,7 @@
-pub mod command;
 pub mod config;
+pub mod dir;
+pub mod get;
 pub mod io;
-pub mod main;
 pub mod network;
 pub mod protocol;
 pub mod ring;
@@ -16,7 +16,7 @@ use std::{
 
 use crate::{
     common::SocketWrapper,
-    types::{BlockIndex, ErrorRate, FileSize, Fraction, TargetRate, UdpErrors},
+    types::{BlockIndex, FileSize, UdpErrors},
 };
 
 #[derive(Clone, Default)]
@@ -68,81 +68,6 @@ pub enum OutputMode {
     Screen,
 }
 
-#[derive(Clone, clap::Args)]
-#[allow(clippy::struct_excessive_bools)]
-pub struct Parameter {
-    #[arg(long = "server", default_value_t = config::DEFAULT_SERVER_NAME.to_owned())]
-    pub server: String,
-
-    /// Specify a static UDP port to receive data on. If not specified, a random port will be used.
-    #[arg(long = "udpport")]
-    pub client_port: Option<u16>,
-
-    /// By default, the client will have the server discover its public UDP address by sending some
-    /// data to it. If this option is set, this behaviour will be disabled and data will always be
-    /// sent to the client's TCP address combined with the port to which the UDP socket is bound.
-    /// This will make the file initialisation process simpler and more deterministic, but it will
-    /// cause problems if the client is behind NAT.
-    #[arg(long = "no-discovery", action = clap::ArgAction::SetFalse)]
-    pub discovery: bool,
-
-    /// If this flag is present, the client will not encrypt the connection. The same flag must also
-    /// be specified on the server.
-    #[arg(long = "unencrypted", action = clap::ArgAction::SetFalse)]
-    pub encrypted: bool,
-
-    #[arg(long = "buffer", default_value_t = config::DEFAULT_UDP_BUFFER)]
-    pub udp_buffer: u32,
-
-    #[arg(long = "quiet", action = clap::ArgAction::SetFalse)]
-    pub verbose_yn: bool,
-
-    #[arg(long = "transcript")]
-    pub transcript_yn: bool,
-
-    #[arg(long = "ipv6")]
-    pub ipv6_yn: bool,
-
-    #[arg(long = "output", value_enum, default_value_t = OutputMode::Line)]
-    pub output_mode: OutputMode,
-
-    #[arg(long = "rate", value_parser = clap::builder::ValueParser::new(command::parse_rate), default_value_t = config::DEFAULT_TARGET_RATE)]
-    pub target_rate: TargetRate,
-
-    #[arg(long = "rateadjust")]
-    pub rate_adjust: bool,
-
-    #[arg(long = "error", default_value_t = config::DEFAULT_ERROR_RATE)]
-    pub error_rate: ErrorRate,
-
-    #[arg(long = "slower", value_parser = clap::builder::ValueParser::new(command::parse_fraction), default_value_t = config::DEFAULT_SLOWER)]
-    pub slower: Fraction,
-
-    #[arg(long = "faster", value_parser = clap::builder::ValueParser::new(command::parse_fraction), default_value_t = config::DEFAULT_FASTER)]
-    pub faster: Fraction,
-
-    #[arg(long = "history", default_value_t = config::DEFAULT_HISTORY)]
-    pub history: u16,
-
-    #[arg(long = "lossy", action = clap::ArgAction::SetFalse)]
-    pub lossless: bool,
-
-    #[arg(long = "losswindow", default_value_t = config::DEFAULT_LOSSWINDOW_MS)]
-    pub losswindow_ms: u32,
-
-    #[arg(long = "blockdump")]
-    pub blockdump: bool,
-
-    /// Specifies the path to a file from which the pre-shared key will be loaded. Only the first 32
-    /// bytes of the file will be used as the PSK. If not specified, a hard-coded key will be used;
-    /// this is not recommended.
-    #[arg(long = "secret")]
-    pub secret_file: Option<PathBuf>,
-
-    #[arg(skip = *crate::common::DEFAULT_SECRET)]
-    pub secret: [u8; 32],
-}
-
 #[derive(Default)]
 pub struct Transfer {
     pub epoch: Duration,
@@ -169,4 +94,29 @@ pub struct Transfer {
 pub struct Session {
     pub transfer: Transfer,
     pub server: SocketWrapper,
+}
+
+impl Session {
+    /// Returns true if the block has already been received
+    #[must_use]
+    pub fn got_block(&self, blocknr: BlockIndex) -> bool {
+        if blocknr > self.transfer.block_count {
+            return true;
+        }
+
+        self.transfer.received[(blocknr.0 / 8) as usize] & (1 << (blocknr.0 % 8)) != 0
+    }
+}
+
+pub fn print_intro(encrypted: bool) {
+    // show version / build information
+    eprintln!(
+        "namida client for protocol revision {} (block size = {}, magic = 0x{:x})\nVersion: {} (revision {})\nCompiled: {}\n",
+        crate::version::NAMIDA_PROTOCOL_REVISION,
+        crate::common::BLOCK_SIZE,
+        crate::version::magic(encrypted),
+        crate::version::NAMIDA_VERSION,
+        &crate::version::GIT_HASH[0..7],
+        crate::version::COMPILE_DATE_TIME,
+    );
 }
