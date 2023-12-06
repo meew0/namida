@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    datagram::BlockType,
+    datagram::{self, BlockType},
     message::{
         self, ClientToServer, FileRequest, FileRequestError, ServerToClient, TransmissionControl,
         UdpMethod,
@@ -107,21 +107,9 @@ pub fn accept_retransmit(
                 BlockType::Retransmission,
                 datagram_block_buffer,
             )?;
-            datagram.write_to(datagram_buffer);
 
-            // try to send out the block
-            session
-                .transfer
-                .udp_socket
-                .as_ref()
-                .expect("an UDP socket should have been opened")
-                .send_to(
-                    datagram_buffer,
-                    session
-                        .transfer
-                        .udp_address
-                        .expect("an UDP address should have been set"),
-                )?;
+            // Send the block away
+            send_datagram(session, parameter, datagram, datagram_buffer)?;
         }
         _ => {
             // if it's another kind of request
@@ -133,6 +121,57 @@ pub fn accept_retransmit(
     }
 
     // we're done
+    Ok(())
+}
+
+/// Send the given `datagram` view as a UDP packet. The `datagram_buffer` is used as an intermediate
+/// and must be `BLOCK_SIZE + 6` bytes long if unencrypted or `BLOCK_SIZE + 30` bytes if encrypted.
+///
+/// # Errors
+/// Returns an error on encoding, encryption, or I/O failure.
+///
+/// # Panics
+/// Panics if no UDP socket is available.
+pub fn send_datagram(
+    session: &mut Session,
+    parameter: &Parameter,
+    datagram: datagram::View,
+    datagram_buffer: &mut [u8],
+) -> anyhow::Result<()> {
+    if parameter.encrypted {
+        let nonce = session.client.nonce();
+
+        // Write the nonce into the first 8 bytes...
+        bincode::encode_into_slice(
+            nonce,
+            &mut datagram_buffer[..8],
+            crate::common::BINCODE_CONFIG,
+        )?;
+
+        // ...and the actual datagram into the rest
+        let message_buffer = &mut datagram_buffer[8..];
+        let message = session
+            .client
+            .encode_encrypt(message_buffer, nonce, datagram)?;
+        assert_eq!(message.len(), message_buffer.len());
+    } else {
+        bincode::encode_into_slice(datagram, datagram_buffer, crate::common::BINCODE_CONFIG)?;
+    }
+
+    // try to send out the block
+    session
+        .transfer
+        .udp_socket
+        .as_ref()
+        .expect("an UDP socket should have been opened")
+        .send_to(
+            datagram_buffer,
+            session
+                .transfer
+                .udp_address
+                .expect("an UDP address should have been set"),
+        )?;
+
     Ok(())
 }
 
@@ -232,7 +271,7 @@ pub fn authenticate_encrypted(session: &mut Session, secret: &[u8]) -> anyhow::R
 /// # Errors
 /// Returns an error on I/O failure, or when negotiation was unsuccessful.
 pub fn negotiate(session: &mut Session, parameter: &Parameter) -> anyhow::Result<()> {
-    let server_revision = crate::version::protocol_revision(parameter.encrypted);
+    let server_revision = crate::version::magic(parameter.encrypted);
 
     // send our protocol revision number to the client
     session.client.write(server_revision)?;
@@ -354,7 +393,6 @@ pub fn open_transfer(
 
     let FileRequest {
         path,
-        block_size,
         target_rate,
         error_rate,
         slowdown,
@@ -385,7 +423,6 @@ pub fn open_transfer(
     };
 
     // store other requested property values
-    session.properties.block_size = block_size;
     session.properties.target_rate = target_rate;
     session.properties.error_rate = error_rate;
     session.properties.slower = slowdown;
@@ -399,13 +436,13 @@ pub fn open_transfer(
         .properties
         .file_size
         .0
-        .checked_div(u64::from(session.properties.block_size.0))
+        .checked_div(u64::from(crate::common::BLOCK_SIZE))
         .expect("block size is zero");
     let tail_size = session
         .properties
         .file_size
         .0
-        .checked_rem(u64::from(session.properties.block_size.0))
+        .checked_rem(u64::from(crate::common::BLOCK_SIZE))
         .expect("block size is zero");
 
     if tail_size != 0 {
@@ -427,7 +464,6 @@ pub fn open_transfer(
     // signal success to the client and send it the required metadata fields
     session.client.write(ServerToClient::FileRequestSuccess {
         file_size: session.properties.file_size,
-        block_size: session.properties.block_size,
         block_count: session.properties.block_count,
         epoch: session.properties.epoch,
         udp_port: udp_socket.local_addr()?.port(),
@@ -465,7 +501,7 @@ pub fn start_transfer_timing(
         .expect("RTT safety margin overflow");
 
     // ...and store the inter-packet delay
-    session.properties.ipd_time = (u64::from(session.properties.block_size.0)
+    session.properties.ipd_time = (u64::from(crate::common::BLOCK_SIZE)
         .checked_mul(8_000_000_u64)
         .expect("IPD time calculation overflow (1)")
         .checked_div(session.properties.target_rate.0)

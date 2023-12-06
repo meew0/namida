@@ -1,6 +1,3 @@
-use crate::types::BlockSize;
-
-pub const DEFAULT_BLOCK_SIZE: BlockSize = BlockSize(1024);
 pub const DEFAULT_SECRET: &str = "kitten";
 pub const DEFAULT_BIND: &str = "0.0.0.0:51038";
 pub const DEFAULT_UDP_BUFFER: u32 = 20_000_000;

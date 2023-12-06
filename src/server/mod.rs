@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     common::SocketWrapper,
-    types::{BlockIndex, BlockSize, ErrorRate, FileMetadata, FileSize, Fraction, TargetRate},
+    types::{BlockIndex, ErrorRate, FileMetadata, FileSize, Fraction, TargetRate},
 };
 
 pub mod config;
@@ -71,7 +71,6 @@ pub struct Parameter {
 
 pub struct Properties {
     pub epoch: Duration,
-    pub block_size: BlockSize,
     pub file_size: FileSize,
     pub block_count: BlockIndex,
     pub target_rate: TargetRate,
@@ -90,7 +89,6 @@ impl Default for Properties {
     fn default() -> Self {
         Self {
             epoch: Duration::default(),
-            block_size: config::DEFAULT_BLOCK_SIZE,
             file_size: FileSize::default(),
             block_count: BlockIndex::default(),
             target_rate: TargetRate(0),

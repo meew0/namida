@@ -16,7 +16,7 @@ use std::{
 
 use crate::{
     common::SocketWrapper,
-    types::{BlockIndex, BlockSize, ErrorRate, FileSize, Fraction, TargetRate, UdpErrors},
+    types::{BlockIndex, ErrorRate, FileSize, Fraction, TargetRate, UdpErrors},
 };
 
 #[derive(Clone, Default)]
@@ -105,9 +105,6 @@ pub struct Parameter {
 
     #[arg(long = "output", value_enum, default_value_t = OutputMode::Line)]
     pub output_mode: OutputMode,
-
-    #[arg(long = "blocksize", default_value_t = config::DEFAULT_BLOCK_SIZE)]
-    pub block_size: BlockSize,
 
     #[arg(long = "rate", value_parser = clap::builder::ValueParser::new(command::parse_rate), default_value_t = config::DEFAULT_TARGET_RATE)]
     pub target_rate: TargetRate,

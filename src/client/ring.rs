@@ -1,9 +1,6 @@
 use std::sync::{Condvar, Mutex};
 
-use crate::{
-    datagram,
-    types::{BlockIndex, BlockSize},
-};
+use crate::{datagram, types::BlockIndex};
 
 pub const MAX_BLOCKS_QUEUED: u32 = 4096;
 
@@ -18,7 +15,6 @@ pub struct Buffer {
 struct Internal {
     headers: Box<[datagram::Header; MAX_BLOCKS_QUEUED as usize]>,
     blocks: Box<[u8]>,
-    block_size: BlockSize,
     base_data: u32,
     count_data: u32,
     count_reserved: u32,
@@ -102,8 +98,8 @@ impl Buffer {
     /// # Panics
     /// Panics if there is an overflow in the amount of data.
     #[must_use]
-    pub fn create(block_size: BlockSize) -> Self {
-        let blocks_len = (block_size.0 as usize)
+    pub fn create() -> Self {
+        let blocks_len = (crate::common::BLOCK_SIZE as usize)
             .checked_mul(MAX_BLOCKS_QUEUED as usize)
             .expect("ring buffer size overflow");
 
@@ -115,7 +111,6 @@ impl Buffer {
         let internal = Internal {
             headers: Box::new([zero_header; MAX_BLOCKS_QUEUED as usize]),
             blocks: allocate_zeroed_boxed_slice(blocks_len),
-            block_size,
             base_data: 0,
             count_data: 0,
             count_reserved: 0,
@@ -149,14 +144,10 @@ impl Buffer {
         }
 
         // find the slice we want
-        let first_index = guard
-            .block_size
-            .0
+        let first_index = u32::from(crate::common::BLOCK_SIZE)
             .checked_mul(guard.base_data)
             .expect("first_index overflow") as usize;
-        let last_index = guard
-            .block_size
-            .0
+        let last_index = u32::from(crate::common::BLOCK_SIZE)
             .checked_mul(guard.base_data.checked_add(1).expect("base_data overflow"))
             .expect("last_index overflow") as usize;
 
@@ -262,14 +253,10 @@ impl Buffer {
         }
 
         // find the slice we want
-        let first_index = guard
-            .block_size
-            .0
+        let first_index = u32::from(crate::common::BLOCK_SIZE)
             .checked_mul(next)
             .expect("first_index overflow") as usize;
-        let last_index = guard
-            .block_size
-            .0
+        let last_index = u32::from(crate::common::BLOCK_SIZE)
             .checked_mul(after_next)
             .expect("last_index overflow") as usize;
         let internal = &mut *guard;

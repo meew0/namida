@@ -65,10 +65,6 @@ impl BlockIndex {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, bincode::Encode, bincode::Decode)]
-pub struct BlockSize(pub u32);
-clapify!(BlockSize, u32, BlockSizeValueParser);
-
 #[derive(Debug, Clone, Copy, bincode::Encode, bincode::Decode)]
 pub struct TargetRate(pub u64);
 clapify!(TargetRate, u64, TargetRateValueParser);

@@ -1,6 +1,5 @@
-use crate::types::{BlockSize, ErrorRate, Fraction, TargetRate};
+use crate::types::{ErrorRate, Fraction, TargetRate};
 
-pub const DEFAULT_BLOCK_SIZE: BlockSize = BlockSize(1024);
 pub const DEFAULT_TABLE_SIZE: libc::c_int = 4096;
 pub const DEFAULT_SERVER_NAME: &str = "localhost";
 pub const DEFAULT_SERVER_PORT: u16 = 51038;

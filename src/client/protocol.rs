@@ -96,7 +96,7 @@ pub fn authenticate_encrypted(session: &mut Session, secret: &[u8]) -> anyhow::R
 /// Returns an error on negotiation failure, I/O failure, or if the server sent unexpected data.
 pub fn negotiate(session: &mut Session, parameter: &Parameter) -> anyhow::Result<()> {
     // send our protocol revision number to the server
-    let client_revision = crate::version::protocol_revision(parameter.encrypted);
+    let client_revision = crate::version::magic(parameter.encrypted);
     session.server.write(client_revision)?;
 
     // read the protocol revision number from the server
@@ -136,7 +136,6 @@ pub fn open_transfer(
         .server
         .write(ClientToServer::FileRequest(FileRequest {
             path: remote_filename.clone(),
-            block_size: parameter.block_size,
             target_rate: parameter.target_rate,
             error_rate: parameter.error_rate,
             slowdown: parameter.slower,
@@ -148,7 +147,6 @@ pub fn open_transfer(
     let remote_udp_port = match result {
         ServerToClient::FileRequestSuccess {
             file_size,
-            block_size,
             block_count,
             epoch,
             udp_port,
@@ -160,9 +158,6 @@ pub fn open_transfer(
 
             // Get the server's parameters
             session.transfer.file_size = file_size;
-            if block_size != parameter.block_size {
-                bail!("Block size disagreement");
-            }
             session.transfer.block_count = block_count;
             session.transfer.epoch = epoch;
 
@@ -211,8 +206,8 @@ pub fn open_transfer(
     #[allow(clippy::cast_sign_loss)]
     #[allow(clippy::cast_possible_truncation)]
     let on_wire_estimate = BlockIndex(
-        (0.5_f64 * parameter.target_rate.0 as f64 / (f64::from(parameter.block_size.0) * 8.0_f64))
-            as u32,
+        (0.5_f64 * parameter.target_rate.0 as f64
+            / (f64::from(crate::common::BLOCK_SIZE) * 8.0_f64)) as u32,
     );
     session.transfer.on_wire_estimate =
         BlockIndex::min(session.transfer.block_count, on_wire_estimate);
@@ -461,8 +456,8 @@ pub fn update_stats(
 
     // find the amount of data transferred (bytes)
     let data_total =
-        f64::from(parameter.block_size.0) * f64::from(session.transfer.stats.total_blocks.0);
-    let data_this = f64::from(parameter.block_size.0)
+        f64::from(crate::common::BLOCK_SIZE) * f64::from(session.transfer.stats.total_blocks.0);
+    let data_this = f64::from(crate::common::BLOCK_SIZE)
         * f64::from(
             (session
                 .transfer
@@ -471,7 +466,7 @@ pub fn update_stats(
                 .safe_sub(session.transfer.stats.this_blocks))
             .0,
         );
-    let data_this_rexmit = f64::from(parameter.block_size.0)
+    let data_this_rexmit = f64::from(crate::common::BLOCK_SIZE)
         * f64::from(session.transfer.stats.this_flow_retransmitteds.0);
 
     // update the UDP receive error count reported by the operating system

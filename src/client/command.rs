@@ -12,9 +12,7 @@ use crate::{
     common::SocketWrapper,
     datagram::{self, BlockType},
     message::{ClientToServer, ServerToClient},
-    types::{
-        BlockIndex, BlockSize, ErrorRate, FileMetadata, FileSize, Fraction, TargetRate, UdpErrors,
-    },
+    types::{BlockIndex, ErrorRate, FileMetadata, FileSize, Fraction, TargetRate, UdpErrors},
 };
 
 /// “Closes the connection” by virtue of dropping the session object.
@@ -198,17 +196,25 @@ pub fn get(
         let ring_buffer_ref = session
             .transfer
             .ring_buffer
-            .insert(Arc::new(super::ring::Buffer::create(parameter.block_size)));
+            .insert(Arc::new(super::ring::Buffer::create()));
         let ring_buffer = Arc::clone(ring_buffer_ref);
 
         // allocate the faster local buffer
-        let mut local_datagram_buffer = ring::allocate_zeroed_boxed_slice(
-            parameter
-                .block_size
-                .0
-                .checked_add(6)
-                .expect("datagram buffer size overflow") as usize,
-        );
+        let local_datagram_buffer_size = (crate::common::BLOCK_SIZE as usize)
+            .checked_add(6)
+            .expect("datagram buffer size overflow");
+        let mut local_datagram_buffer =
+            ring::allocate_zeroed_boxed_slice(local_datagram_buffer_size);
+
+        // allocate the buffer for the ciphertext, if necessary
+        let mut encrypted_buffer = if parameter.encrypted {
+            let size = (crate::common::BLOCK_SIZE as usize)
+                .checked_add(30) // 8 for nonce + 16 for noise auth data + 6 for block header
+                .expect("datagram buffer size overflow");
+            vec![0_u8; size]
+        } else {
+            vec![]
+        };
 
         // This other clone of the ring buffer will be moved into the disk thread.
         let cloned_ring_buffer = Arc::clone(&ring_buffer);
@@ -243,15 +249,28 @@ pub fn get(
         // until we break out of the transfer
         loop {
             // try to receive a datagram
+            let receive_buffer = if parameter.encrypted {
+                encrypted_buffer.as_mut_slice()
+            } else {
+                &mut local_datagram_buffer
+            };
+
             let udp_result = session
                 .transfer
                 .udp_socket
                 .as_ref()
                 .expect("UDP socket should be present")
-                .recv_from(local_datagram_buffer.as_mut());
+                .recv_from(receive_buffer);
 
             match udp_result {
-                Ok(_) => {}
+                Ok((len, _)) => {
+                    if len != receive_buffer.len() {
+                        println!(
+                            "Ignoring datagram with incorrect length: {len} != {}",
+                            receive_buffer.len()
+                        );
+                    }
+                }
                 Err(err) => {
                     println!("WARNING: UDP data transmission error: {err}");
                     println!("Apparently frozen transfer, trying to do retransmit request");
@@ -263,11 +282,24 @@ pub fn get(
                 }
             }
 
-            // retrieve the block number and block type
-            let Some(local_datagram_view) = datagram::View::parse(&local_datagram_buffer) else {
-                println!("WARNING: received datagram with invalid block type, ignoring");
-                continue;
+            let local_datagram_view: datagram::View = if parameter.encrypted {
+                const U64_SIZE: usize = std::mem::size_of::<u64>();
+                let (nonce, _) = bincode::decode_from_slice(
+                    &encrypted_buffer[..U64_SIZE],
+                    crate::common::BINCODE_CONFIG,
+                )?;
+                let payload = &encrypted_buffer[U64_SIZE..];
+                session
+                    .server
+                    .decrypt_borrow_decode(nonce, payload, &mut local_datagram_buffer)?
+            } else {
+                let (datagram_view, _) = bincode::borrow_decode_from_slice(
+                    &local_datagram_buffer,
+                    crate::common::BINCODE_CONFIG,
+                )?;
+                datagram_view
             };
+
             let this_block = local_datagram_view.header.block_index; // 1-based
             let this_type = local_datagram_view.header.block_type;
 
@@ -352,7 +384,7 @@ pub fn get(
                                 path_capability *= 0.001_f64 * f64::from(parameter.losswindow_ms);
 
                                 let first = 1_000_000.0 * path_capability
-                                    / (8.0 * f64::from(parameter.block_size.0));
+                                    / (8.0 * f64::from(crate::common::BLOCK_SIZE));
                                 let second = f64::from(
                                     (this_block.safe_sub(session.transfer.gapless_to_block)).0,
                                 );
@@ -504,9 +536,9 @@ pub fn get(
         // calculate and display the final results
         let bit_thru = 8.0_f64
             * f64::from(session.transfer.stats.total_blocks.0)
-            * f64::from(parameter.block_size.0);
+            * f64::from(crate::common::BLOCK_SIZE);
         let bit_good = (8.0_f64 * f64::from(session.transfer.stats.total_recvd_retransmits.0))
-            .mul_add(-f64::from(parameter.block_size.0), bit_thru);
+            .mul_add(-f64::from(crate::common::BLOCK_SIZE), bit_thru);
         #[allow(clippy::cast_precision_loss)]
         let bit_file = 8.0_f64 * session.transfer.file_size.0 as f64;
 
@@ -564,9 +596,7 @@ pub fn get(
         // update the transcript
         if parameter.transcript_yn {
             crate::common::transcript_warn_error(super::transcript::data_stop(session));
-            crate::common::transcript_warn_error(super::transcript::close(
-                session, parameter, delta,
-            ));
+            crate::common::transcript_warn_error(super::transcript::close(session, delta));
         }
 
         // dump the received packet bitfield to a file, with added filename prefix `.blockmap`
@@ -722,8 +752,6 @@ pub fn set(command: &[&str], parameter: &mut Parameter) -> anyhow::Result<()> {
             parameter.client_port = Some(value_str.parse()?);
         } else if property.eq_ignore_ascii_case("buffer") {
             parameter.udp_buffer = value_str.parse()?;
-        } else if property.eq_ignore_ascii_case("blocksize") {
-            parameter.block_size = BlockSize(value_str.parse()?);
         } else if property.eq_ignore_ascii_case("verbose") {
             parameter.verbose_yn = value_str == "yes";
         } else if property.eq_ignore_ascii_case("transcript") {
@@ -776,9 +804,6 @@ pub fn set(command: &[&str], parameter: &mut Parameter) -> anyhow::Result<()> {
     }
     if do_all || property.eq_ignore_ascii_case("buffer") {
         println!("buffer = {}", parameter.udp_buffer);
-    }
-    if do_all || property.eq_ignore_ascii_case("blocksize") {
-        println!("blocksize = {}", parameter.block_size);
     }
     if do_all || property.eq_ignore_ascii_case("verbose") {
         println!(

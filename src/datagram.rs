@@ -1,3 +1,5 @@
+use bincode::{de::read::BorrowReader, enc::write::Writer};
+
 use crate::types::BlockIndex;
 
 #[derive(Debug, Clone, Copy)]
@@ -6,12 +8,16 @@ pub struct Header {
     pub block_type: BlockType,
 }
 
+impl Header {
+    pub const SIZE: usize = 6;
+}
+
 #[derive(Debug, Clone, Copy)]
 #[repr(u16)]
 pub enum BlockType {
-    Original = 'O' as u16,
-    Final = 'X' as u16,
-    Retransmission = 'R' as u16,
+    Original,
+    Final,
+    Retransmission,
 }
 
 impl TryFrom<u16> for BlockType {
@@ -31,59 +37,47 @@ impl TryFrom<u16> for BlockType {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct View<'a> {
+pub struct View<'v> {
     pub header: Header,
-    pub block: &'a [u8],
+    pub block: &'v [u8],
 }
 
-impl<'a> View<'a> {
-    /// Parses the given byte slice into a datagram `View`. Returns `None` if the input data
-    /// specifies an invalid block type.
-    ///
-    /// # Panics
-    /// Panics if conversions of dynamically-sized to statically-sized slices fail.
-    #[must_use]
-    pub fn parse(slice: &'a [u8]) -> Option<Self> {
-        assert!(slice.len() > 5);
+impl<'v> bincode::Encode for View<'v> {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        bincode::Encode::encode(&self.header.block_index.0, encoder)?;
+        bincode::Encode::encode(&(self.header.block_type as u16), encoder)?;
+        encoder.writer().write(self.block)?;
 
-        let Ok(block_type) = BlockType::try_from(u16::from_be_bytes(
-            slice[4..6]
-                .try_into()
-                .expect("block type slice should be the correct size"),
-        )) else {
-            return None;
-        };
-
-        let header = Header {
-            block_index: BlockIndex(u32::from_be_bytes(
-                slice[0..4]
-                    .try_into()
-                    .expect("block index slice should be the correct size"),
-            )),
-            block_type,
-        };
-
-        Some(Self {
-            header,
-            block: &slice[6..],
-        })
+        Ok(())
     }
+}
 
-    /// Writes a byte representation of this datagram into the given slice. The slice must have
-    /// exactly `self.block.len() + 6` elements.
-    ///
-    /// # Panics
-    /// Panics if the current slice length is less than 6 bytes away from overflowing.
-    pub fn write_to(&self, slice: &mut [u8]) {
-        assert_eq!(
-            slice.len(),
-            self.block
-                .len()
-                .checked_add(6)
-                .expect("datagram length overflow")
-        );
-        slice[0..4].copy_from_slice(&self.header.block_index.0.to_be_bytes());
-        slice[4..6].copy_from_slice(&(self.header.block_type as u16).to_be_bytes());
-        slice[6..].copy_from_slice(self.block);
+impl<'v, 'de: 'v> bincode::BorrowDecode<'de> for View<'v> {
+    fn borrow_decode<D: bincode::de::BorrowDecoder<'de>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        let block_index = BlockIndex(bincode::BorrowDecode::borrow_decode(decoder)?);
+        let block_type_value: u16 = bincode::BorrowDecode::borrow_decode(decoder)?;
+        let block_type = BlockType::try_from(block_type_value).or(Err(
+            bincode::error::DecodeError::UnexpectedVariant {
+                type_name: "BlockType",
+                allowed: &bincode::error::AllowedEnumVariants::Range { min: 0, max: 2 },
+                found: u32::from(block_type_value),
+            },
+        ))?;
+        let block = decoder
+            .borrow_reader()
+            .take_bytes(crate::common::BLOCK_SIZE as usize)?;
+
+        Ok(Self {
+            header: Header {
+                block_index,
+                block_type,
+            },
+            block,
+        })
     }
 }

@@ -11,14 +11,14 @@ use super::{Parameter, Session};
 ///
 /// # Panics
 /// Panics if no transcript file is opened.
-pub fn close(session: &mut Session, parameter: &Parameter, delta: u64) -> anyhow::Result<()> {
+pub fn close(session: &mut Session, delta: u64) -> anyhow::Result<()> {
     // File sizes in megabytes, not mibibytes as Tsunami used
     let mb_thru = f64::from(session.transfer.stats.total_blocks.0)
-        * f64::from(parameter.block_size.0)
+        * f64::from(crate::common::BLOCK_SIZE)
         / 1_000_000.0;
     let mb_good = mb_thru
         - f64::from(session.transfer.stats.total_recvd_retransmits.0)
-            * f64::from(parameter.block_size.0)
+            * f64::from(crate::common::BLOCK_SIZE)
             / 1_000_000.0;
     #[allow(clippy::cast_precision_loss)]
     let mb_file = session.transfer.file_size.0 as f64 / 1_000_000.0;
@@ -156,7 +156,6 @@ pub fn open(session: &mut Session, parameter: &Parameter) -> anyhow::Result<()> 
         session.transfer.block_count.0
     )?;
     writeln!(transcript, "udp_buffer = {}", parameter.udp_buffer)?;
-    writeln!(transcript, "block_size = {}", parameter.block_size)?;
     writeln!(transcript, "target_rate = {}", parameter.target_rate)?;
     writeln!(transcript, "error_rate = {}", parameter.error_rate)?;
     writeln!(transcript, "slower = {}", parameter.slower)?;
@@ -170,7 +169,7 @@ pub fn open(session: &mut Session, parameter: &Parameter) -> anyhow::Result<()> 
     writeln!(
         transcript,
         "protocol_version = 0x{:x}",
-        crate::version::protocol_revision(parameter.encrypted),
+        crate::version::magic(parameter.encrypted),
     )?;
     writeln!(
         transcript,

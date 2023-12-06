@@ -27,8 +27,10 @@ pub fn serve(mut parameter: Parameter) -> anyhow::Result<()> {
 
     // now show version / build information
     eprintln!(
-        "namida server for protocol revision {}\nVersion: {} (revision {})\nCompiled: {}\nWaiting for clients to connect.",
+        "namida server for protocol revision {} (block size = {}, magic = 0x{:x})\nVersion: {} (revision {})\nCompiled: {}\nWaiting for clients to connect.",
         crate::version::NAMIDA_PROTOCOL_REVISION,
+        crate::common::BLOCK_SIZE,
+        crate::version::magic(parameter.encrypted),
         crate::version::NAMIDA_VERSION,
         &crate::version::GIT_HASH[0..7],
         crate::version::COMPILE_DATE_TIME,
@@ -84,7 +86,7 @@ pub fn client_handler(mut session: Session, parameter: &Parameter) -> anyhow::Re
 
     if parameter.verbose_yn {
         println!("Client authenticated. Negotiated parameters are:");
-        println!("Block size: {}", session.properties.block_size);
+        println!("Block size: {}", crate::common::BLOCK_SIZE);
         println!("Buffer size: {}", parameter.udp_buffer);
         println!(
             "Encryption: {}",
@@ -163,11 +165,12 @@ fn handle_transfer(
 
     let mut retransmit_accept_iteration = 0;
 
-    let mut datagram_block_buffer: Vec<u8> = vec![0_u8; session.properties.block_size.0 as usize];
+    let mut datagram_block_buffer: Vec<u8> = vec![0_u8; crate::common::BLOCK_SIZE as usize];
+    let datagram_buffer_extra_length = if parameter.encrypted { 30 } else { 6 };
     let mut datagram_buffer: Vec<u8> = vec![
         0_u8;
-        (session.properties.block_size.0 as usize)
-            .checked_add(6)
+        (crate::common::BLOCK_SIZE as usize)
+            .checked_add(datagram_buffer_extra_length)
             .expect("datagram buffer size overflow")
     ];
 
@@ -309,6 +312,7 @@ fn handle_transfer(
             // some blocks that haven't yet been sent
             let cont = send_next_block(
                 session,
+                parameter,
                 &mut block_type,
                 &mut datagram_block_buffer,
                 &mut datagram_buffer,
@@ -458,6 +462,7 @@ fn try_read(
 
 fn send_next_block(
     session: &mut Session,
+    parameter: &Parameter,
     block_type: &mut BlockType,
     datagram_block_buffer: &mut [u8],
     datagram_buffer: &mut [u8],
@@ -477,21 +482,10 @@ fn send_next_block(
     let block_index = session.transfer.block;
     let datagram =
         super::io::build_datagram(session, block_index, *block_type, datagram_block_buffer)?;
-    datagram.write_to(datagram_buffer);
+    bincode::encode_into_slice(datagram, datagram_buffer, crate::common::BINCODE_CONFIG)?;
 
     // transmit the datagram
-    if let Err(err) = session
-        .transfer
-        .udp_socket
-        .as_ref()
-        .expect("UDP socket should be available")
-        .send_to(
-            datagram_buffer,
-            session
-                .transfer
-                .udp_address
-                .expect("Client UDP address should be available"),
-        )
+    if let Err(err) = super::protocol::send_datagram(session, parameter, datagram, datagram_buffer)
     {
         println!(
             "WARNING: Could not transmit block #{}: {}",

@@ -135,11 +135,6 @@ pub fn open(session: &mut Session, parameter: &Parameter) -> anyhow::Result<()> 
     writeln!(transcript, "udp_buffer = {}", parameter.udp_buffer)?;
     writeln!(
         transcript,
-        "block_size = {}",
-        session.properties.block_size.0
-    )?;
-    writeln!(
-        transcript,
         "target_rate = {}",
         session.properties.target_rate.0
     )?;
@@ -155,7 +150,7 @@ pub fn open(session: &mut Session, parameter: &Parameter) -> anyhow::Result<()> 
     writeln!(
         transcript,
         "protocol_version = 0x{:x}",
-        crate::version::protocol_revision(parameter.encrypted),
+        crate::version::magic(parameter.encrypted),
     )?;
     writeln!(
         transcript,

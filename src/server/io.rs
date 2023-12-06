@@ -22,7 +22,7 @@ pub fn build_datagram<'a>(
     block_type: BlockType,
     block_buffer: &'a mut [u8],
 ) -> anyhow::Result<datagram::View<'a>> {
-    assert_eq!(block_buffer.len(), session.properties.block_size.0 as usize);
+    assert_eq!(block_buffer.len(), crate::common::BLOCK_SIZE as usize);
 
     // move the file pointer to the appropriate location
     let file = session
@@ -31,20 +31,20 @@ pub fn build_datagram<'a>(
         .as_mut()
         .expect("a file should be present");
     file.seek(SeekFrom::Start(
-        u64::from(session.properties.block_size.0)
+        u64::from(crate::common::BLOCK_SIZE)
             .checked_mul(u64::from((block_index.safe_sub(BlockIndex(1))).0))
             .expect("file position overflow"),
     ))?;
 
     // try to read in the block
     let read_amount = file.read(block_buffer)?;
-    if read_amount < session.properties.block_size.0 as usize
+    if read_amount < crate::common::BLOCK_SIZE as usize
         && block_index < session.properties.block_count
     {
         println!(
             "WARNING: only read {} instead of {} bytes for block {} out of {}",
             read_amount,
-            session.properties.block_size,
+            crate::common::BLOCK_SIZE,
             block_index.0,
             session.properties.block_count.0
         );

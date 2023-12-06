@@ -9,8 +9,10 @@ pub fn interactive(mut parameter: Parameter) -> anyhow::Result<()> {
 
     // show version / build information
     eprintln!(
-        "namida client for protocol revision {}\nVersion: {} (revision {})\nCompiled: {}\n",
+        "namida client for protocol revision {} (block size = {}, magic = 0x{:x})\nVersion: {} (revision {})\nCompiled: {}\n",
         crate::version::NAMIDA_PROTOCOL_REVISION,
+        crate::common::BLOCK_SIZE,
+        crate::version::magic(parameter.encrypted),
         crate::version::NAMIDA_VERSION,
         &crate::version::GIT_HASH[0..7],
         crate::version::COMPILE_DATE_TIME,

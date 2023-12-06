@@ -1,8 +1,6 @@
 use std::{borrow::Cow, path::PathBuf, time::Duration};
 
-use crate::types::{
-    BlockIndex, BlockSize, ErrorRate, FileMetadata, FileSize, Fraction, TargetRate,
-};
+use crate::types::{BlockIndex, ErrorRate, FileMetadata, FileSize, Fraction, TargetRate};
 
 #[derive(Debug, bincode::Encode, bincode::Decode)]
 pub enum ClientToServer {
@@ -20,7 +18,6 @@ pub enum ServerToClient {
     AuthenticationStatus(bool),
     FileRequestSuccess {
         file_size: FileSize,
-        block_size: BlockSize,
         block_count: BlockIndex,
         epoch: Duration,
         udp_port: u16,
@@ -61,7 +58,6 @@ impl NoiseHeader {
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
 pub struct FileRequest {
     pub path: PathBuf,
-    pub block_size: BlockSize,
     pub target_rate: TargetRate,
     pub error_rate: ErrorRate,
     pub slowdown: Fraction,

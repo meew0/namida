@@ -24,6 +24,8 @@ pub static DEFAULT_SECRET: &[u8; 32] = &[
     0x25, 0x48, 0xdb, 0x99, 0xec, 0x04, 0x6e, 0x5d, 0xf7, 0x53, 0x3d, 0xdd, 0x60, 0x1d, 0xa2, 0x79,
 ];
 
+pub const BLOCK_SIZE: u16 = 1024;
+
 pub fn transcript_warn_error(result: anyhow::Result<()>) {
     if let Err(err) = result {
         println!("Unable to perform transcript: {err}");
@@ -176,6 +178,49 @@ impl SocketWrapper {
         decrypt_decode(&noise.state, &mut noise.write_buffer, nonce, payload)
     }
 
+    /// Try to decrypt the given payload, and borrow-decode the result as one instance of type `T`.
+    ///
+    /// # Errors
+    /// Returns an error if decryption or decoding was unsuccessful.
+    ///
+    /// # Panics
+    /// Panics if decryption is not available (noise not initialised)
+    pub fn decrypt_borrow_decode<'a, T: bincode::BorrowDecode<'a>>(
+        &mut self,
+        nonce: u64,
+        payload: &[u8],
+        write_buffer: &'a mut [u8],
+    ) -> anyhow::Result<T> {
+        let noise = self.noise.as_mut().expect("decryption should be available");
+        decrypt_borrow_decode(&noise.state, write_buffer, nonce, payload)
+    }
+
+    /// Encode the given object using bincode and encrypt the resulting data as a noise message. The
+    /// `write_buffer` is used as an intermediate; it must be large enough to hold the noise message
+    /// (i.e. at least the encoded data length + 16 bytes). If successful, the slice of the buffer
+    /// containing the message is returned.
+    ///
+    /// # Errors
+    /// Returns an error if encoding or encryption was unsuccessful.
+    ///
+    /// # Panics
+    /// Panics if encryption is unavailable.
+    pub fn encode_encrypt<'a, T: bincode::Encode>(
+        &mut self,
+        write_buffer: &'a mut [u8],
+        nonce: u64,
+        value: T,
+    ) -> anyhow::Result<&'a [u8]> {
+        let noise = self.noise.as_mut().expect("encryption should be available");
+        encode_encrypt(
+            &noise.state,
+            &mut noise.read_buffer,
+            write_buffer,
+            nonce,
+            value,
+        )
+    }
+
     /// Try to read one instance of the given type from the TCP stream. Blocks until one complete
     /// instance is read.
     ///
@@ -287,6 +332,22 @@ fn decrypt_decode<T: bincode::Decode>(
     let message_len = state.read_message(nonce, payload, write_buffer)?;
     let message = &write_buffer[..message_len];
     match bincode::decode_from_slice(message, BINCODE_CONFIG) {
+        Ok((decoded, _)) => Ok(decoded),
+        Err(err) => {
+            bail!("Failed to decode data {message:x?}, error: {err}");
+        }
+    }
+}
+
+fn decrypt_borrow_decode<'a, T: bincode::BorrowDecode<'a>>(
+    state: &StatelessTransportState,
+    write_buffer: &'a mut [u8],
+    nonce: u64,
+    payload: &[u8],
+) -> anyhow::Result<T> {
+    let message_len = state.read_message(nonce, payload, write_buffer)?;
+    let message = &write_buffer[..message_len];
+    match bincode::borrow_decode_from_slice(message, BINCODE_CONFIG) {
         Ok((decoded, _)) => Ok(decoded),
         Err(err) => {
             bail!("Failed to decode data {message:x?}, error: {err}");
