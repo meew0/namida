@@ -11,12 +11,12 @@ use crate::{
         self, ClientToServer, FileRequest, FileRequestError, ServerToClient, TransmissionControl,
         UdpMethod,
     },
-    types::{BlockIndex, FileSize},
+    types::{BlockIndex, FileMetadata, FileSize},
 };
 
 use anyhow::{anyhow, bail};
 
-use super::{Parameter, Session, Transfer};
+use super::{IndexMode, Parameter, Session, Transfer};
 
 /// Handles the given transmission control request. The actions taken depend on the nature of the
 /// request:
@@ -361,12 +361,27 @@ pub fn determine_client_udp_address(
 ///
 /// # Errors
 /// Returns an error on I/O failure.
-pub fn send_file_list(session: &mut Session, parameter: &Parameter) -> anyhow::Result<()> {
+pub fn send_file_list(
+    session: &mut Session,
+    parameter: &Parameter,
+    files: &mut Vec<FileMetadata>,
+) -> anyhow::Result<()> {
+    // The list of files on the system might have changed since the server has started. However,
+    // reindexing is expensive, so we only want to do it if the user actually desires this
+    // behaviour.
+    if matches!(parameter.index, IndexMode::Always) {
+        files.clear();
+        super::io::index_files(&parameter.file_names, files);
+        #[allow(clippy::min_ident_chars)]
+        let s = if files.len() == 1 { "" } else { "s" };
+        eprintln!("Found {} file{s} after reindexing.", files.len());
+    }
+
     session
         .client
-        .write(ServerToClient::FileCount(parameter.files.len() as u64))?;
+        .write(ServerToClient::FileCount(files.len() as u64))?;
 
-    for file_metadata in &parameter.files {
+    for file_metadata in files {
         session
             .client
             .write(ServerToClient::FileListEntry(file_metadata.clone()))?;

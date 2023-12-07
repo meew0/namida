@@ -1,17 +1,18 @@
 use std::{
     cmp::Ordering,
     io::{ErrorKind, Read},
+    path::PathBuf,
     time::Instant,
 };
 
-use super::{Parameter, Session, Transfer};
+use super::{IndexMode, Parameter, Session, Transfer};
 
 use crate::{
     common::SocketWrapper,
     datagram::BlockType,
     message::{ClientToServer, FileRequest, NoiseHeader, TransmissionControl},
     server::Properties,
-    types::{BlockIndex, ErrorRate, FileMetadata, FileSize},
+    types::{BlockIndex, ErrorRate, FileMetadata},
 };
 use anyhow::bail;
 
@@ -19,15 +20,9 @@ use anyhow::bail;
 #[allow(clippy::missing_errors_doc)]
 #[allow(clippy::missing_panics_doc)]
 pub fn serve(mut parameter: Parameter) -> anyhow::Result<()> {
-    // process our command-line options
-    process_options(&mut parameter);
-
-    // obtain our server socket
-    let listener = super::network::create_tcp_socket(&parameter)?;
-
-    // now show version / build information
+    // show version / build information
     eprintln!(
-        "namida server for protocol revision {} (block size = {}, magic = 0x{:x})\nVersion: {} (revision {})\nCompiled: {}\nWaiting for clients to connect.",
+        "namida server for protocol revision {} (block size = {}, magic = 0x{:x})\nVersion: {} (revision {})\nCompiled: {}",
         crate::version::NAMIDA_PROTOCOL_REVISION,
         crate::common::BLOCK_SIZE,
         crate::version::magic(parameter.encrypted),
@@ -35,6 +30,14 @@ pub fn serve(mut parameter: Parameter) -> anyhow::Result<()> {
         &crate::version::GIT_HASH[0..7],
         crate::version::COMPILE_DATE_TIME,
     );
+    eprintln!();
+
+    // process our command-line options
+    let files = process_options(&mut parameter);
+
+    // obtain our server socket
+    let listener = super::network::create_tcp_socket(&parameter)?;
+    eprintln!("Waiting for clients to connect.");
 
     // “while our little world keeps turning”...
     for (session_id, result) in listener.incoming().enumerate() {
@@ -45,6 +48,7 @@ pub fn serve(mut parameter: Parameter) -> anyhow::Result<()> {
         // create a new thread to handle the client connection. (We use threads here instead of
         // sub-processes like Tsunami originally did)
         let parameter_cloned = parameter.clone();
+        let files_cloned = files.clone();
         std::thread::spawn(move || {
             // set up the session structure
             let session = Session {
@@ -56,7 +60,7 @@ pub fn serve(mut parameter: Parameter) -> anyhow::Result<()> {
 
             // and run the client handler, catching any panics so we can inform the user about what
             // happened
-            let result = client_handler(session, &parameter_cloned);
+            let result = client_handler(session, &parameter_cloned, files_cloned);
 
             match result {
                 Ok(()) => eprintln!("Child server thread terminated succcessfully."),
@@ -72,7 +76,11 @@ pub fn serve(mut parameter: Parameter) -> anyhow::Result<()> {
 /// connections.
 #[allow(clippy::missing_errors_doc)]
 #[allow(clippy::missing_panics_doc)]
-pub fn client_handler(mut session: Session, parameter: &Parameter) -> anyhow::Result<()> {
+pub fn client_handler(
+    mut session: Session,
+    parameter: &Parameter,
+    mut files: Vec<FileMetadata>,
+) -> anyhow::Result<()> {
     // negotiate the connection parameters
     // We call it negotiation, but we unilaterally impose our parameters on the client!
     super::protocol::negotiate(&mut session, parameter)?;
@@ -108,7 +116,7 @@ pub fn client_handler(mut session: Session, parameter: &Parameter) -> anyhow::Re
                 handle_transfer(&mut session, parameter, file_request)?;
             }
             ClientToServer::FileListRequest => {
-                super::protocol::send_file_list(&mut session, parameter)?;
+                super::protocol::send_file_list(&mut session, parameter, &mut files)?;
             }
             _ => bail!("Expected a request from the client but got: {request:?}"),
         }
@@ -499,42 +507,59 @@ fn send_next_block(
 
 /// Perform required processing on command line options. Primarily this involves trying to open all
 /// files that were specified to be served, and obtaining their file size.
-pub fn process_options(parameter: &mut Parameter) {
+pub fn process_options(parameter: &mut Parameter) -> Vec<FileMetadata> {
     // Load the secret key from the secret file, if specified
     crate::common::load_secret(&parameter.secret_file, &mut parameter.secret);
 
-    if !parameter.file_names.is_empty() {
-        let total_files = parameter.file_names.len();
-        eprintln!("\nThe specified {total_files} files will be listed on GET *:");
+    if parameter.file_names.is_empty() {
+        // The user did not specify any files, let's index the current directory
+        parameter.file_names.push(PathBuf::from("."));
+    }
 
-        for (counter, path) in parameter.file_names.iter().enumerate() {
-            match std::fs::metadata(path) {
-                Ok(metadata) => {
-                    parameter.files.push(FileMetadata {
-                        path: path.clone(),
-                        size: FileSize(metadata.len()),
-                    });
+    // Index files and directories
+    let mut files = vec![];
+    if !matches!(parameter.index, IndexMode::Never) {
+        super::io::index_files(&parameter.file_names, &mut files);
+
+        // The user specified some files to serve. Try to open them to check whether they exist,
+        // and get their sizes if they do
+        let total_files = files.len();
+
+        if parameter.verbose_yn {
+            match total_files {
+                0 => eprintln!("WARNING: No files to be served were found!"),
+                1 => eprintln!("The specified file will be served:"),
+                count => eprintln!("The specified {count} files will be served:"),
+            }
+
+            for (index, metadata) in files.iter().enumerate() {
+                eprintln!(
+                    " {:3}   {:<20}  {} bytes",
+                    index.saturating_add(1),
+                    metadata.path.display(),
+                    metadata.size.0,
+                );
+            }
+        } else {
+            match total_files {
+                0 => eprintln!("WARNING: No files to be served were found!"),
+                1 => eprintln!("1 file will be served. Use `--verbose` to show a list of files."),
+                count => {
                     eprintln!(
-                        " {:3}   {:<20}  {} bytes\n",
-                        counter.saturating_add(1),
-                        path.display(),
-                        metadata.len(),
-                    );
-                }
-                Err(err) => {
-                    eprintln!(
-                        "Could not get metadata of specified file: '{}', error: {}",
-                        path.display(),
-                        err
+                        "{count} files will be served. Use `--verbose` to show a list of files."
                     );
                 }
             }
         }
+        eprintln!();
     }
 
     // Print some specified options if the user desires
     if parameter.verbose_yn {
         eprintln!("Buffer size: {}", parameter.udp_buffer);
         eprintln!("Bind: {}", parameter.bind);
+        eprintln!();
     }
+
+    files
 }

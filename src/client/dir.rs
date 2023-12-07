@@ -44,7 +44,13 @@ pub fn run(mut parameter: Parameter) -> anyhow::Result<()> {
         bail!("Expected file count");
     };
 
-    eprintln!("Remote file list:");
+    if num_files == 0 {
+        eprintln!(
+            "Server advertises 0 files. Either no files are available, or indexing is disabled."
+        );
+    } else {
+        eprintln!("Remote file list:");
+    }
     for i in 0..num_files {
         let message::ServerToClient::FileListEntry(file_metadata) = session.server.read()? else {
             bail!("Expected file list entry");

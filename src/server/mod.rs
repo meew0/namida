@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     common::SocketWrapper,
-    types::{BlockIndex, ErrorRate, FileMetadata, FileSize, Fraction, TargetRate},
+    types::{BlockIndex, ErrorRate, FileSize, Fraction, TargetRate},
 };
 
 pub mod config;
@@ -36,6 +36,12 @@ pub struct Parameter {
     #[arg(long = "unencrypted", action = clap::ArgAction::SetFalse)]
     pub encrypted: bool,
 
+    /// Defines the indexing mode — whether input files and directories are never indexed (which
+    /// means file listing will be unsupported), only indexed at startup, or reindexed whenever the
+    /// client requests a file list.
+    #[arg(long = "index", default_value_t, value_enum)]
+    pub index: IndexMode,
+
     /// specifies the desired size for UDP socket send buffer (in bytes)
     #[arg(long = "buffer", short = 'b', default_value_t = config::DEFAULT_UDP_BUFFER)]
     pub udp_buffer: u32,
@@ -61,12 +67,24 @@ pub struct Parameter {
     #[arg()]
     pub file_names: Vec<PathBuf>,
 
-    /// Files with associated size
-    #[arg(skip)]
-    pub files: Vec<FileMetadata>,
-
     #[arg(skip = *crate::common::DEFAULT_SECRET)]
     pub secret: [u8; 32],
+}
+
+#[derive(Clone, Default, clap::ValueEnum)]
+pub enum IndexMode {
+    /// Indexing will never be performed. Directory listing and getting all files using `*` will be
+    /// unsupported.
+    Never,
+
+    /// Indexing will only be performed at startup. If files are added in the meantime, this will
+    /// not be reflected in directory listings, but the file can still be downloaded if the client
+    /// knows the path regardless.
+    #[default]
+    Startup,
+
+    /// Every time the client requests a list of files, the input folder(s) will be reindexed.
+    Always,
 }
 
 pub struct Properties {
