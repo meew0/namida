@@ -63,7 +63,7 @@ pub fn serve(mut parameter: Parameter) -> anyhow::Result<()> {
             let result = client_handler(session, &parameter_cloned, files_cloned);
 
             match result {
-                Ok(()) => eprintln!("Child server thread terminated succcessfully."),
+                Ok(()) => eprintln!("Child server thread terminated successfully."),
                 Err(err) => eprintln!("Child server thread terminated with error: {err}"),
             };
         });
@@ -118,6 +118,7 @@ pub fn client_handler(
             ClientToServer::FileListRequest => {
                 super::protocol::send_file_list(&mut session, parameter, &mut files)?;
             }
+            ClientToServer::Close => return Ok(()),
             _ => bail!("Expected a request from the client but got: {request:?}"),
         }
     }

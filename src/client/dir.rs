@@ -63,6 +63,9 @@ pub fn run(mut parameter: Parameter) -> anyhow::Result<()> {
             file_metadata.size.0
         );
     }
-    eprintln!();
+
+    // Close the connection
+    session.server.write(message::ClientToServer::Close)?;
+
     Ok(())
 }

@@ -9,6 +9,7 @@ pub enum ClientToServer {
     FileRequest(FileRequest),
     UdpInit(UdpMethod),
     FileListRequest,
+    Close,
 }
 
 #[derive(Debug, bincode::Encode, bincode::Decode)]

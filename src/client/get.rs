@@ -678,8 +678,11 @@ pub fn run(mut parameter: Parameter) -> anyhow::Result<()> {
         // continue with the next file, if it exists
     }
 
-    if !successful {
-        eprintln!("Transfer not successful.  (WARNING: You may need to reconnect.)");
+    if successful {
+        eprintln!("All transfers were successful!");
+        session.server.write(message::ClientToServer::Close)?;
+    } else {
+        eprintln!("Transfer not successful.");
         eprintln!();
 
         session.transfer.udp_socket.take();
