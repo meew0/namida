@@ -98,10 +98,13 @@ pub struct Parameter {
     #[arg(skip = *crate::common::DEFAULT_SECRET)]
     pub secret: [u8; 32],
 
-    /// The files to try to read from the server. The special value `*` may be specified to try to
-    /// obtain all files available on the server. (Make sure to avoid shell expansion here!)
+    /// The files to try to read from the server.
     #[arg()]
     pub files: Vec<PathBuf>,
+
+    /// Download all files indexed on the server.
+    #[arg(long = "all")]
+    pub all: bool,
 }
 
 /// Parse a string in the form `123M` into an integer like `123000000`.
@@ -164,16 +167,11 @@ pub fn run(mut parameter: Parameter) -> anyhow::Result<()> {
     let mut session =
         super::protocol::connect(&parameter.server, parameter.encrypted, &parameter.secret)?;
 
-    if parameter.files.is_empty() {
-        bail!("No files are specified.");
-    }
-
     // These variables are only used when requesting multiple files.
     let mut file_names: Vec<PathBuf> = vec![];
 
-    if parameter.files.len() == 1 && parameter.files[0] == PathBuf::from("*") {
-        // if the client is asking for multiple files to be transferred
-        println!("Requesting all available files");
+    if parameter.all {
+        println!("Requesting all indexed files");
 
         session
             .server
@@ -202,6 +200,10 @@ pub fn run(mut parameter: Parameter) -> anyhow::Result<()> {
 
         session.server.flush()?;
     } else {
+        if parameter.files.is_empty() {
+            bail!("No files are specified. Either specify a list of files to be downloaded, or use the `--all` option to download all indexed files.");
+        }
+
         file_names.extend_from_slice(&parameter.files);
     }
 

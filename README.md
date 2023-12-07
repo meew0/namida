@@ -52,7 +52,7 @@ $ namida get --server example.com file1.txt
 Get all files from a server:
 
 ```
-$ namida get --server example.com "*"
+$ namida get --server example.com --all
 ```
 
 Many more options are available for the individual subcommands. Run `namida help [command]` to get more information.
