@@ -218,6 +218,9 @@ pub fn run(mut parameter: Parameter) -> anyhow::Result<()> {
     let mut stats_iteration = 0;
     let mut successful = true;
 
+    let mut this_type = BlockType::Original;
+    let mut last_type;
+
     'outer: for remote_filename in file_names {
         // Get a suitable local filename for the remote one
         let local_filename = create_local_filename(&remote_filename, &parameter.local_filename);
@@ -356,7 +359,8 @@ pub fn run(mut parameter: Parameter) -> anyhow::Result<()> {
             };
 
             let this_block = local_datagram_view.header.block_index; // 1-based
-            let this_type = local_datagram_view.header.block_type;
+            last_type = this_type;
+            this_type = local_datagram_view.header.block_type;
 
             // keep statistics on received blocks
             session.transfer.stats.total_blocks =
@@ -409,8 +413,8 @@ pub fn run(mut parameter: Parameter) -> anyhow::Result<()> {
                     }
                 }
 
-                // transmit restart: avoid re-triggering on blocks still down the wire before
-                // server reacts
+                // If a transfer restart is pending, avoid re-triggering on blocks still down the
+                // wire before the server reacts
                 if !session.transfer.restart_pending
                     || matches!(this_type, BlockType::Final)
                     || this_block <= session.transfer.restart_lastidx
@@ -489,7 +493,30 @@ pub fn run(mut parameter: Parameter) -> anyhow::Result<()> {
                     }
 
                     // are we at the end of the transmission?
-                    if matches!(this_type, BlockType::Final) {
+                    //
+                    // meew0 NOTE:
+                    // After it has transmitted all blocks once, the server will flood us
+                    // with `Final` blocks. If we respond to every one of them with a
+                    // `repeat_retransmit`, we will overload the network and become unable to
+                    // receive any further blocks at all. So, we only want to do this if it is
+                    // unlikely that we will receive any further retransmitted blocks. However, it
+                    // is impossible to know this for sure, since some or all retransmitted packets
+                    // may be lost.
+                    //
+                    // My solution here is to not react to `Final` blocks if the last block was
+                    // also a final block, unless a certain timeout has passed to account for the
+                    // possibility of *all* retransmitted blocks being lost. This will of course
+                    // incur a delay in rare cases, but it should be preferable to the alternative.
+                    if matches!(this_type, BlockType::Final)
+                        && (!matches!(last_type, BlockType::Final)
+                            || crate::common::get_µs_since(
+                                session
+                                    .transfer
+                                    .stats
+                                    .this_time
+                                    .expect("this_time should be set"),
+                            ) > 100_000)
+                    {
                         // got all blocks by now
                         if session.transfer.blocks_left == BlockIndex(0) {
                             break;

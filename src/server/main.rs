@@ -317,8 +317,16 @@ fn handle_transfer(
 
             maybe_transmission_control = None; // wait for the next one
         } else {
-            // we could not read a full transmission control request so far, so simply send
-            // some blocks that haven't yet been sent
+            // we could not read a full transmission control request so far, so, send out
+            // some blocks that haven't yet been sent, or resend the final block.
+            // We want to avoid spamming the client with `Final` blocks, if possible, so do not
+            // send those out if the client is currently sending us retransmit requests
+            if session.properties.retransmit_phase
+                && session.transfer.block == session.properties.block_count
+            {
+                continue;
+            }
+
             let cont = send_next_block(
                 session,
                 parameter,
@@ -389,7 +397,7 @@ fn handle_transfer(
 
         // wait before handling the next packet
         if matches!(block_type, BlockType::Final) {
-            crate::common::µsleep_that_works(ipd_time_max.saturating_mul(10));
+            crate::common::µsleep_that_works(ipd_time_max.saturating_mul(100));
         }
         if let Ok(ipd_time_non_negative) = ipd_time.try_into() {
             crate::common::µsleep_that_works(ipd_time_non_negative);

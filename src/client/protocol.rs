@@ -315,7 +315,7 @@ pub fn open_port(
 }
 
 /// Tries to repeat all of the outstanding retransmit requests for the current transfer on the
-/// given session. This also takes care of maintanence operations on the transmission table,
+/// given session. This also takes care of maintenance operations on the transmission table,
 /// such as relocating the entries toward the bottom of the array.
 ///
 /// # Errors
@@ -402,9 +402,15 @@ pub fn repeat_retransmit(session: &mut Session) -> anyhow::Result<()> {
             for block_index in &session.transfer.retransmit.next_table {
                 retransmits.push(TransmissionControl::Retransmit(*block_index));
             }
+
             for retransmit in retransmits {
                 session.server.write(retransmit)?;
             }
+
+            // let the server know that we're done sending out retransmits
+            session
+                .server
+                .write(TransmissionControl::RetransmitOver(0))?;
         }
 
         // clear the previous table which has now become invalid, and swap it for the next table

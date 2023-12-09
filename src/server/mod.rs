@@ -101,6 +101,7 @@ pub struct Properties {
     pub totalslots: i32,
     pub samplerate: i32,
     pub wait_µs: i64,
+    pub retransmit_phase: bool,
 }
 
 impl Default for Properties {
@@ -125,6 +126,7 @@ impl Default for Properties {
             totalslots: 0,
             samplerate: 0,
             wait_µs: 0,
+            retransmit_phase: false,
         }
     }
 }

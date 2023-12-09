@@ -100,6 +100,8 @@ pub fn accept_retransmit(
             session.transfer.block = block;
         }
         TransmissionControl::Retransmit(block) => {
+            session.properties.retransmit_phase = true;
+
             // if it's a retransmit request: build the retransmission
             let datagram = super::io::build_datagram(
                 session,
@@ -110,6 +112,9 @@ pub fn accept_retransmit(
 
             // Send the block away
             send_datagram(session, parameter, datagram, datagram_buffer)?;
+        }
+        TransmissionControl::RetransmitOver(_) => {
+            session.properties.retransmit_phase = false;
         }
         _ => {
             // if it's another kind of request

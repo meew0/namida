@@ -35,7 +35,8 @@ pub enum TransmissionControl {
     Retransmit(BlockIndex),
     SubmitErrorRate(ErrorRate),
 
-    /// Dummy value to ensure all enum variants have the same length
+    // Dummy values to ensure all enum variants have the same length
+    RetransmitOver(u32),
     EndTransmission(u32),
 }
 
@@ -124,6 +125,14 @@ mod tests {
         assert_eq!(
             bincode::encode_into_slice(
                 TransmissionControl::SubmitErrorRate(ErrorRate(0)),
+                &mut slice,
+                crate::common::BINCODE_CONFIG,
+            )?,
+            TransmissionControl::SIZE
+        );
+        assert_eq!(
+            bincode::encode_into_slice(
+                TransmissionControl::RetransmitOver(0),
                 &mut slice,
                 crate::common::BINCODE_CONFIG,
             )?,
