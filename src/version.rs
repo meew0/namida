@@ -1,6 +1,6 @@
 /// Our own protocol revision counter. On every protocol update, this is incremented by 1. There are
 /// 11 bits available for this value, so it should not exceed 2048.
-pub const NAMIDA_PROTOCOL_REVISION: u16 = 2;
+pub const NAMIDA_PROTOCOL_REVISION: u16 = 3;
 
 /// The protocol revision as a 32 bit integer, compatible with Tsunami's negotiation mechanism.
 /// Tsunami simply used a date interpreted as hexadecimal digits, e.g. 0x20061025.
