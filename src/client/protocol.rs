@@ -23,7 +23,12 @@ use crate::{
 ///
 /// # Errors
 /// Returns an error on I/O failure.
-pub fn connect(server: &str, encrypted: bool, secret: &[u8]) -> anyhow::Result<Session> {
+pub fn connect(
+    server: &str,
+    encrypted: bool,
+    secret: &[u8],
+    quiet: bool,
+) -> anyhow::Result<Session> {
     // obtain our client socket, and create a new session object with it
     let mut session = Session {
         transfer: Transfer::default(),
@@ -37,7 +42,7 @@ pub fn connect(server: &str, encrypted: bool, secret: &[u8]) -> anyhow::Result<S
 
     // authenticate to the server, and potentially initiate an encrypted connection
     let auth_result = if encrypted {
-        authenticate_encrypted(&mut session, secret)
+        authenticate_encrypted(&mut session, secret, quiet)
     } else {
         authenticate_unencrypted(&mut session, secret)
     };
@@ -89,7 +94,11 @@ pub fn authenticate_unencrypted(session: &mut Session, secret: &[u8]) -> anyhow:
 /// # Errors
 /// Returns an error on I/O failure, authentication failure, or when the encrypted connection could
 /// not be established.
-pub fn authenticate_encrypted(session: &mut Session, secret: &[u8]) -> anyhow::Result<()> {
+pub fn authenticate_encrypted(
+    session: &mut Session,
+    secret: &[u8],
+    quiet: bool,
+) -> anyhow::Result<()> {
     let mut noise_init_buffer = [0_u8; 1024];
 
     let builder = snow::Builder::new(crate::common::NOISE_PATTERN.parse()?);
@@ -118,7 +127,9 @@ pub fn authenticate_encrypted(session: &mut Session, secret: &[u8]) -> anyhow::R
     let noise = noise.into_stateless_transport_mode()?;
     session.server.set_noise_state(noise);
 
-    println!("Encrypted session established.");
+    if !quiet {
+        println!("Encrypted session established.");
+    }
 
     Ok(())
 }

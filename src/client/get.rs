@@ -164,8 +164,12 @@ pub fn run(mut parameter: Parameter) -> anyhow::Result<()> {
     super::print_intro(parameter.encrypted);
 
     // Connect to the server
-    let mut session =
-        super::protocol::connect(&parameter.server, parameter.encrypted, &parameter.secret)?;
+    let mut session = super::protocol::connect(
+        &parameter.server,
+        parameter.encrypted,
+        &parameter.secret,
+        false,
+    )?;
 
     // These variables are only used when requesting multiple files.
     let mut file_names: Vec<PathBuf> = vec![];

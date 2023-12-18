@@ -23,6 +23,11 @@ pub struct Parameter {
     #[arg(long = "secret")]
     pub secret_file: Option<PathBuf>,
 
+    /// If specified, the output will be given in machine readable format, i.e. only the file paths
+    /// will be printed to standard output, without any extraneous decorating information.
+    #[arg(short = 'm')]
+    pub machine_readable: bool,
+
     #[arg(skip = *crate::common::DEFAULT_SECRET)]
     pub secret: [u8; 32],
 }
@@ -30,11 +35,18 @@ pub struct Parameter {
 #[allow(clippy::missing_errors_doc)]
 pub fn run(mut parameter: Parameter) -> anyhow::Result<()> {
     crate::common::load_secret(&parameter.secret_file, &mut parameter.secret);
-    super::print_intro(parameter.encrypted);
+
+    if !parameter.machine_readable {
+        super::print_intro(parameter.encrypted);
+    }
 
     // Connect to the server
-    let mut session =
-        super::protocol::connect(&parameter.server, parameter.encrypted, &parameter.secret)?;
+    let mut session = super::protocol::connect(
+        &parameter.server,
+        parameter.encrypted,
+        &parameter.secret,
+        parameter.machine_readable,
+    )?;
 
     // send request and parse the resulting response
     session
@@ -44,24 +56,31 @@ pub fn run(mut parameter: Parameter) -> anyhow::Result<()> {
         bail!("Expected file count");
     };
 
-    if num_files == 0 {
-        eprintln!(
-            "Server advertises 0 files. Either no files are available, or indexing is disabled."
-        );
-    } else {
-        eprintln!("Remote file list:");
+    if !parameter.machine_readable {
+        if num_files == 0 {
+            eprintln!(
+                "Server advertises 0 files. Either no files are available, or indexing is disabled."
+            );
+        } else {
+            eprintln!("Remote file list:");
+        }
     }
+
     for i in 0..num_files {
         let message::ServerToClient::FileListEntry(file_metadata) = session.server.read()? else {
             bail!("Expected file list entry");
         };
 
-        eprintln!(
-            " {:2}) {:<64} {:10}",
-            i,
-            file_metadata.path.display(),
-            file_metadata.size.0
-        );
+        if parameter.machine_readable {
+            println!("{}", file_metadata.path.display());
+        } else {
+            eprintln!(
+                " {:2}) {:<64} {:10}",
+                i,
+                file_metadata.path.display(),
+                file_metadata.size.0
+            );
+        }
     }
 
     // Close the connection
