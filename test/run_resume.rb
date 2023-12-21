@@ -5,7 +5,7 @@ NAMIDA_PATH = ["../target/release/namida"]
 
 puts "-- Resume test --"
 
-data = Random.new.bytes(1000000000)
+data = Random.new.bytes(100000000)
 File.write('source/100M.bin', data)
 source_digest = Digest::MD5.hexdigest(data)
 20000000.upto(40000000) { |i| data[i] = 'a' }
