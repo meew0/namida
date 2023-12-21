@@ -429,20 +429,16 @@ pub fn open_transfer(
         println!("Request for file: '{}'", requested_path.display());
     };
 
-    // Check if the file is actually within the current working directory, to prevent
-    // `namida get ../../../etc/passwd`-style path traversal attacks
-    let canonical = requested_path.canonicalize()?;
-    let base_canonical = Path::new(".").canonicalize()?;
-    if !canonical
-        .as_os_str()
-        .as_bytes()
-        .starts_with(base_canonical.as_os_str().as_bytes())
-    {
+    // Check if the file is within one of the served paths, to prevent the client from retrieving
+    // files it is not supposed to (files outside of explicitly specified paths, or
+    // `namida get ../../../etc/passwd`-style path traversal attacks in case no explicit paths were
+    // specified)
+    if !file_accessible(parameter, requested_path) {
         session.client.write(ServerToClient::FileRequestError(
             FileRequestError::Nonexistent,
         ))?;
         bail!(
-            "Requested path '{}' is outside the served directory",
+            "Requested path '{}' is outside the served directories",
             requested_path.display()
         );
     }
@@ -510,6 +506,33 @@ pub fn open_transfer(
     })?;
 
     Ok(())
+}
+
+// Checks whether the given file should be accessible to the client, i.e. whether it is located
+// within one of the served paths (or is itself one of the served paths)
+fn file_accessible(parameter: &Parameter, file: &Path) -> bool {
+    let Ok(canonical) = file.canonicalize() else {
+        eprintln!("Could not canonicalise requested path {}", file.display());
+        return false;
+    };
+
+    for base in &parameter.file_names {
+        let Ok(base_canonical) = base.canonicalize() else {
+            eprintln!("WARNING: Could not canonicalise served path '{}'. Files in it will not be accessible to the client.", base.display());
+            continue;
+        };
+
+        // Check whether `base_canonical` is a prefix of `canonical`
+        if canonical
+            .as_os_str()
+            .as_bytes()
+            .starts_with(base_canonical.as_os_str().as_bytes())
+        {
+            return true;
+        }
+    }
+
+    false
 }
 
 /// Send the client a list of checksums of chunks within the current file. Then, wait for the
