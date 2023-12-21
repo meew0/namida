@@ -2,6 +2,8 @@ use std::{
     borrow::Cow,
     io::{Seek, SeekFrom},
     net::ToSocketAddrs,
+    os::unix::ffi::OsStrExt,
+    path::Path,
     time::Instant,
 };
 
@@ -426,6 +428,24 @@ pub fn open_transfer(
     if parameter.verbose_yn {
         println!("Request for file: '{}'", requested_path.display());
     };
+
+    // Check if the file is actually within the current working directory, to prevent
+    // `namida get ../../../etc/passwd`-style path traversal attacks
+    let canonical = requested_path.canonicalize()?;
+    let base_canonical = Path::new(".").canonicalize()?;
+    if !canonical
+        .as_os_str()
+        .as_bytes()
+        .starts_with(base_canonical.as_os_str().as_bytes())
+    {
+        session.client.write(ServerToClient::FileRequestError(
+            FileRequestError::Nonexistent,
+        ))?;
+        bail!(
+            "Requested path '{}' is outside the served directory",
+            requested_path.display()
+        );
+    }
 
     // try to open the file for reading
     let file = match std::fs::File::open(&requested_path) {
