@@ -16,7 +16,7 @@ use std::{
 
 use crate::{
     common::SocketWrapper,
-    types::{BlockIndex, FileSize, UdpErrors},
+    types::{BlockIndex, FileSize, ReceivedMap, UdpErrors},
 };
 
 #[derive(Clone, Default)]
@@ -83,7 +83,7 @@ pub struct Transfer {
     pub retransmit: Retransmit,
     pub stats: Statistics,
     pub ring_buffer: Option<Arc<ring::Buffer>>,
-    pub received: Vec<u8>,
+    pub received: ReceivedMap,
     pub blocks_left: BlockIndex,
     pub restart_pending: bool,
     pub restart_lastidx: BlockIndex,
@@ -104,7 +104,7 @@ impl Session {
             return true;
         }
 
-        self.transfer.received[(blocknr.0 / 8) as usize] & (1 << (blocknr.0 % 8)) != 0
+        self.transfer.received.got_block(blocknr)
     }
 }
 

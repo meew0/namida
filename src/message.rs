@@ -1,13 +1,16 @@
 use std::{borrow::Cow, path::PathBuf, time::Duration};
 
-use crate::types::{BlockIndex, ErrorRate, FileMetadata, FileSize, Fraction, TargetRate};
+use crate::types::{
+    BlockIndex, ErrorRate, FileChecksums, FileMetadata, FileSize, Fraction, SkipChunks, TargetRate,
+};
 
 #[derive(Debug, bincode::Encode, bincode::Decode)]
 pub enum ClientToServer {
     ProtocolRevision(u32),
     AuthenticationResponse([u8; 16]),
     FileRequest(FileRequest),
-    UdpInit(UdpMethod),
+    UdpInit(UdpMethod, bool),
+    SkipChunks(SkipChunks),
     FileListRequest,
     Close,
 }
@@ -25,6 +28,7 @@ pub enum ServerToClient {
     },
     FileRequestError(FileRequestError),
     UdpDone,
+    Checksums(FileChecksums),
     FileCount(u64),
     FileListEntry(FileMetadata),
 }

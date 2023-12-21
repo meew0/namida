@@ -11,7 +11,9 @@ use crate::{
     client::Statistics,
     datagram::{self, BlockType},
     message,
-    types::{BlockIndex, ErrorRate, FileMetadata, FileSize, Fraction, TargetRate, UdpErrors},
+    types::{
+        BlockIndex, ErrorRate, FileMetadata, FileSize, Fraction, ReceivedMap, TargetRate, UdpErrors,
+    },
 };
 
 use super::{ring, OutputMode, Transfer};
@@ -94,6 +96,12 @@ pub struct Parameter {
     /// requesting exactly one file, otherwise the command will fail!
     #[arg(long = "local")]
     pub local_filename: Option<PathBuf>,
+
+    /// By default, namida will try to resume an existing transfer, skipping the transfer of blocks
+    /// that are already present locally. If this behaviour is not desired, this option can be
+    /// specified to always transfer everything.
+    #[arg(long = "no-resume", action = clap::ArgAction::SetFalse)]
+    pub resume: bool,
 
     #[arg(skip = *crate::common::DEFAULT_SECRET)]
     pub secret: [u8; 32],
@@ -230,7 +238,7 @@ pub fn run(mut parameter: Parameter) -> anyhow::Result<()> {
         let local_filename = create_local_filename(&remote_filename, &parameter.local_filename);
 
         // negotiate the file request with the server
-        let remote_udp_port = super::protocol::open_transfer(
+        let (remote_udp_port, resume) = super::protocol::open_transfer(
             &mut session,
             &parameter,
             remote_filename,
@@ -238,17 +246,17 @@ pub fn run(mut parameter: Parameter) -> anyhow::Result<()> {
         )?;
 
         // create the UDP data socket
-        super::protocol::open_port(&mut session, &parameter, remote_udp_port)?;
+        super::protocol::open_port(&mut session, &parameter, remote_udp_port, resume)?;
 
         // allocate the retransmission table and received bitfield
         session.transfer.retransmit.previous_table = vec![];
-        session.transfer.received = vec![
-            0;
-            (session.transfer.block_count.0 / 8)
-                .checked_add(2)
-                .expect("`received` bitfield size overflow")
-                as usize
-        ];
+        session.transfer.received = ReceivedMap::new(session.transfer.block_count);
+
+        // If we desire to resume an existing transfer, we need to find out which blocks we already
+        // have, and tell the server about that
+        if resume {
+            super::protocol::resume(&mut session)?;
+        }
 
         // allocate the ring buffer
         // We want to avoid unwrapping the buffer every time we use it. But, on the other hand, we
@@ -401,8 +409,7 @@ pub fn run(mut parameter: Parameter) -> anyhow::Result<()> {
                     ring_buffer.confirm();
 
                     // mark the block as received
-                    let fresh1 = &mut session.transfer.received[(this_block.0 / 8) as usize];
-                    *fresh1 |= 1 << (this_block.0 % 8);
+                    session.transfer.received.set(this_block);
 
                     if session.transfer.blocks_left.is_zero() {
                         println!("Oops! Negative-going blocks_left count at block: type={:?} this={} final={} left={}",
@@ -797,7 +804,7 @@ pub fn dump_blockmap(postfix: &str, xfer: &Transfer) -> anyhow::Result<()> {
         .create(true)
         .open(fname)?;
     fbits.write_all(&xfer.block_count.0.to_le_bytes())?;
-    let block_data = &xfer.received[0..((xfer.block_count.0 / 8).wrapping_add(1) as usize)];
+    let block_data = &xfer.received.inner[0..((xfer.block_count.0 / 8).wrapping_add(1) as usize)];
     fbits.write_all(block_data)?;
 
     Ok(())

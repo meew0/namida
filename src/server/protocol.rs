@@ -492,6 +492,39 @@ pub fn open_transfer(
     Ok(())
 }
 
+/// Send the client a list of checksums of chunks within the current file. Then, wait for the
+/// client to let us know which of the chunks it already has. We can then skip transmitting these
+/// blocks.
+///
+/// # Errors
+/// Returns an error on I/O failure.
+///
+/// # Panics
+/// Panics if no file has been opened.
+pub fn resume(session: &mut Session) -> anyhow::Result<()> {
+    let file = session
+        .transfer
+        .file
+        .as_mut()
+        .expect("File should have been opened");
+
+    let chunk_blocks = crate::common::chunk_blocks(session.properties.file_size);
+    let checksums = crate::common::calculate_checksums(
+        file,
+        session.properties.file_size,
+        session.properties.block_count,
+        chunk_blocks,
+    )?;
+    session.client.write(ServerToClient::Checksums(checksums))?;
+
+    let ClientToServer::SkipChunks(skip_chunks) = session.client.read()? else {
+        bail!("Expected `SkipChunks`");
+    };
+    session.transfer.skip_chunks = Some(skip_chunks);
+
+    Ok(())
+}
+
 /// Takes the given ping `Instant`s and uses them to calculate an initial inter-packet delay, which
 /// will be set for the session.
 ///

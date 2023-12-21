@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     common::SocketWrapper,
-    types::{BlockIndex, ErrorRate, FileSize, Fraction, TargetRate},
+    types::{BlockIndex, ErrorRate, FileSize, Fraction, SkipChunks, TargetRate},
 };
 
 pub mod config;
@@ -139,6 +139,7 @@ pub struct Transfer {
     pub udp_address: Option<SocketAddr>,
     pub ipd_current: libc::c_double,
     pub block: BlockIndex,
+    pub skip_chunks: Option<SkipChunks>,
 }
 
 impl Default for Transfer {
@@ -151,6 +152,7 @@ impl Default for Transfer {
             udp_address: None,
             ipd_current: 0.0,
             block: BlockIndex(0),
+            skip_chunks: None,
         }
     }
 }

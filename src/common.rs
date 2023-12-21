@@ -1,5 +1,6 @@
 use std::{
-    io::{Read, Write},
+    fs::File,
+    io::{Read, Seek, Write},
     net::{IpAddr, Ipv4Addr, Ipv6Addr, TcpStream},
     path::{Path, PathBuf},
     time::{Duration, Instant},
@@ -8,7 +9,10 @@ use std::{
 use anyhow::{anyhow, bail};
 use snow::StatelessTransportState;
 
-use crate::message::NoiseHeader;
+use crate::{
+    message::NoiseHeader,
+    types::{BlockIndex, FileChecksums, FileSize},
+};
 
 pub static BINCODE_CONFIG: bincode::config::Configuration<
     bincode::config::BigEndian,
@@ -129,6 +133,70 @@ pub fn get_udp_in_errors() -> anyhow::Result<u64> {
     let in_errors_value: u64 = in_errors_value_str.parse()?;
 
     Ok(in_errors_value)
+}
+
+/// Determine the amount of blocks each chunk of a file with the given size should contain.
+///
+/// # Panics
+/// Panics if the block size is 0.
+#[must_use]
+pub fn chunk_blocks(file_size: FileSize) -> u64 {
+    let chunk_size = file_size.0 >> 8; // use 128-256 chunks per file
+    chunk_size
+        .checked_div(u64::from(BLOCK_SIZE))
+        .expect("block size is 0")
+}
+
+/// Calculate the chunk-wise checksum for the data in the given file. Returns one checksum value
+/// for each chunk.
+///
+/// # Errors
+/// Returns an error on file I/O failure.
+///
+/// # Panics
+/// Panics on arithmetic overflow.
+pub fn calculate_checksums(
+    file: &mut File,
+    file_size: FileSize,
+    block_count: BlockIndex,
+    chunk_blocks: u64,
+) -> anyhow::Result<FileChecksums> {
+    let chunk_size = u64::from(BLOCK_SIZE)
+        .checked_mul(chunk_blocks)
+        .expect("chunk size overflow #1");
+    let chunk_size_usize: usize = chunk_size.try_into().expect("chunk size overflow #2");
+    let num_chunks = file_size
+        .0
+        .checked_div(chunk_size)
+        .expect("chunk size is 0");
+    let last_chunk_blocks = u64::from(block_count.0)
+        .checked_rem(chunk_blocks)
+        .expect("chunk_blocks is 0");
+    let mut checksums: Vec<u64> = Vec::with_capacity(
+        num_chunks
+            .checked_add(1)
+            .expect("capacity overflow #1")
+            .try_into()
+            .expect("capacity overflow #2"),
+    );
+    let mut data_buffer = vec![0_u8; chunk_size_usize];
+
+    for i in 0..=num_chunks {
+        let start_pos = i.checked_mul(chunk_size).expect("start pos overflow");
+        file.seek(std::io::SeekFrom::Start(start_pos))?;
+        let read_count = file.read(&mut data_buffer)?;
+        if read_count < chunk_size_usize && i != num_chunks {
+            eprintln!("WARNING: Read only {read_count} instead of {chunk_size} bytes for chunk {i} out of {num_chunks}");
+        }
+        let checksum = xxhash_rust::xxh3::xxh3_64(&data_buffer);
+        checksums.push(checksum);
+    }
+
+    Ok(FileChecksums {
+        chunk_blocks,
+        last_chunk_blocks,
+        checksums,
+    })
 }
 
 /// Wraps a `TcpStream` to be able to conveniently read `bincode` de-/encodable objects.

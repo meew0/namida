@@ -137,7 +137,7 @@ fn handle_transfer(
     // Find out which method the client would like to use to receive UDP data. Use the opportunity
     // to measure the round trip time
     let ping_start = Instant::now();
-    let ClientToServer::UdpInit(udp_method) = session.client.read()? else {
+    let ClientToServer::UdpInit(udp_method, resume) = session.client.read()? else {
         bail!("Expected UdpInit");
     };
     let ping_end = Instant::now();
@@ -147,6 +147,12 @@ fn handle_transfer(
     if let Err(err) = super::protocol::determine_client_udp_address(session, parameter, udp_method)
     {
         bail!("UDP address determination failed: {err:?}");
+    }
+
+    // If the client wants to resume, send it some checksums, and wait for it to tell us which
+    // blocks we can skip
+    if resume {
+        super::protocol::resume(session)?;
     }
 
     // Make the client socket non-blocking, to be able to skip reading a transmission control
@@ -183,6 +189,10 @@ fn handle_transfer(
             .expect("datagram buffer size overflow")
     ];
 
+    // true if in the previous iteration, we did not end up sending a scheduled block (because the
+    // client already has it, or because of I/O failure)
+    let mut cont = false;
+
     session.transfer.block = BlockIndex(0);
 
     // start by blasting out every block
@@ -193,28 +203,31 @@ fn handle_transfer(
         // precalculate time to wait after sending the next packet
         let current_packet_time = Instant::now();
 
-        // Only perform time adjustment if the difference in microseconds fits into a u32.
-        // 2^32 microseconds is about 1 hour and 12 minutes. If more time than that has
-        // passed, probably something has gone horribly wrong and we should try again after the
-        // next packet.
-        let micros_diff_maybe: Result<u32, _> = current_packet_time
-            .duration_since(previous_packet_time)
-            .as_micros()
-            .try_into();
-        if let Ok(micros_diff_u32) = micros_diff_maybe {
-            let micros_diff = f64::from(micros_diff_u32);
-            #[allow(clippy::cast_possible_truncation)]
-            let ipd_usleep_diff: i64 = (session.transfer.ipd_current - micros_diff) as i64;
-            previous_packet_time = current_packet_time;
+        // Only perform time adjustment if we actually ended up sending something before
+        if !cont {
+            // Only perform time adjustment if the difference in microseconds fits into a u32.
+            // 2^32 microseconds is about 1 hour and 12 minutes. If more time than that has
+            // passed, probably something has gone horribly wrong and we should try again after the
+            // next packet.
+            let micros_diff_maybe: Result<u32, _> = current_packet_time
+                .duration_since(previous_packet_time)
+                .as_micros()
+                .try_into();
+            if let Ok(micros_diff_u32) = micros_diff_maybe {
+                let micros_diff = f64::from(micros_diff_u32);
+                #[allow(clippy::cast_possible_truncation)]
+                let ipd_usleep_diff: i64 = (session.transfer.ipd_current - micros_diff) as i64;
+                previous_packet_time = current_packet_time;
 
-            if ipd_usleep_diff > 0 || ipd_time > 0 {
-                ipd_time = ipd_time
-                    .checked_add(ipd_usleep_diff)
-                    .expect("ipd_time over- or underflow");
+                if ipd_usleep_diff > 0 || ipd_time > 0 {
+                    ipd_time = ipd_time
+                        .checked_add(ipd_usleep_diff)
+                        .expect("ipd_time over- or underflow");
+                }
+
+                let ipd_time_non_negative: u64 = ipd_time.try_into().unwrap_or(0);
+                ipd_time_max = ipd_time_max.max(ipd_time_non_negative);
             }
-
-            let ipd_time_non_negative: u64 = ipd_time.try_into().unwrap_or(0);
-            ipd_time_max = ipd_time_max.max(ipd_time_non_negative);
         }
 
         // see if transmit requests are available
@@ -327,7 +340,7 @@ fn handle_transfer(
                 continue;
             }
 
-            let cont = send_next_block(
+            cont = send_next_block(
                 session,
                 parameter,
                 &mut block_type,
@@ -494,6 +507,18 @@ fn send_next_block(
     } else {
         BlockType::Original
     };
+
+    // Check whether we can skip sending this block, because the client claims to already have it.
+    // Don't do this for the final block, given how that one has control flow significance
+    if matches!(block_type, BlockType::Original)
+        && session
+            .transfer
+            .skip_chunks
+            .as_ref()
+            .is_some_and(|skip_chunks| skip_chunks.has_block(session.transfer.block))
+    {
+        return Ok(true);
+    }
 
     // build the datagram
     let block_index = session.transfer.block;

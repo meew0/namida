@@ -176,7 +176,7 @@ pub fn open_transfer(
     parameter: &get::Parameter,
     remote_filename: PathBuf,
     local_filename: PathBuf,
-) -> anyhow::Result<u16> {
+) -> anyhow::Result<(u16, bool)> {
     // submit the transfer request
     session
         .server
@@ -229,6 +229,7 @@ pub fn open_transfer(
     session.transfer.blocks_left = session.transfer.block_count;
 
     // try to open the local file for writing
+    let mut resume = false;
     let local_path = session
         .transfer
         .local_filename
@@ -236,17 +237,28 @@ pub fn open_transfer(
         .expect("there should be a local path")
         .as_path();
     if local_path.exists() {
-        println!(
-            "Warning: overwriting existing file '{}'",
-            local_path.display()
-        );
+        resume = if parameter.resume {
+            println!(
+                "File '{}' is already present locally — resuming previous transfer.",
+                local_path.display()
+            );
+            true
+        } else {
+            println!(
+                "File '{}' is already present locally, but `resume` has been disabled. The existing file will be overwritten.",
+                local_path.display()
+            );
+            false
+        }
     }
-    session.transfer.file = Some(
+    let file = session.transfer.file.insert(
         std::fs::File::options()
+            .read(true)
             .write(true)
             .create(true)
             .open(local_path)?,
     );
+    file.set_len(session.transfer.file_size.0)?;
 
     #[allow(clippy::cast_precision_loss)]
     #[allow(clippy::cast_sign_loss)]
@@ -264,7 +276,7 @@ pub fn open_transfer(
     }
 
     // indicate success, and let the outside know of the server's UDP port
-    Ok(remote_udp_port)
+    Ok((remote_udp_port, resume))
 }
 
 /// Creates a new UDP socket for receiving the file data associated with our pending transfer and
@@ -277,6 +289,7 @@ pub fn open_port(
     session: &mut Session,
     parameter: &get::Parameter,
     remote_port: u16,
+    resume: bool,
 ) -> anyhow::Result<()> {
     // open a new UDP socket
     let udp_socket = session
@@ -293,7 +306,7 @@ pub fn open_port(
         // UDP message.
         session
             .server
-            .write(ClientToServer::UdpInit(UdpMethod::Discovery))?;
+            .write(ClientToServer::UdpInit(UdpMethod::Discovery, resume))?;
 
         // Send some (non-)data to the server. This will open the port on NATs along the path to
         // the server, and also let the server know about the mapped port on the final NAT, if one
@@ -318,9 +331,113 @@ pub fn open_port(
         let port = udp_socket.local_addr()?.port();
         session
             .server
-            .write(ClientToServer::UdpInit(UdpMethod::StaticPort(port)))?;
+            .write(ClientToServer::UdpInit(UdpMethod::StaticPort(port), resume))?;
         session.server.flush()?;
     }
+
+    Ok(())
+}
+
+/// Receives chunk-wise checksum data from the server, compares the data with the file we already
+/// have stored locally, and sends the result back to the server
+///
+/// # Errors
+/// Returns an error on I/O failure.
+///
+/// # Panics
+/// Panics if no file has been opened.
+pub fn resume(session: &mut Session) -> anyhow::Result<()> {
+    let ServerToClient::Checksums(remote_checksums) = session.server.read()? else {
+        bail!("Expected checksums");
+    };
+
+    let file = session
+        .transfer
+        .file
+        .as_mut()
+        .expect("File should have been opened");
+
+    let our_checksums = crate::common::calculate_checksums(
+        file,
+        session.transfer.file_size,
+        session.transfer.block_count,
+        remote_checksums.chunk_blocks,
+    )?;
+
+    let skip_chunks = remote_checksums.compare(&our_checksums);
+    let block_count = skip_chunks.count_blocks();
+    let mut matching_bytes = block_count.saturating_mul(u64::from(crate::common::BLOCK_SIZE));
+    let final_block_size = session
+        .transfer
+        .file_size
+        .0
+        .checked_rem(u64::from(crate::common::BLOCK_SIZE))
+        .expect("block size is 0");
+    if skip_chunks.has_block(session.transfer.block_count) && final_block_size > 0 {
+        matching_bytes = matching_bytes
+            .wrapping_add(final_block_size)
+            .wrapping_sub(u64::from(crate::common::BLOCK_SIZE));
+    }
+
+    #[allow(clippy::min_ident_chars)]
+    let s = if block_count == 1 { "" } else { "s" };
+    println!("Resuming previous transfer: found {block_count} matching block{s} ({matching_bytes} bytes)",);
+
+    // Store the number of blocks we already have
+    session.transfer.blocks_left = session.transfer.block_count.safe_sub(BlockIndex(
+        block_count.try_into().expect("BlockIndex overflow"),
+    ));
+
+    // Set gapless_to_block and next_block to the first block that we do not have yet
+    let first_missing = skip_chunks
+        .matches
+        .iter()
+        .copied()
+        .enumerate()
+        .find(|(_, present)| !*present)
+        .map_or(session.transfer.block_count, |(i, _)| {
+            BlockIndex(
+                (i as u64)
+                    .checked_mul(remote_checksums.chunk_blocks)
+                    .expect("BlockIndex overflow #1")
+                    .try_into()
+                    .expect("BlockIndex overflow #2"),
+            )
+        });
+    session.transfer.gapless_to_block = first_missing;
+    session.transfer.next_block = first_missing;
+
+    // Store the exact indices of blocks we already have
+    for (i, _) in skip_chunks
+        .matches
+        .iter()
+        .copied()
+        .enumerate()
+        .filter(|(_, present)| *present)
+    {
+        let block_index_low = (i as u64)
+            .checked_mul(remote_checksums.chunk_blocks)
+            .expect("block_index_low overflow");
+
+        if block_index_low > u64::from(session.transfer.block_count.0) {
+            break;
+        }
+
+        let block_index_high = block_index_low
+            .checked_add(remote_checksums.chunk_blocks)
+            .and_then(|res| res.checked_sub(1)) // inclusive
+            .expect("block_index_high overflow")
+            .min(u64::from(session.transfer.block_count.0));
+
+        for block_index_num in block_index_low..=block_index_high {
+            let block_index = BlockIndex(block_index_num.try_into().expect("BlockIndex overflow"));
+            session.transfer.received.set(block_index);
+        }
+    }
+
+    session
+        .server
+        .write(ClientToServer::SkipChunks(skip_chunks))?;
 
     Ok(())
 }
