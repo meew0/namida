@@ -18,6 +18,7 @@ New features compared to Tsunami:
 - Simple CLI that allows everything to be done in one command invocation (in return, Tsunami's FTP-like interactive console has been removed)
 - Client-side NAT traversal: UDP packets can be received even if the client is behind NAT, without any additional manual configuration required.
 - Encrypted communication by default: [snow](https://github.com/mcginty/snow) is used to encrypt both TCP and UDP communication.
+- Resumption of interrupted transfers: if parts of a file to be downloaded are already present locally, those parts will be skipped by default.
 
 While namida is based on software that has been used in production for 20 years, there are still many parts I'm unhappy with. Also, my “improvements” might have introduced new bugs. Expect more updates in the future.
 
