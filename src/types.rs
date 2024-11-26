@@ -73,7 +73,7 @@ clapify!(TargetRate, u64, TargetRateValueParser);
 pub struct ErrorRate(pub u32);
 clapify!(ErrorRate, u32, ErrorRateValueParser);
 
-#[derive(Debug, Clone, Copy, Default, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, bincode::Encode, bincode::Decode)]
 pub struct FileSize(pub u64);
 
 #[derive(Debug, Clone, Copy, bincode::Encode, bincode::Decode)]

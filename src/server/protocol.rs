@@ -481,7 +481,7 @@ pub fn open_transfer(
         .checked_rem(u64::from(crate::common::BLOCK_SIZE))
         .expect("block size is zero");
 
-    if tail_size != 0 {
+    if tail_size != 0 || session.properties.file_size == FileSize(0) {
         block_count_base = block_count_base
             .checked_add(1)
             .expect("block count overflow");
