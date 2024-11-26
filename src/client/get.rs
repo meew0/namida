@@ -1,5 +1,6 @@
 use std::{
     io::Write,
+    mem::size_of,
     path::{Path, PathBuf},
     sync::Arc,
     time::Instant,
