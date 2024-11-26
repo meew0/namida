@@ -22,13 +22,11 @@ use anyhow::bail;
 pub fn serve(mut parameter: Parameter) -> anyhow::Result<()> {
     // show version / build information
     eprintln!(
-        "namida server for protocol revision {} (block size = {}, magic = 0x{:x})\nVersion: {} (revision {})\nCompiled: {}",
+        "namida server for protocol revision {} (block size = {}, magic = 0x{:x})\nVersion: {}",
         crate::version::NAMIDA_PROTOCOL_REVISION,
         crate::common::BLOCK_SIZE,
         crate::version::magic(parameter.encrypted),
         crate::version::NAMIDA_VERSION,
-        &crate::version::GIT_HASH[0..7],
-        crate::version::COMPILE_DATE_TIME,
     );
     eprintln!();
 

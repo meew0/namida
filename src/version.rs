@@ -38,9 +38,3 @@ pub const fn magic(encrypted: bool) -> u32 {
 /// The version as a string. The semver “minor” part should be the same as the protocol revision
 /// counter.
 pub const NAMIDA_VERSION: &str = env!("CARGO_PKG_VERSION");
-
-/// Git revision at compile time
-pub const GIT_HASH: &str = env!("GIT_HASH");
-
-/// Formatted date & time of when the namida executable was compiled.
-pub const COMPILE_DATE_TIME: &str = env!("NAMIDA_COMPILE_DT");
