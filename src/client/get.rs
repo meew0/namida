@@ -119,6 +119,14 @@ pub struct Parameter {
     #[arg(long = "no-resume", action = clap::ArgAction::SetFalse)]
     pub resume: bool,
 
+    /// Ignore files that already exist locally.
+    ///
+    /// Note that the exact behaviour of this option depends on the specific name of the local
+    /// file that would be created, which may be changed by e.g. the `--tree` option or by directly
+    /// specifying a local filename.
+    #[arg(long = "skip", action = clap::ArgAction::SetTrue)]
+    pub skip: bool,
+
     #[arg(skip = *crate::common::DEFAULT_SECRET)]
     pub secret: [u8; 32],
 
@@ -253,6 +261,17 @@ pub fn run(mut parameter: Parameter) -> anyhow::Result<()> {
         // Get a suitable local filename for the remote one
         let local_filename =
             create_local_filename(&remote_filename, &parameter.local_filename, parameter.tree)?;
+
+        // If the file already exists and the user wants to skip existing files, then do that
+        if local_filename.exists() && parameter.skip {
+            if parameter.verbose_yn {
+                println!(
+                    "[--skip] Local file {} already exists, skipping",
+                    local_filename.display()
+                );
+            }
+            continue;
+        }
 
         // negotiate the file request with the server
         let (remote_udp_port, resume) = super::protocol::open_transfer(
