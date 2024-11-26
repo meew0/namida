@@ -142,9 +142,16 @@ pub fn get_udp_in_errors() -> anyhow::Result<u64> {
 #[must_use]
 pub fn chunk_blocks(file_size: FileSize) -> u64 {
     let chunk_size = file_size.0 >> 8; // use 128-256 chunks per file
-    chunk_size
+    let calculated_chunk_blocks = chunk_size
         .checked_div(u64::from(BLOCK_SIZE))
-        .expect("block size is 0")
+        .expect("block size is 0");
+
+    // Make sure each chunk contains at least one block, in case of very small files
+    if calculated_chunk_blocks < 1 {
+        1
+    } else {
+        calculated_chunk_blocks
+    }
 }
 
 /// Calculate the chunk-wise checksum for the data in the given file. Returns one checksum value

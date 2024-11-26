@@ -33,8 +33,16 @@ sout.close
 cin.close
 cout.close
 
-puts "example1 exists: #{File.exist?("temp/test1/example.txt")}"
-puts "example2 exists: #{File.exist?("temp/test2/example.txt")}"
+if File.exist?("temp/example.txt")
+  content = File.read("temp/example.txt")
+  if content == "test\n"
+    puts "ok"
+  else
+    puts "not ok, content is: `#{content.inspect}`"
+  end
+else
+  puts "not ok, no file created"
+end
 
 FileUtils.rm_r 'temp'
 
